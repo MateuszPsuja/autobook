@@ -1,0 +1,74 @@
+// Settings component styles
+// Uses Tailwind classes in the template, minimal custom styles here
+
+:host {
+  display: block;
+}
+
+// Smooth transitions for interactive elements
+button, input, select {
+  transition: all 0.2s ease;
+}
+
+// Custom focus states
+input:focus, select:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+}
+
+// Loading animation for spinners
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+// Pulse animation for status indicators
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.animate-pulse {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+// Model list scrollable container
+.models-list-container {
+  max-height: 400px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+  
+  &::-webkit-scrollbar {
+    width: 6px;
+  }
+  
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  
+  &::-webkit-scrollbar-thumb {
+    background-color: #cbd5e1;
+    border-radius: 3px;
+  }
+  
+  :host-context(.dark) & {
+    scrollbar-color: #4b5563 transparent;
+    
+    &::-webkit-scrollbar-thumb {
+      background-color: #4b5563;
+    }
+  }
+}
