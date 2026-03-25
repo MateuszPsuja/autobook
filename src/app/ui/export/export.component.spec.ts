@@ -34,8 +34,7 @@ describe('ExportComponent', () => {
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      imports: [CommonModule, FormsModule],
-      declarations: [ExportComponent],
+      imports: [CommonModule, FormsModule, ExportComponent],
       providers: [
         { provide: BookStateService, useValue: mockBookState },
         { provide: PersistenceService, useValue: mockPersistence },
