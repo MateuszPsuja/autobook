@@ -15,7 +15,7 @@ Clone and run locally:
 
 ```bash
 git clone https://github.com/MateuszPsuja/autobook.git
-cd book-generator
+cd autobook
 npm install
 npm start
 # open http://localhost:4200/
