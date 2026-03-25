@@ -1,0 +1,514 @@
+<div class="max-w-4xl mx-auto">
+  <!-- Configured Mode: Show form with step indicator -->
+  <div class="p-6">
+      
+      <!-- Step Progress Indicator -->
+      <div class="mb-10 pb-4">
+        <div class="flex items-center justify-between gap-2">
+          @for (step of steps; track trackByStep($index, step); let i = $index) {
+            <!-- Step Circle and Label -->
+            <div class="flex flex-col items-center flex-1">
+              <!-- Circle always stays at top -->
+              <button
+                type="button"
+                (click)="goToStep(step.number)"
+                [disabled]="step.number > currentStep && !isStepCompleted(step.number - 1)"
+                class="w-12 h-12 rounded-full flex items-center justify-center font-semibold text-base transition-all duration-300 shadow-md flex-shrink-0"
+                [class]="getStepClass(step.number)">
+                @if (step.number < currentStep || (step.number === currentStep && isCurrentStepValid())) {
+                  <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"></path>
+                  </svg>
+                } @else {
+                  {{ step.number }}
+                }
+              </button>
+              <!-- Label below circle with min-height to prevent movement -->
+              <div class="mt-2 min-h-[2rem] flex items-start justify-center">
+                <span 
+                  class="text-xs font-medium text-center"
+                  [class]="step.number === currentStep ? 'text-brand-600 dark:text-brand-400' : 'text-gray-500 dark:text-gray-400'">
+                  {{ step.label }}
+                </span>
+              </div>
+            </div>
+            
+            <!-- Connector Line -->
+            @if (i < steps.length - 1) {
+              <div class="flex-1 h-0.5 -mt-8 rounded-full transition-all duration-500"
+                [class]="step.number < currentStep ? 'bg-brand-500' : 'bg-gray-200 dark:bg-gray-700'">
+              </div>
+            }
+          }
+        </div>
+      </div>
+
+
+
+    <!-- Form Content -->
+    <form [formGroup]="configForm" (ngSubmit)="onSubmit()" class="space-y-6">
+      <!-- Step 1: Creative Settings -->
+      @if (currentStep === 0) {
+        <div class="space-y-6 animate-fade-in">
+          <div class="flex items-center justify-between">
+            <div>
+              <h3 class="text-2xl font-bold text-gray-900 dark:text-white">{{ t('config.creativeSettings') }}</h3>
+              <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">{{ t('config.defineCore') }}</p>
+            </div>
+            <button
+              type="button"
+              (click)="fillRandom()"
+              class="px-4 py-2 text-sm font-medium bg-gradient-to-r from-purple-500 to-purple-600 text-white rounded-xl hover:from-purple-600 hover:to-purple-700 transition-all shadow-md hover:shadow-lg flex items-center gap-2">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+              </svg>
+              {{ t('config.fillRandom') }}
+            </button>
+          </div>
+          
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div class="p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
+              <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">{{ t('config.title') }}</label>
+              <input
+                formControlName="title"
+                type="text"
+                [placeholder]="t('config.titlePlaceholder')"
+                class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all">
+              @if (configForm.get('title')?.invalid && configForm.get('title')?.touched) {
+                <p class="mt-2 text-red-600 text-sm flex items-center gap-1">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                  </svg>
+                  {{ t('config.titleRequired') }}
+                </p>
+              }
+            </div>
+            
+            <div class="p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
+              <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">{{ t('config.genre') }}</label>
+              <select formControlName="genre" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all">
+                <option value="">{{ t('config.selectGenre') }}</option>
+                @for (genre of genres; track trackByIndex($index)) {
+                  <option [value]="genre">{{ genre }}</option>
+                }
+              </select>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div class="p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
+              <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">{{ t('config.writingStyle') }}</label>
+              <select formControlName="style" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all">
+                <option value="">{{ t('config.selectStyle') }}</option>
+                @for (style of writingStyles; track trackByIndex($index)) {
+                  <option [value]="style">{{ style }}</option>
+                }
+              </select>
+            </div>
+            
+            <div class="p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
+              <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">{{ t('config.tone') }}</label>
+              <select formControlName="tone" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all">
+                <option value="">{{ t('config.selectTone') }}</option>
+                @for (tone of tones; track trackByIndex($index)) {
+                  <option [value]="tone">{{ tone }}</option>
+                }
+              </select>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+            <div class="p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
+              <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">{{ t('config.pov') }}</label>
+              <select formControlName="pov" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all">
+                <option value="">{{ t('config.selectPov') }}</option>
+                @for (pov of povs; track trackByIndex($index)) {
+                  <option [value]="pov">{{ pov }}</option>
+                }
+              </select>
+            </div>
+            
+            <div class="p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
+              <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">{{ t('config.tense') }}</label>
+              <select formControlName="tense" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all">
+                <option value="">{{ t('config.selectTense') }}</option>
+                @for (tense of tenses; track trackByIndex($index)) {
+                  <option [value]="tense">{{ tense }}</option>
+                }
+              </select>
+            </div>
+            
+            <div class="p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
+              <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">{{ t('config.audience') }}</label>
+              <select formControlName="audience" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all">
+                <option value="">{{ t('config.selectAudience') }}</option>
+                @for (audience of audiences; track trackByIndex($index)) {
+                  <option [value]="audience">{{ audience }}</option>
+                }
+              </select>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div class="p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
+              <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">{{ t('config.themes') }}</label>
+              <input
+                formControlName="themes"
+                type="text"
+                [placeholder]="t('config.themesPlaceholder')"
+                class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all">
+            </div>
+            
+            <div class="p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
+              <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">{{ t('config.worldType') }}</label>
+              <select formControlName="worldType" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all">
+                <option value="">{{ t('config.selectWorldType') }}</option>
+                @for (worldType of worldTypes; track trackByIndex($index)) {
+                  <option [value]="worldType">{{ worldType }}</option>
+                }
+              </select>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div class="p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
+              <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">{{ t('config.targetLength') }}</label>
+              <select formControlName="targetLength" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all">
+                <option value="">{{ t('config.selectLength') }}</option>
+                @for (length of bookLengths; track trackByIndex($index)) {
+                  <option [value]="length">{{ length }}</option>
+                }
+              </select>
+            </div>
+            
+            <div class="p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
+              <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">{{ t('config.chapterLength') }}</label>
+              <select formControlName="chapterLength" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all">
+                <option value="">{{ t('config.selectChapterLength') }}</option>
+                @for (length of chapterLengths; track trackByIndex($index)) {
+                  <option [value]="length">{{ length }}</option>
+                }
+              </select>
+            </div>
+          </div>
+        </div>
+      }
+
+      <!-- Step 2: Characters -->
+      @if (currentStep === 1) {
+        <div class="space-y-6 animate-fade-in">
+          <div>
+            <h3 class="text-2xl font-bold text-gray-900 dark:text-white">{{ t('config.characters') }}</h3>
+            <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">{{ t('config.defineCharacters') }}</p>
+          </div>
+          
+          <!-- Protagonist -->
+          <div class="p-6 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-md" formGroupName="protagonist">
+            <div class="flex items-center gap-3 mb-4">
+              <div class="w-10 h-10 bg-green-100 dark:bg-green-900/30 rounded-lg flex items-center justify-center">
+                <svg class="w-5 h-5 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                </svg>
+              </div>
+              <h4 class="text-lg font-semibold text-gray-900 dark:text-white">{{ t('config.protagonist') }}</h4>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">{{ t('config.name') }}</label>
+                <input
+                  formControlName="name"
+                  type="text"
+                  class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all">
+              </div>
+              
+              <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">{{ t('config.age') }}</label>
+                <input
+                  formControlName="age"
+                  type="number"
+                  min="1"
+                  max="100"
+                  class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all">
+              </div>
+            </div>
+            
+            <div class="mt-4">
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">{{ t('config.background') }}</label>
+              <textarea
+                formControlName="background"
+                rows="3"
+                class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all"></textarea>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">{{ t('config.motivations') }}</label>
+                <textarea
+                  formControlName="motivations"
+                  rows="2"
+                  class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all"></textarea>
+              </div>
+              
+              <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">{{ t('config.flaws') }}</label>
+                <textarea
+                  formControlName="flaws"
+                  rows="2"
+                  class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all"></textarea>
+              </div>
+            </div>
+            
+            <div class="mt-4">
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">{{ t('config.characterArc') }}</label>
+              <textarea
+                formControlName="arc"
+                rows="2"
+                class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all"></textarea>
+            </div>
+          </div>
+
+          <!-- Antagonist -->
+          <div class="p-6 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-md" formGroupName="antagonist">
+            <div class="flex items-center gap-3 mb-4">
+              <div class="w-10 h-10 bg-red-100 dark:bg-red-900/30 rounded-lg flex items-center justify-center">
+                <svg class="w-5 h-5 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                </svg>
+              </div>
+              <h4 class="text-lg font-semibold text-gray-900 dark:text-white">{{ t('config.antagonist') }}</h4>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">{{ t('config.name') }}</label>
+                <input
+                  formControlName="name"
+                  type="text"
+                  class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all">
+              </div>
+              
+              <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">{{ t('config.age') }}</label>
+                <input
+                  formControlName="age"
+                  type="number"
+                  min="1"
+                  max="100"
+                  class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all">
+              </div>
+            </div>
+            
+            <div class="mt-4">
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">{{ t('config.background') }}</label>
+              <textarea
+                formControlName="background"
+                rows="3"
+                class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all"></textarea>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">{{ t('config.motivations') }}</label>
+                <textarea
+                  formControlName="motivations"
+                  rows="2"
+                  class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all"></textarea>
+              </div>
+              
+              <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">{{ t('config.flaws') }}</label>
+                <textarea
+                  formControlName="flaws"
+                  rows="2"
+                  class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all"></textarea>
+              </div>
+            </div>
+            
+            <div class="mt-4">
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">{{ t('config.characterArc') }}</label>
+              <textarea
+                formControlName="arc"
+                rows="2"
+                class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all"></textarea>
+            </div>
+          </div>
+        </div>
+      }
+
+      <!-- Step 3: Structure -->
+      @if (currentStep === 2) {
+        <div class="space-y-6 animate-fade-in">
+          <div>
+            <h3 class="text-2xl font-bold text-gray-900 dark:text-white">{{ t('config.structure') }}</h3>
+            <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">{{ t('config.defineStructure') }}</p>
+          </div>
+          
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div class="p-5 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-md">
+              <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">{{ t('config.plotArchetype') }}</label>
+              <select formControlName="plotArchetype" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all">
+                <option value="">{{ t('config.selectArchetype') }}</option>
+                @for (archetype of plotArchetypes; track trackByIndex($index)) {
+                  <option [value]="archetype">{{ archetype }}</option>
+                }
+              </select>
+            </div>
+            
+            <div class="p-5 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-md">
+              <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">{{ t('config.actStructure') }}</label>
+              <select formControlName="actStructure" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all">
+                <option value="">{{ t('config.selectStructure') }}</option>
+                @for (structure of actStructures; track trackByIndex($index)) {
+                  <option [value]="structure">{{ structure }}</option>
+                }
+              </select>
+            </div>
+          </div>
+
+          <div class="flex gap-6 p-5 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-md">
+            <label class="flex items-center gap-3 cursor-pointer">
+              <input formControlName="hasPrologue" type="checkbox" class="w-5 h-5 text-brand-500 rounded focus:ring-brand-500">
+              <span class="text-sm font-medium text-gray-700 dark:text-gray-300">{{ t('config.includePrologue') }}</span>
+            </label>
+            
+            <label class="flex items-center gap-3 cursor-pointer">
+              <input formControlName="hasEpilogue" type="checkbox" class="w-5 h-5 text-brand-500 rounded focus:ring-brand-500">
+              <span class="text-sm font-medium text-gray-700 dark:text-gray-300">{{ t('config.includeEpilogue') }}</span>
+            </label>
+          </div>
+        </div>
+      }
+
+      <!-- Step 4: Review -->
+      @if (currentStep === 3) {
+        <div class="space-y-6 animate-fade-in">
+          <div>
+            <h3 class="text-2xl font-bold text-gray-900 dark:text-white">{{ t('config.review') }}</h3>
+            <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">{{ t('config.reviewSettings') }}</p>
+          </div>
+          
+          <div class="space-y-4">
+            <div class="p-5 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-md">
+              <div class="flex items-center gap-2 mb-3">
+                <div class="w-8 h-8 bg-brand-100 dark:bg-brand-900/30 rounded-lg flex items-center justify-center">
+                  <svg class="w-4 h-4 text-brand-600 dark:text-brand-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path>
+                  </svg>
+                </div>
+                <h4 class="font-semibold text-gray-900 dark:text-white">{{ t('config.bookDetails') }}</h4>
+              </div>
+              <div class="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
+                <div><span class="text-gray-500 dark:text-gray-400">{{ t('config.title') }}: </span> <span class="font-medium text-gray-900 dark:text-white">{{ configForm.get('title')?.value }}</span></div>
+                <div><span class="text-gray-500 dark:text-gray-400">{{ t('config.genre') }}: </span> <span class="font-medium text-gray-900 dark:text-white">{{ configForm.get('genre')?.value }}</span></div>
+                <div><span class="text-gray-500 dark:text-gray-400">{{ t('config.writingStyle') }}: </span> <span class="font-medium text-gray-900 dark:text-white">{{ configForm.get('style')?.value }}</span></div>
+                <div><span class="text-gray-500 dark:text-gray-400">{{ t('config.tone') }}: </span> <span class="font-medium text-gray-900 dark:text-white">{{ configForm.get('tone')?.value }}</span></div>
+                <div><span class="text-gray-500 dark:text-gray-400">{{ t('config.pov') }}: </span> <span class="font-medium text-gray-900 dark:text-white">{{ configForm.get('pov')?.value }}</span></div>
+                <div><span class="text-gray-500 dark:text-gray-400">{{ t('config.tense') }}: </span> <span class="font-medium text-gray-900 dark:text-white">{{ configForm.get('tense')?.value }}</span></div>
+              </div>
+            </div>
+
+            <div class="p-5 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-md">
+              <div class="flex items-center gap-2 mb-3">
+                <div class="w-8 h-8 bg-green-100 dark:bg-green-900/30 rounded-lg flex items-center justify-center">
+                  <svg class="w-4 h-4 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                  </svg>
+                </div>
+                <h4 class="font-semibold text-gray-900 dark:text-white">{{ t('config.characters') }}</h4>
+              </div>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="p-3 bg-gray-50 dark:bg-gray-900 rounded-lg">
+                  <h5 class="font-medium text-green-600 dark:text-green-400">{{ t('config.protagonist') }}</h5>
+                  <p class="text-sm text-gray-600 dark:text-gray-400">{{ protagonistForm.get('name')?.value || t('config.notSpecified') }}</p>
+                </div>
+                <div class="p-3 bg-gray-50 dark:bg-gray-900 rounded-lg">
+                  <h5 class="font-medium text-red-600 dark:text-red-400">{{ t('config.antagonist') }}</h5>
+                  <p class="text-sm text-gray-600 dark:text-gray-400">{{ antagonistForm.get('name')?.value || t('config.notSpecified') }}</p>
+                </div>
+              </div>
+            </div>
+
+            <div class="p-5 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-md">
+              <div class="flex items-center gap-2 mb-3">
+                <div class="w-8 h-8 bg-purple-100 dark:bg-purple-900/30 rounded-lg flex items-center justify-center">
+                  <svg class="w-4 h-4 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z"></path>
+                  </svg>
+                </div>
+                <h4 class="font-semibold text-gray-900 dark:text-white">{{ t('config.structure') }}</h4>
+              </div>
+              <div class="grid grid-cols-2 gap-2 text-sm">
+                <div><span class="text-gray-500 dark:text-gray-400">{{ t('config.plotArchetype') }}: </span> <span class="font-medium text-gray-900 dark:text-white">{{ configForm.get('plotArchetype')?.value || t('config.notSpecified') }}</span></div>
+                <div><span class="text-gray-500 dark:text-gray-400">{{ t('config.actStructure') }}: </span> <span class="font-medium text-gray-900 dark:text-white">{{ configForm.get('actStructure')?.value || t('config.notSpecified') }}</span></div>
+                <div><span class="text-gray-500 dark:text-gray-400">{{ t('config.prologue') }}: </span> <span class="font-medium text-gray-900 dark:text-white">{{ configForm.get('hasPrologue')?.value ? t('config.yes') : t('config.no') }}</span></div>
+                <div><span class="text-gray-500 dark:text-gray-400">{{ t('config.epilogue') }}: </span> <span class="font-medium text-gray-900 dark:text-white">{{ configForm.get('hasEpilogue')?.value ? t('config.yes') : t('config.no') }}</span></div>
+              </div>
+            </div>
+
+            <div class="p-5 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-md">
+              <div class="flex items-center gap-2 mb-3">
+                <div class="w-8 h-8 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center">
+                  <svg class="w-4 h-4 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+                  </svg>
+                </div>
+                <h4 class="font-semibold text-gray-900 dark:text-white">{{ t('shell.model') }}</h4>
+              </div>
+              <p class="text-sm text-gray-600 dark:text-gray-400">
+                {{ getSelectedModelName() }}
+              </p>
+            </div>
+          </div>
+        </div>
+      }
+
+
+      <!-- Navigation Buttons -->
+      <div class="flex justify-between pt-6 border-t border-gray-200 dark:border-gray-700">
+        <button
+          type="button"
+          (click)="prevStep()"
+          [disabled]="isFirstStep"
+          class="px-6 py-3 text-gray-700 dark:text-gray-300 font-medium border border-gray-300 dark:border-gray-600 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800 transition-all"
+          [class.opacity-50]="isFirstStep"
+          [class.cursor-not-allowed]="isFirstStep">
+          <span class="flex items-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+            </svg>
+            {{ t('config.previous') }}
+          </span>
+        </button>
+
+        @if (!isLastStep) {
+          <button
+            type="button"
+            (click)="nextStep()"
+            [disabled]="!isCurrentStepValid()"
+            class="px-8 py-3 bg-brand-500 text-white font-medium rounded-xl hover:bg-brand-600 transition-all shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+            [class.opacity-50]="!isCurrentStepValid()">
+            <span class="flex items-center gap-2">
+              {{ t('config.next') }}
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+              </svg>
+            </span>
+          </button>
+        } @else {
+          <button
+            type="button"
+            (click)="goToGenerator()"
+            [disabled]="!configForm.valid || !isConfigured"
+            class="px-8 py-3 bg-brand-500 text-white font-medium rounded-xl hover:bg-brand-600 transition-all shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+            [class.opacity-50]="!configForm.valid || !isConfigured">
+            <span class="flex items-center gap-2">
+              {{ t('config.next') }}
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+              </svg>
+            </span>
+          </button>
+        }
+      </div>
+    </form>
+  </div>
+</div>

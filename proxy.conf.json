@@ -1,0 +1,11 @@
+{
+  "/api/openrouter": {
+    "target": "https://openrouter.ai",
+    "secure": true,
+    "changeOrigin": true,
+    "logLevel": "debug",
+    "pathRewrite": {
+      "^/api/openrouter": ""
+    }
+  }
+}

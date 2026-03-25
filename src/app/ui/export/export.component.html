@@ -1,0 +1,161 @@
+<div class="space-y-6">
+  <!-- Header -->
+  <div class="flex items-center justify-between">
+    <div>
+      <h1 class="text-2xl font-bold text-gray-900 dark:text-white">{{ t('export.title') }}</h1>
+      <p class="text-sm text-gray-600 dark:text-gray-400">{{ t('export.downloadFinished') }}</p>
+    </div>
+    
+    <div class="flex items-center gap-4">
+      <span class="text-sm text-gray-500 dark:text-gray-400">
+        {{ getChapterCount() }} {{ t('export.chapterCount') }}
+      </span>
+      <button
+        (click)="clearData()"
+        class="px-4 py-2 text-sm font-medium text-white bg-red-500 rounded-md hover:bg-red-600 dark:bg-red-600 dark:hover:bg-red-500 transition-colors">
+        {{ t('export.clearData') }}
+      </button>
+    </div>
+  </div>
+
+  <!-- Row 1: Format Selection -->
+  <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+    <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">{{ t('export.format') }}</h3>
+    <div class="flex flex-wrap gap-3">
+      @for (format of ['pdf', 'epub', 'docx', 'markdown']; track format) {
+        <button
+          type="button"
+          (click)="setFormat(format)"
+          [disabled]="isExporting"
+          class="flex-1 min-w-[120px] flex items-center justify-center gap-2 px-4 py-3 border-2 rounded-lg cursor-pointer transition-all duration-200 font-semibold"
+          [class.border-indigo-600]="selectedFormat === format"
+          [class.bg-indigo-100]="selectedFormat === format"
+          [class.dark:bg-indigo-900]="selectedFormat === format"
+          [class.dark:border-indigo-400]="selectedFormat === format"
+          [class.text-indigo-700]="selectedFormat === format"
+          [class.dark:text-indigo-300]="selectedFormat === format"
+          [class.border-gray-300]="selectedFormat !== format"
+          [class.dark:border-gray-600]="selectedFormat !== format"
+          [class.bg-white]="selectedFormat !== format"
+          [class.dark:bg-gray-800]="selectedFormat !== format"
+          [class.hover:bg-gray-100]="selectedFormat !== format && !isExporting"
+          [class.dark:hover:bg-gray-700]="selectedFormat !== format && !isExporting"
+          [class.text-gray-700]="selectedFormat !== format"
+          [class.dark:text-gray-200]="selectedFormat !== format"
+          [class.opacity-50]="isExporting"
+          [class.cursor-not-allowed]="isExporting">
+          {{ format.toUpperCase() }}
+        </button>
+      }
+    </div>
+
+    <!-- Status Row -->
+    @if (isExporting && exportStatus) {
+      <div class="mt-4 flex items-center justify-between bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-700 rounded-lg px-4 py-3">
+        <div class="flex items-center gap-2">
+          <div class="w-4 h-4 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+          <span class="text-sm font-medium text-indigo-700 dark:text-indigo-300">{{ exportStatus }}</span>
+        </div>
+        <button
+          (click)="stopExport()"
+          class="px-3 py-1 text-sm font-medium text-white bg-red-500 rounded-md hover:bg-red-600 dark:bg-red-600 dark:hover:bg-red-500 transition-colors">
+          {{ t('export.stop') || 'Stop' }}
+        </button>
+      </div>
+    }
+  </div>
+
+  <!-- Row 2: Options & Export -->
+  <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+    <div class="flex flex-col lg:flex-row gap-6">
+      <!-- Options -->
+      <div class="flex-1">
+        <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">{{ t('export.options') }}</h3>
+        <div class="flex flex-wrap gap-4">
+          <!-- Include Chapter Titles -->
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              [(ngModel)]="exportOptions.includeTitles"
+              class="w-4 h-4 text-brand-500 border-gray-300 rounded focus:ring-brand-500">
+            <span class="text-sm text-gray-700 dark:text-gray-300">{{ t('export.includeChapterTitles') }}</span>
+          </label>
+
+          <!-- Include TOC -->
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              [(ngModel)]="exportOptions.includeTOC"
+              class="w-4 h-4 text-brand-500 border-gray-300 rounded focus:ring-brand-500">
+            <span class="text-sm text-gray-700 dark:text-gray-300">{{ t('export.includeToc') }}</span>
+          </label>
+
+          <!-- Include Critiques -->
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              [(ngModel)]="exportOptions.includeCritiques"
+              class="w-4 h-4 text-brand-500 border-gray-300 rounded focus:ring-brand-500">
+            <span class="text-sm text-gray-700 dark:text-gray-300">{{ t('export.includeCritiques') }}</span>
+          </label>
+
+          <!-- Include Characters -->
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              [(ngModel)]="exportOptions.includeCharacters"
+              class="w-4 h-4 text-brand-500 border-gray-300 rounded focus:ring-brand-500">
+            <span class="text-sm text-gray-700 dark:text-gray-300">{{ t('export.includeCharacters') }}</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Export Button -->
+      <div class="lg:w-64 flex flex-col justify-end">
+        <div class="space-y-3">
+          <!-- Progress Bar -->
+          @if (isExporting) {
+            <div class="space-y-2">
+              <div class="flex items-center justify-between text-sm">
+                <span class="text-gray-600 dark:text-gray-400">{{ t('export.exporting') }}</span>
+                <span class="font-medium">{{ exportProgress }}%</span>
+              </div>
+              <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                <div 
+                  class="bg-brand-500 h-2 rounded-full transition-all duration-300"
+                  [style.width.%]="exportProgress">
+                </div>
+              </div>
+            </div>
+          }
+
+          <!-- Export Button -->
+          <button
+            (click)="exportBook()"
+            [disabled]="isExporting || getChapterCount() === 0"
+            class="w-full py-3 px-4 bg-brand-500 text-white rounded-lg hover:bg-brand-600 transition-colors font-medium"
+            [class.opacity-50]="isExporting || getChapterCount() === 0"
+            [class.cursor-not-allowed]="isExporting || getChapterCount() === 0">
+            @if (isExporting) {
+              <span class="flex items-center justify-center gap-2">
+                <div class="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                {{ getExportButtonText() }}
+              </span>
+            } @else {
+              <span class="flex items-center justify-center gap-2">
+                📤 {{ getExportButtonText() }}
+              </span>
+            }
+          </button>
+
+          <!-- Empty State -->
+          @if (getChapterCount() === 0) {
+            <div class="text-center py-2">
+              <p class="text-sm text-gray-500 dark:text-gray-400">{{ t('export.noChaptersToExport') }}</p>
+            </div>
+          }
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
