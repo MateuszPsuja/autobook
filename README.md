@@ -1,6 +1,6 @@
-# AutoBook
+# AutoBook — Book Generator
 
-AutoBook is an Angular application that orchestrates AI agents to design a story blueprint and generate chapter content, evaluate it, and export the result in multiple formats (PDF/EPUB/DOCX/Markdown).
+AutoBook (book-generator) is an Angular application that orchestrates AI agents to design a story blueprint and generate chapter content, evaluate it, and export the result in multiple formats (PDF/EPUB/DOCX/Markdown).
 
 This README covers quick setup, development commands, testing, and the included DejaVu Sans font licensing (font is bundled for consistent exports).
 
@@ -37,12 +37,6 @@ npm test
 ```
 
 The test runner is configured with Karma and Chrome.
-
-### Recent change
-
-- Fixed failing unit tests caused by declaring a standalone component in a test module. The `ExportComponent` spec now imports the standalone component instead of declaring it, which resolves 4 failing specs that occurred during the Karma run.
-
-Refer to the commit: "Fix: import standalone ExportComponent in spec" for details.
 
 ## Notes
 
