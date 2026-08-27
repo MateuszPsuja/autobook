@@ -65,11 +65,6 @@ npm test
 
 The test suite uses Karma with Jasmine and runs in Chrome.
 
-## Assets and Licensing
-
-The repository includes DejaVu Sans for consistent export rendering.
-See `src/assets/LICENSE-DejaVu.txt` for license details.
-
 ## License
 
 This project is licensed under the MIT License. See [LICENSE](LICENSE) for the
