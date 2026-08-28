@@ -1,12 +1,16 @@
 import { ChapterBrief, CriticContext } from '../../models/book-state.model';
 import { Chapter } from '../../models/chapter.model';
+import { stripRunningWordCount } from '../../shared/utils/chapter-cleanup';
 
 const getPreviousChapterClosing = (previousChapters: Chapter[]): string => {
   if (previousChapters.length === 0) {
     return 'Beginning of the story.';
   }
   const lastChapter = previousChapters[previousChapters.length - 1];
-  return lastChapter.content.slice(-500);
+  if (!lastChapter || !lastChapter.content) {
+    return 'Previous chapter content not available.';
+  }
+  return stripRunningWordCount(lastChapter.content).slice(-500);
 };
 
 export const criticSystemPrompt = `

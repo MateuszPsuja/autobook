@@ -30,6 +30,7 @@ describe('ShellComponent', () => {
     config: {} as any,
     error: null,
     continuityFlags: [],
+    skippedChapters: [],
     stats: {
       startTime: null,
       endTime: null,

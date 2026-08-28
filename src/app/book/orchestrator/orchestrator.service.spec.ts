@@ -172,6 +172,7 @@ describe('OrchestratorService', () => {
       config: mockConfig,
       error: null,
       continuityFlags: [],
+      skippedChapters: [],
       stats: createInitialStats()
     });
 

@@ -85,28 +85,52 @@ export class OrchestratorService {
   }
 
   /**
-   * Process all chapters in sequence
+   * Process all chapters in sequence. A single chapter failure no
+   * longer aborts the whole book — it logs the error, records the
+   * chapter number in `skippedChapters`, and moves on to the next
+   * chapter. The final status is `completed` if at least one chapter
+   * succeeded; the user can see which chapters were skipped in the
+   * state and retry just those.
    */
   private processChapters(blueprint: Blueprint, config: BookConfig): Observable<any> {
     return new Observable(subscriber => {
       const chapters = blueprint.chapters;
       let currentChapterIndex = 0;
+      const skippedChapters: number[] = [];
+      // Reset any prior skipped list at the start of a new run.
+      this.bookStateService.setSkippedChapters([]);
 
       const processNextChapter = () => {
         if (currentChapterIndex >= chapters.length) {
+          if (skippedChapters.length > 0) {
+            console.warn(
+              `Orchestrator: ${skippedChapters.length} chapter(s) skipped due to errors: ${skippedChapters.join(', ')}`,
+            );
+            this.bookStateService.setSkippedChapters(skippedChapters);
+          } else {
+            this.bookStateService.setSkippedChapters([]);
+          }
           subscriber.next('All chapters processed');
           subscriber.complete();
           return;
         }
 
         const chapterBrief = chapters[currentChapterIndex];
-        this.processChapter(chapterBrief, config, currentChapterIndex + 1).subscribe({
+        const expectedNumber = currentChapterIndex + 1;
+        this.processChapter(chapterBrief, config, expectedNumber).subscribe({
           next: () => {
             currentChapterIndex++;
             processNextChapter();
           },
           error: (error) => {
-            subscriber.error(error);
+            console.error(
+              `Orchestrator: chapter ${expectedNumber} ("${chapterBrief.title}") failed — skipping and continuing.`,
+              error,
+            );
+            skippedChapters.push(expectedNumber);
+            currentChapterIndex++;
+            // Continue with the next chapter instead of aborting.
+            processNextChapter();
           }
         });
       };

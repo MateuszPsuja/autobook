@@ -21,6 +21,7 @@ export class BookStateService {
     activeAgent: null,
     status: 'idle',
     error: null,
+    skippedChapters: [],
     stats: createInitialStats()
   };
 
@@ -115,6 +116,10 @@ export class BookStateService {
 
   setError(error: string | null): void {
     this.patch({ error });
+  }
+
+  setSkippedChapters(skipped: number[]): void {
+    this.patch({ skippedChapters: skipped });
   }
 
   // Stats methods

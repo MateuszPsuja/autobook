@@ -1,6 +1,7 @@
 import { BookConfig } from '../../models/book-config.model';
 import { ChapterBrief, AuthorContext } from '../../models/book-state.model';
 import { Chapter } from '../../models/chapter.model';
+import { stripRunningWordCount } from '../../shared/utils/chapter-cleanup';
 
 const getPreviousChapterClosing = (previousChapters: Chapter[]): string => {
   if (previousChapters.length === 0) {
@@ -10,7 +11,7 @@ const getPreviousChapterClosing = (previousChapters: Chapter[]): string => {
   if (!lastChapter || !lastChapter.content) {
     return 'Previous chapter content not available.';
   }
-  return lastChapter.content.slice(-500);
+  return stripRunningWordCount(lastChapter.content).slice(-500);
 };
 
 export const authorSystemPrompt = (config: BookConfig): string => `
@@ -37,14 +38,17 @@ Tone: ${config.tone}. POV: ${config.pov}. Tense: ${config.tense}.
 - Every paragraph should earn its place
 - Maintain consistent voice and style
 
-**Technical Requirements:**
+**Technical Requirements — output format:**
 - Write in complete prose only
-- Do not include chapter summaries or explanations
-- Do not break the fourth wall
-- Do not address the reader directly
+- Do NOT include any chapter summaries, explanations, or meta-commentary
+- Do NOT include a running word count, per-word numbering, or final word count
+  (e.g. do not write "Count: A1 banner2 fluttered3..." or "91 words." at the end)
+- Do NOT repeat the book title or chapter number in the output
+- Do NOT break the fourth wall or address the reader directly
 - Maintain consistent tense and POV
 - Use proper grammar and punctuation
-- Target word count: as specified in chapter brief
+- The requested word count is a soft target — write naturally for as long as
+  the scene needs. Do not pad or truncate to hit an exact number.
 `;
 
 export const authorChapterPrompt = (brief: ChapterBrief, ctx: AuthorContext): string => `
@@ -68,7 +72,7 @@ ${brief.keyEvents.map((event, index) => `${index + 1}. ${event}`).join('\n')}
 
 **Chapter Requirements:**
 - Hook type: ${brief.hookType}
-- Target word count: ${brief.targetWordCount} words
+- Approximate target word count: ${brief.targetWordCount} (soft — do not count as you write)
 - Must advance the overall plot
 - Must develop character in some way
 - Must maintain narrative tension
@@ -83,7 +87,12 @@ ${brief.keyEvents.map((event, index) => `${index + 1}. ${event}`).join('\n')}
 6. Ensure the chapter feels complete while leaving readers wanting more
 
 **Output:**
-Write the complete chapter in full prose. Do not include any summaries, explanations, or meta-commentary. Just the story.
+Write the chapter as pure narrative prose. The output will be inserted into a book PDF as-is. Do not include ANY of the following anywhere in your response:
+- Word counts, running counters, or per-word numbering
+- "Count:" prefix or "N words." summary
+- The book title or chapter number repeated at the start or end
+- Editorial notes, scene labels, or commentary outside the story
+Just the prose.
 `;
 
 export const authorRevisionPrompt = (draft: string, critique: any, brief: ChapterBrief): string => `

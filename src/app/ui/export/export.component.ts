@@ -9,6 +9,8 @@ import { takeUntil } from 'rxjs/operators';
 import { TranslationService } from '../../i18n/translation.service';
 import pdfMake from 'pdfmake/build/pdfmake';
 import pdfFonts from 'pdfmake/build/vfs_fonts';
+import { buildPdfDocument, PdfExportOptions } from './pdf-renderer';
+import { stripRunningWordCount } from '../../shared/utils/chapter-cleanup';
 
 // Initialize pdfMake with virtual file system
 (pdfMake as any).vfs = (pdfFonts as any).pdfMake?.vfs || (pdfFonts as any).vfs;
@@ -24,7 +26,7 @@ export class ExportComponent implements OnInit {
   
   chapters$: Observable<Chapter[]>;
   selectedFormat: 'pdf' | 'epub' | 'docx' | 'markdown' = 'pdf';
-  exportOptions = {
+  exportOptions: PdfExportOptions = {
     includeTitles: true,
     includeTOC: true,
     includeCritiques: false,
@@ -75,9 +77,47 @@ export class ExportComponent implements OnInit {
     try {
       const state = this.bookStateService.getState();
       let chapters = [...state.chapters];
-      
+
       if (!chapters || chapters.length === 0) {
         alert('No chapters to export. Generate some chapters first!');
+        this.isExporting = false;
+        this.exportProgress = 0;
+        return;
+      }
+
+      // Defensive: surface missing or empty chapters up front so the
+      // user doesn't get a PDF with a hole and no idea why. We block
+      // the export and list the gaps.
+      const expectedCount = state.config?.targetLength
+        ? this.estimateExpectedChapters(state.config.targetLength)
+        : null;
+      const missing = chapters
+        .map((c, i) => ({ chapter: c, position: i + 1 }))
+        .filter(({ chapter, position }) => chapter.number !== position);
+      const empty = chapters
+        .filter(c => !c.content || !c.content.trim())
+        .map(c => c.number);
+      const skipped = Array.isArray(state.skippedChapters)
+        ? state.skippedChapters.filter(n => n > 0)
+        : [];
+      if (missing.length || empty.length || skipped.length) {
+        const issues: string[] = [];
+        if (missing.length) {
+          issues.push(`Chapter numbers are out of order: expected ${missing.map(m => m.position).join(', ')} but found different numbers.`);
+        }
+        if (empty.length) {
+          issues.push(`Chapter(s) ${empty.join(', ')} have no content.`);
+        }
+        if (skipped.length) {
+          issues.push(`Chapter(s) ${skipped.join(', ')} were skipped during generation (LLM error). Re-run generation to fill them in.`);
+        }
+        if (expectedCount && chapters.length < expectedCount) {
+          issues.push(`Book has ${chapters.length} chapters but the target length expects ~${expectedCount}.`);
+        }
+        alert(
+          'Export blocked: ' + issues.join(' ') +
+          '\n\nRe-generate the missing chapter(s) and try again.',
+        );
         this.isExporting = false;
         this.exportProgress = 0;
         return;
@@ -164,133 +204,11 @@ export class ExportComponent implements OnInit {
     // Set pdfMake virtual file system with fonts
     (pdfMake as any).vfs = (pdfFonts as any).pdfMake?.vfs || (pdfFonts as any).vfs;
 
-    const state = this.bookStateService.getState();
-    const isPolish = this.translationService.isPolish();
-    const bookTitle = state.config?.title || (isPolish ? 'Bez tytułu' : 'Untitled');
-    const tocLabel = isPolish ? 'Spis Treści' : 'Table of Contents';
-    const chapterLabel = isPolish ? 'Rozdział' : 'Chapter';
-    const critiqueLabel = isPolish ? 'Raport Krytyki' : 'Critique Report';
-    const overallScoreLabel = isPolish ? 'Ocena Ogólna' : 'Overall Score';
-    const feedbackLabel = isPolish ? 'Informacja Zwrotna' : 'Feedback';
-
-    // Clean text
-    const cleanText = (text: string): string => {
-      if (!text) return '';
-      let result = text;
-      result = result.replace(/\*\*([^*]+)\*\*/g, '$1');
-      result = result.replace(/\*([^*]+)\*/g, '$1');
-      result = result.replace(/_([^_]+)_/g, '$1');
-      result = result.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');
-      result = result.replace(/<[^>]+>/g, '');
-      return result.trim();
-    };
-
-    // Build document content for pdfmake
-    const content: any[] = [];
-
-    // Title
-    content.push({
-      text: bookTitle,
-      style: 'title'
+    const docDefinition = buildPdfDocument(chapters, this.exportOptions, {
+      state: this.bookStateService.getState(),
+      isPolish: this.translationService.isPolish(),
     });
 
-    // TOC
-    if (this.exportOptions.includeTOC) {
-      content.push({
-        text: tocLabel,
-        style: 'heading'
-      });
-
-      chapters.forEach(chapter => {
-        content.push({
-          text: `${chapterLabel} ${chapter.number}: ${chapter.title}`,
-          style: 'tocEntry'
-        });
-      });
-
-      content.push({ text: '', pageBreak: 'after' });
-    }
-
-    // Chapters
-    chapters.forEach((chapter, index) => {
-      if (this.exportOptions.includeTitles) {
-        content.push({
-          text: `${chapterLabel} ${chapter.number}: ${chapter.title}`,
-          style: 'chapterTitle'
-        });
-      }
-
-      // Process content - split by paragraphs
-      const paragraphs = cleanText(chapter.content).split(/\n\n+/);
-      
-      paragraphs.forEach(para => {
-        if (para.trim()) {
-          content.push({
-            text: para.trim(),
-            style: 'body'
-          });
-        }
-      });
-
-      // Critique
-      if (this.exportOptions.includeCritiques && chapter.critique) {
-        content.push({
-          text: critiqueLabel,
-          style: 'critiqueTitle'
-        });
-        content.push({
-          text: `${overallScoreLabel}: ${chapter.critique.overallScore}/10`,
-          style: 'body'
-        });
-        content.push({
-          text: `${feedbackLabel}: ${chapter.critique.feedback}`,
-          style: 'body'
-        });
-      }
-
-      // Page break between chapters (except last)
-      if (index < chapters.length - 1) {
-        content.push({ text: '', pageBreak: 'after' });
-      }
-    });
-
-    // Define styles
-    const docDefinition = {
-      content: content,
-      styles: {
-        title: {
-          fontSize: 24,
-          bold: true,
-          margin: [0, 0, 0, 20]
-        },
-        heading: {
-          fontSize: 16,
-          bold: true,
-          margin: [0, 0, 0, 10]
-        },
-        tocEntry: {
-          fontSize: 12,
-          margin: [20, 2, 0, 2]
-        },
-        chapterTitle: {
-          fontSize: 18,
-          bold: true,
-          margin: [0, 10, 0, 10]
-        },
-        critiqueTitle: {
-          fontSize: 14,
-          bold: true,
-          margin: [0, 15, 0, 5]
-        },
-        body: {
-          fontSize: 12,
-          margin: [0, 0, 0, 5],
-          lineHeight: 1.4
-        }
-      }
-    };
-
-    // Generate PDF as blob
     return new Promise((resolve, reject) => {
       try {
         pdfMake.createPdf(docDefinition).getBlob((blob: Blob) => {
@@ -342,7 +260,7 @@ export class ExportComponent implements OnInit {
       if (this.exportOptions.includeTitles) {
         content += `# ${chapterLabel} ${chapter.number}: ${chapter.title}\n\n`;
       }
-      content += `${chapter.content}\n\n`;
+      content += `${stripRunningWordCount(chapter.content)}\n\n`;
       
       if (this.exportOptions.includeCritiques && chapter.critique) {
         content += `## ${critiqueLabel}\n\n`;
@@ -376,6 +294,21 @@ export class ExportComponent implements OnInit {
 
   getChapterCount(): number {
     return this.chapterCount;
+  }
+
+  /**
+   * Rough target chapter count for a given book length, used to flag
+   * obviously-incomplete exports. Kept in sync with the architect
+   * service's estimate.
+   */
+  private estimateExpectedChapters(targetLength: string): number {
+    switch (targetLength) {
+      case 'Short Story': return 3;
+      case 'Novella': return 7;
+      case 'Novel': return 15;
+      case 'Epic': return 25;
+      default: return 5;
+    }
   }
 
   getFormatDescription(format: string): string {

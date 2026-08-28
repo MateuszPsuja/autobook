@@ -5,6 +5,7 @@ import { ApiService, TokenUsage } from '../../core/api.service';
 import { ChapterBrief, AuthorContext } from '../../models/book-state.model';
 import { ChapterDraft } from '../../models/chapter.model';
 import { authorSystemPrompt, authorChapterPrompt, authorRevisionPrompt } from '../prompts/author.prompts';
+import { stripRunningWordCount } from '../../shared/utils/chapter-cleanup';
 
 export interface AuthorResult {
   draft: ChapterDraft;
@@ -43,12 +44,15 @@ export class AuthorService {
     let subscription = stream.subscribe({
       next: (token: string) => {
         content += token;
-        wordCount = this.countWords(content);
+        // Strip the running word counter (if the model emits one) so
+        // the stored content and live progress text are clean prose.
+        const cleaned = stripRunningWordCount(content);
+        wordCount = this.countWords(cleaned);
         hasEmitted = true;
-        
+
         const draft: ChapterDraft = {
           chapterId: `chapter-${brief.number}`,
-          content,
+          content: cleaned,
           wordCount,
           progress: Math.min(100, Math.floor((wordCount / brief.targetWordCount) * 100)),
           createdAt: new Date(),
@@ -61,11 +65,12 @@ export class AuthorService {
         console.error('Author stream error:', error);
         // If we have partial content, emit it as a partial draft instead of erroring
         if (content.length > 0) {
+          const cleaned = stripRunningWordCount(content);
           const partialDraft: ChapterDraft = {
             chapterId: `chapter-${brief.number}`,
-            content,
-            wordCount,
-            progress: Math.min(100, Math.floor((wordCount / brief.targetWordCount) * 100)),
+            content: cleaned,
+            wordCount: this.countWords(cleaned),
+            progress: Math.min(100, Math.floor((this.countWords(cleaned) / brief.targetWordCount) * 100)),
             createdAt: new Date(),
             updatedAt: new Date()
           };
@@ -121,9 +126,9 @@ export class AuthorService {
 
     return this.apiService.chatCompletion(request).pipe(
       map(response => {
-        const content = response.choices[0]?.message?.content || '';
+        const content = stripRunningWordCount(response.choices[0]?.message?.content || '');
         const wordCount = this.countWords(content);
-        
+
         const draft: ChapterDraft = {
           chapterId: `chapter-${brief.number}`,
           content,
@@ -132,13 +137,13 @@ export class AuthorService {
           createdAt: new Date(),
           updatedAt: new Date()
         };
-        
+
         const usage: TokenUsage = {
           promptTokens: response.usage?.prompt_tokens || 0,
           completionTokens: response.usage?.completion_tokens || 0,
           totalTokens: response.usage?.total_tokens || 0
         };
-        
+
         return { draft, usage };
       })
     );
@@ -162,7 +167,7 @@ export class AuthorService {
 
     return this.apiService.chatCompletion(request).pipe(
       map(response => {
-        const content = response.choices[0].message.content;
+        const content = stripRunningWordCount(response.choices[0].message.content);
         const revisedDraft: ChapterDraft = {
           ...draft,
           content,
@@ -192,22 +197,23 @@ export class AuthorService {
 
     return this.apiService.chatCompletion(request).pipe(
       map(response => {
-        const content = response.choices[0]?.message?.content || draft.content;
+        const raw = response.choices[0]?.message?.content || draft.content;
+        const content = stripRunningWordCount(raw);
         const wordCount = this.countWords(content);
-        
+
         const revisedDraft: ChapterDraft = {
           ...draft,
           content,
           wordCount,
           updatedAt: new Date()
         };
-        
+
         const usage: TokenUsage = {
           promptTokens: response.usage?.prompt_tokens || 0,
           completionTokens: response.usage?.completion_tokens || 0,
           totalTokens: response.usage?.total_tokens || 0
         };
-        
+
         return { draft: revisedDraft, usage };
       })
     );

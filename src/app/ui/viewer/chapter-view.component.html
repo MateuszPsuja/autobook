@@ -158,7 +158,7 @@
       <div *ngIf="selectedChapter" class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
         <div class="prose prose-lg dark:prose-invert max-w-none font-serif">
           <div class="whitespace-pre-wrap">
-            {{ selectedChapter.content }}
+            {{ getDisplayContent() }}
           </div>
         </div>
       </div>

@@ -10,6 +10,29 @@ import { ApiResult, extractUsage } from '../../shared/utils/api-result.util';
 
 export interface CriticResult extends ApiResult<CritiqueReport> {}
 
+/**
+ * Thrown internally when the LLM returns an empty / null response.
+ * Distinct from JSON parse errors so the catch handler can treat it as
+ * a recoverable condition (rate limit, timeout, refusal).
+ */
+class CriticEmptyResponseError extends Error {
+  constructor() {
+    super('Empty response content from critic');
+    this.name = 'CriticEmptyResponseError';
+  }
+}
+
+/**
+ * Thrown when the LLM returned content but it could not be parsed as
+ * JSON. Recoverable — the pipeline continues with an empty critique.
+ */
+class CriticParseError extends Error {
+  constructor(cause: string) {
+    super(`Critic response was not parseable JSON: ${cause}`);
+    this.name = 'CriticParseError';
+  }
+}
+
 @Injectable({
   providedIn: 'root'
 })
@@ -24,24 +47,16 @@ export class CriticService {
    */
   evaluateChapter(chapterContent: string, brief: ChapterBrief, ctx: CriticContext): Observable<CritiqueReport> {
     const request = this.buildRequest(chapterContent, brief, ctx);
-    
+
     return this.apiService.chatCompletion(request).pipe(
       map(response => {
         const content = response.choices[0]?.message?.content;
         if (!content || content.trim().length === 0) {
-          throw new Error('Empty response content from critic');
+          throw new CriticEmptyResponseError();
         }
-        const critique = this.jsonParser.parse<CritiqueReport>(content);
-        critique.createdAt = new Date();
-        return critique;
+        return this.parseCritique(content);
       }),
-      catchError(error => {
-        console.error('Critic evaluation error:', error);
-        return new Observable<CritiqueReport>(subscriber => {
-          subscriber.next({} as CritiqueReport);
-          subscriber.complete();
-        });
-      })
+      catchError(error => this.handleCriticError(error))
     );
   }
 
@@ -50,31 +65,67 @@ export class CriticService {
    */
   evaluateChapterWithUsage(chapterContent: string, brief: ChapterBrief, ctx: CriticContext): Observable<CriticResult> {
     const request = this.buildRequest(chapterContent, brief, ctx);
-    
+
     return this.apiService.chatCompletion(request).pipe(
       map(response => {
         const content = response.choices[0]?.message?.content;
         if (!content || content.trim().length === 0) {
-          throw new Error('Empty response content from critic');
+          throw new CriticEmptyResponseError();
         }
-        const critique = this.jsonParser.parse<CritiqueReport>(content);
-        critique.createdAt = new Date();
-        return {
-          data: critique,
-          usage: extractUsage(response)
-        };
+        return this.parseCritiqueWithUsage(content, response);
       }),
-      catchError(error => {
-        console.error('Critic evaluation error:', error);
-        return new Observable<CriticResult>(subscriber => {
-          subscriber.next({
-            data: {} as CritiqueReport,
-            usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 }
-          });
-          subscriber.complete();
-        });
-      })
+      catchError(error => this.handleCriticError(error, true))
     );
+  }
+
+  private parseCritique(content: string): CritiqueReport {
+    try {
+      const critique = this.jsonParser.parse<CritiqueReport>(content);
+      critique.createdAt = new Date();
+      return critique;
+    } catch (e) {
+      throw new CriticParseError((e as Error).message);
+    }
+  }
+
+  private parseCritiqueWithUsage(content: string, response: any): CriticResult {
+    try {
+      const critique = this.jsonParser.parse<CritiqueReport>(content);
+      critique.createdAt = new Date();
+      return { data: critique, usage: extractUsage(response) };
+    } catch (e) {
+      throw new CriticParseError((e as Error).message);
+    }
+  }
+
+  private handleCriticError<T>(error: unknown, withUsage: true): Observable<{ data: CritiqueReport; usage: { promptTokens: number; completionTokens: number; totalTokens: number } }>;
+  private handleCriticError<T>(error: unknown, withUsage?: false): Observable<CritiqueReport>;
+  private handleCriticError<T>(error: unknown, withUsage = false): Observable<any> {
+    if (error instanceof CriticEmptyResponseError) {
+      // LLM returned no content — recoverable (rate limit, timeout,
+      // model refusal). Log a warning, not an error, and fall through
+      // to the empty-critique fallback so the rest of the pipeline
+      // can continue.
+      console.warn('Critic returned no content; skipping critique.');
+    } else if (error instanceof CriticParseError) {
+      // LLM returned content but it wasn't parseable JSON. Still
+      // recoverable — empty critique is the right fallback. Warn
+      // rather than error so paper bots don't get spammed red.
+      console.warn('Critic returned non-JSON content; skipping critique. ' + (error as Error).message);
+    } else {
+      console.error('Critic evaluation error:', error);
+    }
+    return new Observable(subscriber => {
+      if (withUsage) {
+        subscriber.next({
+          data: {} as CritiqueReport,
+          usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 }
+        });
+      } else {
+        subscriber.next({} as CritiqueReport);
+      }
+      subscriber.complete();
+    });
   }
 
   private buildRequest(chapterContent: string, brief: ChapterBrief, ctx: CriticContext) {

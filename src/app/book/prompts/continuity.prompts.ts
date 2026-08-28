@@ -1,14 +1,15 @@
 import { ChapterBrief } from '../../models/book-state.model';
 import { Chapter } from '../../models/chapter.model';
 import { Issue } from '../../models/book-state.model';
+import { stripRunningWordCount } from '../../shared/utils/chapter-cleanup';
 
 const buildPreviousChaptersSummary = (chapters: Chapter[]): string => {
   if (chapters.length === 0) return 'No previous chapters - this is the beginning of the story.';
-  
+
   return chapters.map(ch => `
 **Chapter ${ch.number}: ${ch.title}**
 - Word Count: ${ch.wordCount}
-- Content Summary: ${ch.content.slice(0, 300)}...
+- Content Summary: ${ch.content ? stripRunningWordCount(ch.content).slice(0, 300) : '(no content yet)'}...
 `).join('\n');
 };
 

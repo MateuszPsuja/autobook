@@ -54,6 +54,13 @@ export interface BookState {
   activeAgent: AgentType | null;
   status: GenerationStatus;
   error: string | null;
+  /**
+   * Chapter numbers that the orchestrator couldn't generate and
+   * skipped, so the rest of the book could continue. Empty when
+   * generation was clean. The user can re-trigger generation and
+   * the orchestrator should retry these specifically.
+   */
+  skippedChapters: number[];
   stats: GenerationStats;
 }
 

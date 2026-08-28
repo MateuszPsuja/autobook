@@ -31,6 +31,29 @@ export interface ContinuityFlagsResult {
   remainingFlags: Issue[];
 }
 
+/**
+ * Thrown internally when the LLM returns an empty / null response.
+ * Distinct from JSON parse errors so the catch handler can treat it as
+ * a recoverable condition (rate limit, timeout, refusal).
+ */
+class ContinuityEmptyResponseError extends Error {
+  constructor() {
+    super('Empty response content from continuity');
+    this.name = 'ContinuityEmptyResponseError';
+  }
+}
+
+/**
+ * Thrown when the LLM returned content but it could not be parsed as
+ * JSON. Recoverable — the pipeline continues with no continuity issues.
+ */
+class ContinuityParseError extends Error {
+  constructor(cause: string) {
+    super(`Continuity response was not parseable JSON: ${cause}`);
+    this.name = 'ContinuityParseError';
+  }
+}
+
 @Injectable({
   providedIn: 'root'
 })
@@ -50,24 +73,16 @@ export class ContinuityService {
     model: string
   ): Observable<ContinuityResult> {
     const request = this.buildContinuityRequest(chapterContent, brief, previousChapters, model);
-    
+
     return this.apiService.chatCompletion(request).pipe(
       map(response => {
-        const content = response.choices[0].message.content;
-        const parsed = this.jsonParser.parse(content) as ContinuityAnalysisResponse;
-        const issuesWithChapter = this.addChapterToIssues(parsed.issues || [], brief.number);
-        return {
-          issues: issuesWithChapter,
-          overallContinuity: parsed.overallContinuity || 'Fair'
-        };
+        const content = response.choices[0]?.message?.content;
+        if (!content || content.trim().length === 0) {
+          throw new ContinuityEmptyResponseError();
+        }
+        return this.parseContinuity(content, brief);
       }),
-      catchError(error => {
-        console.error('Continuity analysis error:', error);
-        return new Observable<ContinuityResult>(subscriber => {
-          subscriber.next({ issues: [], overallContinuity: 'Fair' });
-          subscriber.complete();
-        });
-      })
+      catchError(error => this.handleContinuityError(error, false))
     );
   }
 
@@ -81,31 +96,74 @@ export class ContinuityService {
     model: string
   ): Observable<ApiResult<ContinuityResult>> {
     const request = this.buildContinuityRequest(chapterContent, brief, previousChapters, model);
-    
+
     return this.apiService.chatCompletion(request).pipe(
       map(response => {
-        const content = response.choices[0].message.content;
-        const parsed = this.jsonParser.parse(content) as ContinuityAnalysisResponse;
-        const issuesWithChapter = this.addChapterToIssues(parsed.issues || [], brief.number);
-        return {
-          data: {
-            issues: issuesWithChapter,
-            overallContinuity: parsed.overallContinuity || 'Fair'
-          },
-          usage: extractUsage(response)
-        };
+        const content = response.choices[0]?.message?.content;
+        if (!content || content.trim().length === 0) {
+          throw new ContinuityEmptyResponseError();
+        }
+        return this.parseContinuityWithUsage(content, brief, response);
       }),
-      catchError(error => {
-        console.error('Continuity analysis error:', error);
-        return new Observable<ApiResult<ContinuityResult>>(subscriber => {
-          subscriber.next({
-            data: { issues: [], overallContinuity: 'Fair' },
-            usage: defaultUsage()
-          });
-          subscriber.complete();
-        });
-      })
+      catchError(error => this.handleContinuityError(error, true))
     );
+  }
+
+  private parseContinuity(content: string, brief: ChapterBrief): ContinuityResult {
+    try {
+      const parsed = this.jsonParser.parse(content) as ContinuityAnalysisResponse;
+      const issuesWithChapter = this.addChapterToIssues(parsed.issues || [], brief.number);
+      return {
+        issues: issuesWithChapter,
+        overallContinuity: parsed.overallContinuity || 'Fair'
+      };
+    } catch (e) {
+      throw new ContinuityParseError((e as Error).message);
+    }
+  }
+
+  private parseContinuityWithUsage(content: string, brief: ChapterBrief, response: any): ApiResult<ContinuityResult> {
+    try {
+      const parsed = this.jsonParser.parse(content) as ContinuityAnalysisResponse;
+      const issuesWithChapter = this.addChapterToIssues(parsed.issues || [], brief.number);
+      return {
+        data: {
+          issues: issuesWithChapter,
+          overallContinuity: parsed.overallContinuity || 'Fair'
+        },
+        usage: extractUsage(response)
+      };
+    } catch (e) {
+      throw new ContinuityParseError((e as Error).message);
+    }
+  }
+
+  private handleContinuityError(error: unknown, withUsage: true): Observable<ApiResult<ContinuityResult>>;
+  private handleContinuityError(error: unknown, withUsage: false): Observable<ContinuityResult>;
+  private handleContinuityError(error: unknown, withUsage: boolean): Observable<any> {
+    if (error instanceof ContinuityEmptyResponseError) {
+      // LLM returned no content — recoverable (rate limit, timeout,
+      // model refusal). Log a warning, not an error.
+      console.warn('Continuity returned no content; skipping analysis.');
+    } else if (error instanceof ContinuityParseError) {
+      // LLM returned content but it wasn't parseable JSON. Still
+      // recoverable — empty analysis is the right fallback. Warn
+      // rather than error so paper bots don't get spammed red.
+      console.warn('Continuity returned non-JSON content; skipping analysis. ' + (error as Error).message);
+    } else {
+      console.error('Continuity analysis error:', error);
+    }
+    return new Observable(subscriber => {
+      if (withUsage) {
+        subscriber.next({
+          data: { issues: [], overallContinuity: 'Fair' },
+          usage: defaultUsage()
+        });
+      } else {
+        subscriber.next({ issues: [], overallContinuity: 'Fair' });
+      }
+      subscriber.complete();
+    });
   }
 
   /**

@@ -5,6 +5,7 @@ import { Chapter } from '../../models/chapter.model';
 import { AsyncPipe } from '@angular/common';
 import { Observable } from 'rxjs';
 import { TranslationService } from '../../i18n/translation.service';
+import { stripRunningWordCount } from '../../shared/utils/chapter-cleanup';
 
 @Component({
   selector: 'app-chapter-view',
@@ -94,6 +95,15 @@ export class ChapterViewComponent implements OnInit {
 
   hasCritique(): boolean {
     return !!this.selectedChapter?.critique;
+  }
+
+  /**
+   * Defensive cleanup for already-stored chapters. New chapters come
+   * out of the author service clean, but chapters persisted before
+   * that fix may still carry the running-counter corruption pattern.
+   */
+  getDisplayContent(): string {
+    return stripRunningWordCount(this.selectedChapter?.content || '');
   }
 
   // Translation helper
