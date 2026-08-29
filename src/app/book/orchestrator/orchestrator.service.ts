@@ -355,57 +355,106 @@ export class OrchestratorService {
   }
 
   /**
-   * Handle chapter revision loop
+   * Handle chapter revision loop. Retries the reviser on any failure
+   * (refusal, truncation, network error) up to `maxReviseRetries`
+   * times per revision round. If all retries fail, the original draft
+   * is kept and the chapter still goes through the rest of the
+   * pipeline — a chapter is never skipped just because the reviser
+   * bailed. The Observable always completes with the final draft
+   * (never errors), so the chapter is always approved.
    */
-  private handleRevision(brief: ChapterBrief, draft: ChapterDraft, critique: any, config: BookConfig): Observable<any> {
+  private handleRevision(brief: ChapterBrief, draft: ChapterDraft, critique: any, config: BookConfig): Observable<ChapterDraft> {
+    const maxReviseRetries = 3;
+    const maxRevisionRounds = 3;
     return new Observable(subscriber => {
-      let revisionCount = 0;
       let currentDraft = draft;
+      let completed = false;
+      let pendingRetry: ReturnType<typeof setTimeout> | null = null;
 
-      const revise = () => {
-        revisionCount++;
-        this.bookStateService.setRevisionCount(revisionCount);
-        this.bookStateService.setActiveAgent('reviser');
-
-        this.authorService.reviseChapterWithUsage(currentDraft, critique, brief, config.model).subscribe({
-          next: (result) => {
-            this.bookStateService.recordAgentUsage('reviser', result.usage);
-            
-            // Re-evaluate the revised chapter
-            const criticContext: CriticContext = {
-              model: config.model,
-              chapterBrief: brief,
-              chapterContent: result.draft.content,
-              previousChapters: this.bookStateService.getState().chapters,
-              characterState: this.bookStateService.getState().characterStore[brief.povCharacter] || null,
-              worldState: this.bookStateService.getState().worldStateDoc
-            };
-
-            this.criticService.evaluateChapterWithUsage(result.draft.content, brief, criticContext).subscribe({
-              next: (newCritiqueResult) => {
-                this.bookStateService.recordAgentUsage('critic', newCritiqueResult.usage);
-                
-                if (newCritiqueResult.data.overallScore >= 7 || revisionCount >= 3) {
-                  currentDraft = result.draft;
-                  subscriber.next('Revision loop completed');
-                  subscriber.complete();
-                } else {
-                  currentDraft = result.draft;
-                  revise(); // Continue revision loop
-                }
-              },
-              error: (error) => {
-                subscriber.error(error);
-              }
-            });
-          },
-          error: (error) => {
-            subscriber.error(error);
-          }
-        });
+      const finish = (finalDraft: ChapterDraft, reason: string) => {
+        if (completed) return;
+        completed = true;
+        if (pendingRetry) {
+          clearTimeout(pendingRetry);
+          pendingRetry = null;
+        }
+        console.log(`Orchestrator: chapter ${brief.number} revision done — ${reason}`);
+        subscriber.next(finalDraft);
+        subscriber.complete();
       };
 
-      revise();
+      // One reviser attempt, with its own retry loop. Resolves on
+      // success; resolves with the previous draft on exhaustion.
+      const runReviserRound = (round: number): void => {
+        if (completed) return;
+        let attempt = 0;
+
+        const doAttempt = () => {
+          if (completed) return;
+          if (attempt >= maxReviseRetries) {
+            // Exhausted retries this round — keep the current draft
+            // and call it done. The chapter still goes through
+            // post-revision checks and gets approved.
+            console.warn(
+              `Orchestrator: reviser exhausted ${maxReviseRetries} attempts for chapter ${brief.number}; keeping current draft.`
+            );
+            finish(currentDraft, 'reviser gave up, original draft kept');
+            return;
+          }
+          attempt++;
+
+          this.authorService.reviseChapterWithUsage(currentDraft, critique, brief, config.model).subscribe({
+            next: (result) => {
+              this.bookStateService.recordAgentUsage('reviser', result.usage);
+              const newDraft = result.draft;
+              const criticContext: CriticContext = {
+                model: config.model,
+                chapterBrief: brief,
+                chapterContent: newDraft.content,
+                previousChapters: this.bookStateService.getState().chapters,
+                characterState: this.bookStateService.getState().characterStore[brief.povCharacter] || null,
+                worldState: this.bookStateService.getState().worldStateDoc
+              };
+
+              this.criticService.evaluateChapterWithUsage(newDraft.content, brief, criticContext).subscribe({
+                next: (newCritiqueResult) => {
+                  this.bookStateService.recordAgentUsage('critic', newCritiqueResult.usage);
+                  currentDraft = newDraft;
+                  const score = newCritiqueResult.data?.overallScore ?? 0;
+                  if (score >= 7 || round >= maxRevisionRounds) {
+                    finish(currentDraft, `score ${score} after round ${round}`);
+                  } else {
+                    this.bookStateService.setRevisionCount(round + 1);
+                    this.bookStateService.setActiveAgent('reviser');
+                    runReviserRound(round + 1);
+                  }
+                },
+                error: (error) => {
+                  // Critic is supposed to be non-throwing now
+                  // (returns an unavailableReason sentinel). If it
+                  // does throw, keep the current draft and finish.
+                  console.warn(
+                    `Orchestrator: critic re-eval failed for chapter ${brief.number}; keeping current draft.`,
+                    error?.message || error
+                  );
+                  finish(currentDraft, 'critic re-eval failed, keeping draft');
+                }
+              });
+            },
+            error: (error) => {
+              console.warn(
+                `Orchestrator: reviser attempt ${attempt}/${maxReviseRetries} for chapter ${brief.number} failed: ${error?.message || error}`
+              );
+              if (completed) return;
+              pendingRetry = setTimeout(doAttempt, 2000);
+            }
+          });
+        };
+
+        doAttempt();
+      };
+
+      runReviserRound(1);
     });
   }
 

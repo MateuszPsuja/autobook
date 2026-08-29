@@ -49,9 +49,9 @@ export class CriticService {
     const request = this.buildRequest(chapterContent, brief, ctx);
 
     return this.apiService.chatCompletion(request).pipe(
-      switchMap(response => this.handleFirstResponse(response, false)),
+      switchMap(response => this.handleFirstResponse(response, request, chapterContent, brief, ctx, false)),
       catchError(error => this.handleCriticError(error, false))
-    );
+    ) as unknown as Observable<CritiqueReport>;
   }
 
   /**
@@ -61,28 +61,31 @@ export class CriticService {
     const request = this.buildRequest(chapterContent, brief, ctx);
 
     return this.apiService.chatCompletion(request).pipe(
-      switchMap(response => this.handleFirstResponse(response, true)),
+      switchMap(response => this.handleFirstResponse(response, request, chapterContent, brief, ctx, true)),
       catchError(error => this.handleCriticError(error, true))
-    );
+    ) as unknown as Observable<CriticResult>;
   }
 
   /**
    * Process the first LLM response: extract content, parse it, and on
-   * parse failure kick off a single rescue retry that re-asks the model
-   * to return ONLY valid JSON. This is the "work correctly every time"
-   * path for the feedback-missing bug — we no longer silently return
-   * an empty critique just because the model wrapped the JSON in prose
-   * or markdown.
+   * parse failure (or empty content) kick off a single rescue retry
+   * that re-runs the *original* evaluation with a stricter
+   * "JSON only" system prompt — so the model still has the chapter
+   * to evaluate, unlike a generic "give me an empty critique" retry.
+   * If both attempts fail, fall through to the unavailableReason
+   * sentinel.
    */
-  private handleFirstResponse(response: any, withUsage: true): Observable<CriticResult>;
-  private handleFirstResponse(response: any, withUsage: false): Observable<CritiqueReport>;
-  private handleFirstResponse(response: any, withUsage: boolean): Observable<CritiqueReport | CriticResult> {
+  private handleFirstResponse(
+    response: any,
+    originalRequest: any,
+    chapterContent: string,
+    brief: ChapterBrief,
+    ctx: CriticContext,
+    withUsage: boolean
+  ): Observable<CritiqueReport | CriticResult> {
     const content = response.choices?.[0]?.message?.content;
     if (!content || content.trim().length === 0) {
-      // No content — try a rescue once. Sometimes the model just
-      // returns whitespace, and a direct re-ask with a tighter prompt
-      // gets a real answer.
-      return this.rescueRetry(response, 'Critic returned empty content; retrying with stricter prompt.', withUsage)
+      return this.rescueRetry(originalRequest, withUsage)
         .pipe(catchError(error => this.handleCriticError(error, withUsage as any)));
     }
     try {
@@ -91,9 +94,8 @@ export class CriticService {
       }
       return of(this.parseCritique(content));
     } catch (parseError) {
-      // First parse failed — try once more with a strict JSON-only
-      // prompt. If that also fails, fall through to the empty-critique
-      // fallback so the rest of the pipeline can continue.
+      // First parse failed — try to extract JSON from the previous
+      // content (the model has the original text to work with).
       const model = response.model;
       return this.rescueRetryForParse(content, model, withUsage as any)
         .pipe(catchError(error => this.handleCriticError(error, withUsage as any)));
@@ -101,34 +103,38 @@ export class CriticService {
   }
 
   /**
-   * Re-ask the same model with the strictest possible "return ONLY
-   * valid JSON" prompt. Used when the first response was empty.
+   * When the first response was empty, re-run the ORIGINAL evaluation
+   * with a stricter "JSON only" system prompt. Crucially, the user
+   * message is the same as the original — the model still has the
+   * chapter to evaluate, so it can produce a real critique instead
+   * of bailing with an empty object.
    */
-  private rescueRetry(prevResponse: any, _reason: string, withUsage: boolean): Observable<CritiqueReport | CriticResult> {
-    const model = prevResponse.model;
-    const messages = [
+  private rescueRetry(originalRequest: any, withUsage: boolean): Observable<CritiqueReport | CriticResult> {
+    const messages: Array<{ role: 'system' | 'user'; content: string }> = [
       {
-        role: 'system' as const,
-        content: 'You are a strict JSON generator. Return ONLY a single valid JSON object. No prose, no markdown, no explanations before or after. The first character of your reply must be "{" and the last must be "}".'
+        role: 'system',
+        content: 'You are a strict JSON evaluator. Evaluate the chapter the user provides and respond with ONLY a single valid JSON object. No prose, no markdown, no explanations before or after. The first character of your reply must be "{" and the last must be "}". Use this exact schema: {"scores":{"prose":N,"pacing":N,"showVsTell":N,"dialogue":N,"continuity":N,"hookStrength":N,"thematicResonance":N},"overallScore":N,"feedback":"<2-3 sentences>","mustFix":["<items>"],"suggestions":["<items>"]} with N in 1-10.'
       },
-      {
-        role: 'user' as const,
-        content: 'Reply with an empty critique object: {"scores":{},"overallScore":0,"feedback":"","mustFix":[],"suggestions":[]}'
-      }
+      // Keep the original user prompt — the model still has the chapter.
+      originalRequest.messages[originalRequest.messages.length - 1]
     ];
-    return this.apiService.chatCompletion({ model, messages, temperature: 0.1, max_tokens: 800 })
-      .pipe(
-        switchMap(response => {
-          const content = response.choices?.[0]?.message?.content;
-          if (!content || content.trim().length === 0) {
-            throw new CriticEmptyResponseError();
-          }
-          if (withUsage) {
-            return of(this.parseCritiqueWithUsage(content, response));
-          }
-          return of(this.parseCritique(content));
-        })
-      );
+    return this.apiService.chatCompletion({
+      model: originalRequest.model,
+      messages,
+      temperature: 0.1,
+      max_tokens: 2000
+    }).pipe(
+      switchMap(response => {
+        const content = response.choices?.[0]?.message?.content;
+        if (!content || content.trim().length === 0) {
+          throw new CriticEmptyResponseError();
+        }
+        if (withUsage) {
+          return of(this.parseCritiqueWithUsage(content, response));
+        }
+        return of(this.parseCritique(content));
+      })
+    );
   }
 
   /**
@@ -165,6 +171,7 @@ export class CriticService {
     try {
       const critique = this.jsonParser.parse<CritiqueReport>(content);
       critique.createdAt = new Date();
+      this.assertCritiqueHasContent(critique);
       return critique;
     } catch (e) {
       throw new CriticParseError((e as Error).message);
@@ -175,9 +182,39 @@ export class CriticService {
     try {
       const critique = this.jsonParser.parse<CritiqueReport>(content);
       critique.createdAt = new Date();
+      this.assertCritiqueHasContent(critique);
       return { data: critique, usage: extractUsage(response) };
     } catch (e) {
       throw new CriticParseError((e as Error).message);
+    }
+  }
+
+  /**
+   * Reject "structurally valid but effectively empty" critiques —
+   * the all-zeros, no-feedback object that some models return when
+   * they comply literally with a "reply with an empty critique
+   * object" prompt. Without this check the chapter ends up with a
+   * valid `CritiqueReport` containing all-zeros and empty strings,
+   * which renders as a 0/10 panel instead of the "unavailable"
+   * panel the user actually wants to see.
+   */
+  private assertCritiqueHasContent(critique: CritiqueReport): void {
+    if (!critique) {
+      throw new CriticParseError('Critique parsed to null/undefined');
+    }
+    if (critique.unavailableReason) {
+      // Already an unavailable sentinel; nothing to validate.
+      return;
+    }
+    const hasText = (s?: string) => !!(s && s.trim().length > 0);
+    const feedback = hasText(critique.feedback);
+    const hasMustFix = Array.isArray(critique.mustFix) && critique.mustFix.length > 0;
+    const hasSuggestions = Array.isArray(critique.suggestions) && critique.suggestions.length > 0;
+    const scores = critique.scores || {};
+    const hasAnyScore = Object.values(scores).some(v => typeof v === 'number' && v > 0);
+
+    if (!feedback && !hasMustFix && !hasSuggestions && !hasAnyScore) {
+      throw new CriticParseError('Critique parsed but is empty (no feedback, no items, all scores 0)');
     }
   }
 

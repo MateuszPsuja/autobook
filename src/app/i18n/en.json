@@ -152,6 +152,7 @@
     "watchCreate": "Watch your book come to life",
     "clickToStart": "Click Generate to start creating your book",
     "generate": "Generate",
+    "regenerate": "Regenerate",
     "stop": "Stop",
     "agentPipeline": "Agent Pipeline",
     "generationComplete": "Generation Complete!",

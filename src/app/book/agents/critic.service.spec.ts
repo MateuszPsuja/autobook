@@ -273,6 +273,42 @@ describe('CriticService', () => {
         error: done.fail
       });
     });
+
+    it('should treat an all-zeros / empty JSON as a parse failure', (done) => {
+      // The model returned a structurally valid but content-empty
+      // critique object — the kind a model produces when it
+      // complies literally with an "empty critique" rescue prompt.
+      // We must NOT let this slip through as a real critique,
+      // because the UI would render a 0/10 panel instead of the
+      // "unavailable" panel the user actually wants.
+      apiServiceSpy.chatCompletion.and.returnValue(of({
+        id: 'test',
+        choices: [{
+          message: { role: 'assistant', content: '{"scores":{},"overallScore":0,"feedback":"","mustFix":[],"suggestions":[]}' },
+          finish_reason: 'stop',
+          index: 0
+        }],
+        created: 123,
+        model: 'test/model',
+        object: 'chat.completion',
+        usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 }
+      }));
+
+      jsonParserSpy.parse.and.callFake((raw: string) => JSON.parse(raw));
+
+      service.evaluateChapter('Test content', mockBrief, mockContext).subscribe({
+        next: (critique) => {
+          expect(critique).toBeDefined();
+          // The empty critique should be converted to the
+          // unavailableReason sentinel, not passed through as a
+          // valid (but content-less) CritiqueReport.
+          expect(critique.unavailableReason).toBeDefined();
+          expect(critique.unavailableReason!.length).toBeGreaterThan(0);
+          done();
+        },
+        error: done.fail
+      });
+    });
   });
 
   describe('compareRevisions', () => {
