@@ -286,52 +286,55 @@ export class OrchestratorService {
   }
 
   /**
-   * Write chapter with retry logic for empty responses
+   * Write chapter with retry logic. Retries on any failure —
+   * network error, empty response, too-short response, or thrown
+   * validation error from the author service. The first successful
+   * draft wins.
    */
   private writeChapterWithRetry(brief: ChapterBrief, config: BookConfig, maxRetries: number): Observable<{ draft: ChapterDraft; usage: any }> {
     return new Observable(subscriber => {
       this.bookStateService.setActiveAgent('author');
-      
+
       let attempt = 0;
-      
-      const attemptWrite = () => {
+      let totalPromptTokens = 0;
+      let totalCompletionTokens = 0;
+      let gaveUp = false;
+
+      const self = this;
+      const ctx: { attempt: () => void } = { attempt: () => {} };
+      const scheduleRetry = () => {
+        if (attempt >= maxRetries) {
+          gaveUp = true;
+          subscriber.error(new Error(`Failed to generate chapter ${brief.number} after ${maxRetries} attempts`));
+          return;
+        }
+        setTimeout(() => ctx.attempt(), 2000);
+      };
+
+      ctx.attempt = () => {
+        if (gaveUp) return;
         attempt++;
         console.log(`Writing chapter attempt ${attempt}/${maxRetries}`);
-        
-        let latestDraft: ChapterDraft | null = null;
-        let totalPromptTokens = 0;
-        let totalCompletionTokens = 0;
-        
-        this.authorService.writeChapterWithUsage(brief, {
+
+        self.authorService.writeChapterWithUsage(brief, {
           model: config.model,
           chapterBrief: brief,
-          previousChapters: this.bookStateService.getState().chapters,
-          characterState: this.bookStateService.getState().characterStore[brief.povCharacter] || null,
-          worldState: this.bookStateService.getState().worldStateDoc
+          previousChapters: self.bookStateService.getState().chapters,
+          characterState: self.bookStateService.getState().characterStore[brief.povCharacter] || null,
+          worldState: self.bookStateService.getState().worldStateDoc
         }).subscribe({
           next: (result) => {
-            latestDraft = result.draft;
             totalPromptTokens += result.usage.promptTokens;
             totalCompletionTokens += result.usage.completionTokens;
-          },
-          error: (error) => {
-            subscriber.error(error);
-          },
-          complete: () => {
-            if (!latestDraft || !latestDraft.content || latestDraft.content.trim().length === 0) {
+            const draft = result.draft;
+            if (!draft || !draft.content || draft.content.trim().length === 0) {
               console.error(`Empty draft received on attempt ${attempt}`);
-              if (attempt < maxRetries) {
-                // Wait a bit before retrying
-                setTimeout(() => attemptWrite(), 2000);
-              } else {
-                subscriber.error(new Error(`Failed to generate chapter after ${maxRetries} attempts`));
-              }
+              scheduleRetry();
               return;
             }
-            
-            console.log(`Orchestrator: Received draft with ${latestDraft.wordCount} words`);
+            console.log(`Orchestrator: Received draft with ${draft.wordCount} words`);
             subscriber.next({
-              draft: latestDraft,
+              draft,
               usage: {
                 promptTokens: totalPromptTokens,
                 completionTokens: totalCompletionTokens,
@@ -339,11 +342,15 @@ export class OrchestratorService {
               }
             });
             subscriber.complete();
+          },
+          error: (error) => {
+            console.error(`Author attempt ${attempt} errored:`, error?.message || error);
+            scheduleRetry();
           }
         });
       };
-      
-      attemptWrite();
+
+      ctx.attempt();
     });
   }
 

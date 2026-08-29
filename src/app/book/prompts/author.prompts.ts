@@ -39,6 +39,11 @@ Tone: ${config.tone}. POV: ${config.pov}. Tense: ${config.tense}.
 - Maintain consistent voice and style
 
 **Technical Requirements — output format:**
+- Start your reply directly with the chapter's first sentence. Do not
+  include any "Here's a thinking process", planning steps, numbered
+  outlines, analysis, or preamble. The output is inserted into a PDF
+  as-is — the first character the reader sees must be the first
+  character of the chapter.
 - Write in complete prose only
 - Do NOT include any chapter summaries, explanations, or meta-commentary
 - Do NOT include a running word count, per-word numbering, or final word count

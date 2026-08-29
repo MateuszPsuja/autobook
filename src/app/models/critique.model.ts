@@ -13,6 +13,12 @@ export interface CritiqueReport {
   mustFix: string[];
   suggestions: string[];
   createdAt: Date;
+  /**
+   * Set when the reviewer model failed to return a parseable critique.
+   * The UI should display this message in place of the normal
+   * scores/feedback/mustFix/suggestions panel.
+   */
+  unavailableReason?: string;
 }
 
 export interface CharacterCheckResult {

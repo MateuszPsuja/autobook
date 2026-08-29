@@ -3,6 +3,7 @@ import { FormBuilder, FormGroup, Validators, ReactiveFormsModule } from '@angula
 import { Router, ActivatedRoute } from '@angular/router';
 import { BookConfig } from '../../models/book-config.model';
 import { ApiService } from '../../core/api.service';
+import { BookStateService } from '../../book/state/book-state.service';
 import { TranslationService } from '../../i18n/translation.service';
 
 @Component({
@@ -15,7 +16,8 @@ import { TranslationService } from '../../i18n/translation.service';
 export class ConfigComponent implements OnInit {
   protected translationService = inject(TranslationService);
   protected apiService = inject(ApiService);
-  
+  private bookStateService = inject(BookStateService);
+
   configForm: FormGroup;
   currentStep = 0;
   isSubmitting = false;
@@ -480,8 +482,13 @@ export class ConfigComponent implements OnInit {
     this.router.navigate(['/generator']);
   }
 
-  // Random fill for testing - always generates shortest possible book
+  // Random fill for testing - always generates shortest possible book.
+  // Also clears any in-progress book state (chapters, blueprint, draft,
+  // critique, skipped list) so a new generation won't be contaminated
+  // by leftover data from a previous run.
   fillRandom(): void {
+    this.bookStateService.reset();
+
     const randomFromArray = <T>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
     
     // Use English content for internal storage (AI needs English)

@@ -129,6 +129,21 @@ export class AuthorService {
         const content = stripRunningWordCount(response.choices[0]?.message?.content || '');
         const wordCount = this.countWords(content);
 
+        // Treat "mostly preamble" or "tiny fragment" as a failure so the
+        // orchestrator's writeChapterWithRetry can re-ask the model. The
+        // cleanup utility already strips reasoning preambles; if the
+        // surviving content is still very short, the model almost
+        // certainly bailed (refusal, hit max_tokens, or returned just a
+        // title and a sentence). ~200 words is well below any
+        // reasonable targetWordCount and a clear signal of a bad draft.
+        const minViableWords = Math.min(200, Math.max(50, Math.floor(brief.targetWordCount * 0.2)));
+        if (wordCount < minViableWords) {
+          throw new Error(
+            `Author returned only ${wordCount} words after cleanup (minimum ${minViableWords}). ` +
+            `Likely a refusal, truncation, or reasoning-only response — will retry.`
+          );
+        }
+
         const draft: ChapterDraft = {
           chapterId: `chapter-${brief.number}`,
           content,
@@ -200,6 +215,17 @@ export class AuthorService {
         const raw = response.choices[0]?.message?.content || draft.content;
         const content = stripRunningWordCount(raw);
         const wordCount = this.countWords(content);
+
+        // Same "too short after cleanup" guard as writeChapterWithUsage.
+        // We compare against the original draft's word count so a
+        // legitimately shorter revision doesn't get rejected.
+        const minViableWords = Math.min(200, Math.max(50, Math.floor(draft.wordCount * 0.5)));
+        if (wordCount < minViableWords) {
+          throw new Error(
+            `Reviser returned only ${wordCount} words after cleanup (minimum ${minViableWords}). ` +
+            `Likely a refusal or truncation — will retry.`
+          );
+        }
 
         const revisedDraft: ChapterDraft = {
           ...draft,

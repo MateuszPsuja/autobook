@@ -98,6 +98,20 @@ export class ChapterViewComponent implements OnInit {
   }
 
   /**
+   * True when the critic service produced a sentinel object because the
+   * reviewer model failed to return a parseable critique. The UI should
+   * show the `unavailableReason` message instead of the normal
+   * scores/feedback panel.
+   */
+  isCritiqueUnavailable(): boolean {
+    return !!this.selectedChapter?.critique?.unavailableReason;
+  }
+
+  getCritiqueUnavailableReason(): string {
+    return this.selectedChapter?.critique?.unavailableReason || '';
+  }
+
+  /**
    * Defensive cleanup for already-stored chapters. New chapters come
    * out of the author service clean, but chapters persisted before
    * that fix may still carry the running-counter corruption pattern.
