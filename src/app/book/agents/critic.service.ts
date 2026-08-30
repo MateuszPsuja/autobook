@@ -49,7 +49,7 @@ export class CriticService {
     const request = this.buildRequest(chapterContent, brief, ctx);
 
     return this.apiService.chatCompletion(request).pipe(
-      switchMap(response => this.handleFirstResponse(response, request, chapterContent, brief, ctx, false)),
+      switchMap(response => this.handleFirstResponse(response, request, false)),
       catchError(error => this.handleCriticError(error, false))
     ) as unknown as Observable<CritiqueReport>;
   }
@@ -61,7 +61,7 @@ export class CriticService {
     const request = this.buildRequest(chapterContent, brief, ctx);
 
     return this.apiService.chatCompletion(request).pipe(
-      switchMap(response => this.handleFirstResponse(response, request, chapterContent, brief, ctx, true)),
+      switchMap(response => this.handleFirstResponse(response, request, true)),
       catchError(error => this.handleCriticError(error, true))
     ) as unknown as Observable<CriticResult>;
   }
@@ -78,9 +78,6 @@ export class CriticService {
   private handleFirstResponse(
     response: any,
     originalRequest: any,
-    chapterContent: string,
-    brief: ChapterBrief,
-    ctx: CriticContext,
     withUsage: boolean
   ): Observable<CritiqueReport | CriticResult> {
     const content = response.choices?.[0]?.message?.content;
@@ -94,10 +91,13 @@ export class CriticService {
       }
       return of(this.parseCritique(content));
     } catch (parseError) {
-      // First parse failed — try to extract JSON from the previous
-      // content (the model has the original text to work with).
-      const model = response.model;
-      return this.rescueRetryForParse(content, model, withUsage as any)
+      // The model produced content but it wasn't parseable JSON.
+      // Asking the model to "extract" JSON from its own broken output
+      // is a hard task and the model often produces yet more broken
+      // JSON. A more reliable rescue is to re-run the ORIGINAL
+      // evaluation with a stricter "JSON only" system prompt — the
+      // model still has the chapter to evaluate.
+      return this.rescueRetry(originalRequest, withUsage)
         .pipe(catchError(error => this.handleCriticError(error, withUsage as any)));
     }
   }
@@ -135,36 +135,6 @@ export class CriticService {
         return of(this.parseCritique(content));
       })
     );
-  }
-
-  /**
-   * Re-ask the same model to extract the JSON from a previous reply
-   * that was unparseable. Cheaper than regenerating the full critique.
-   */
-  private rescueRetryForParse(prevContent: string, model: string, withUsage: boolean): Observable<CritiqueReport | CriticResult> {
-    const messages = [
-      {
-        role: 'system' as const,
-        content: 'You are a strict JSON extractor. The user will give you a text that is supposed to contain a JSON object. Extract the JSON object and return it verbatim — no prose, no markdown, no comments. The first character of your reply must be "{" and the last must be "}".'
-      },
-      {
-        role: 'user' as const,
-        content: 'Extract the JSON object from this text:\n\n' + prevContent
-      }
-    ];
-    return this.apiService.chatCompletion({ model, messages, temperature: 0.1, max_tokens: 2000 })
-      .pipe(
-        switchMap(response => {
-          const content = response.choices?.[0]?.message?.content;
-          if (!content || content.trim().length === 0) {
-            throw new CriticEmptyResponseError();
-          }
-          if (withUsage) {
-            return of(this.parseCritiqueWithUsage(content, response));
-          }
-          return of(this.parseCritique(content));
-        })
-      );
   }
 
   private parseCritique(content: string): CritiqueReport {

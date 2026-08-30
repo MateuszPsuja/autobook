@@ -176,7 +176,43 @@ describe('CharacterService', () => {
         next: (result) => {
           // Should return empty result on error
           expect(result.violations).toEqual([]);
-          expect(result.suggestions).toContain('Failed to analyze character consistency');
+          expect(result.suggestions).toContain('Character consistency check unavailable for this chapter');
+          done();
+        },
+        error: done.fail
+      });
+    });
+
+    it('should rescue an empty first response by re-asking the model with a stricter prompt', (done) => {
+      // First call: empty content. Second call (rescue): valid JSON
+      // with one violation. The service should retry transparently
+      // and return the rescue's parsed result without surfacing the
+      // empty-response error to the caller.
+      const emptyResponse: any = {
+        id: 'test',
+        choices: [{ message: { role: 'assistant', content: '' }, finish_reason: 'stop', index: 0 }],
+        created: 1, model: 'test/model', object: 'chat.completion',
+        usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 }
+      };
+      const validResponse: any = {
+        id: 'test',
+        choices: [{
+          message: { role: 'assistant', content: '{"violations":[{"characterName":"Hero","issue":"Out of character","location":"ch1","severity":"Low","suggestedFix":"tone down"}],"suggestions":["shorter sentences"]}' },
+          finish_reason: 'stop', index: 0
+        }],
+        created: 1, model: 'test/model', object: 'chat.completion',
+        usage: { prompt_tokens: 50, completion_tokens: 50, total_tokens: 100 }
+      };
+      apiServiceSpy.chatCompletion.and.returnValues(of(emptyResponse), of(validResponse));
+      jsonParserSpy.parse.and.callFake((raw: string) => JSON.parse(raw));
+
+      service.checkCharacterConsistency('Test content', mockBrief, mockCharacterStore, 'test/model').subscribe({
+        next: (result) => {
+          expect(result.violations.length).toBe(1);
+          expect(result.violations[0].issue).toBe('Out of character');
+          // The model was called twice — the empty first attempt
+          // and the rescue retry.
+          expect(apiServiceSpy.chatCompletion).toHaveBeenCalledTimes(2);
           done();
         },
         error: done.fail

@@ -309,6 +309,52 @@ describe('CriticService', () => {
         error: done.fail
       });
     });
+
+    it('should re-run the original evaluation (with the chapter) when the first response is unparseable JSON', (done) => {
+      // First call: model returns broken JSON (parse will fail).
+      // Second call (rescue): model returns a real critique.
+      // The rescue must re-run the ORIGINAL evaluation — the
+      // extract-JSON-from-bad-output approach was unreliable
+      // because the model is bad at fixing its own broken JSON.
+      const brokenResponse: any = {
+        id: 'test',
+        choices: [{
+          message: { role: 'assistant', content: '{"scores":a, "overallScore":0}' },
+          finish_reason: 'stop',
+          index: 0
+        }],
+        created: 1, model: 'test/model', object: 'chat.completion',
+        usage: { prompt_tokens: 50, completion_tokens: 20, total_tokens: 70 }
+      };
+      const goodResponse: any = {
+        id: 'test',
+        choices: [{
+          message: { role: 'assistant', content: '{"scores":{"prose":7,"pacing":7,"showVsTell":7,"dialogue":7,"continuity":7,"hookStrength":7,"thematicResonance":7},"overallScore":7,"feedback":"Solid chapter with good pacing.","mustFix":["trim the opening"],"suggestions":["add more sensory detail"]}' },
+          finish_reason: 'stop', index: 0
+        }],
+        created: 1, model: 'test/model', object: 'chat.completion',
+        usage: { prompt_tokens: 50, completion_tokens: 80, total_tokens: 130 }
+      };
+      // The json parser will throw on the broken JSON and succeed
+      // on the good JSON.
+      jsonParserSpy.parse.and.callFake((raw: string) => JSON.parse(raw));
+      apiServiceSpy.chatCompletion.and.returnValues(of(brokenResponse), of(goodResponse));
+
+      service.evaluateChapter('Test content', mockBrief, mockContext).subscribe({
+        next: (critique) => {
+          expect(critique).toBeDefined();
+          // The rescue's parsed result should win, not the
+          // unavailableReason sentinel.
+          expect(critique.unavailableReason).toBeUndefined();
+          expect(critique.feedback).toBe('Solid chapter with good pacing.');
+          expect(critique.overallScore).toBe(7);
+          // Two API calls: the original and the rescue.
+          expect(apiServiceSpy.chatCompletion).toHaveBeenCalledTimes(2);
+          done();
+        },
+        error: done.fail
+      });
+    });
   });
 
   describe('compareRevisions', () => {

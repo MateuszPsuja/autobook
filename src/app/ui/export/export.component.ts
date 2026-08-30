@@ -7,6 +7,7 @@ import { Chapter } from '../../models/chapter.model';
 import { Observable, Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { TranslationService } from '../../i18n/translation.service';
+import { DialogService } from '../../core/dialog.service';
 import pdfMake from 'pdfmake/build/pdfmake';
 import pdfFonts from 'pdfmake/build/vfs_fonts';
 import { buildPdfDocument, PdfExportOptions } from './pdf-renderer';
@@ -23,6 +24,7 @@ import { stripRunningWordCount } from '../../shared/utils/chapter-cleanup';
 })
 export class ExportComponent implements OnInit {
   protected translationService = inject(TranslationService);
+  private dialogService = inject(DialogService);
   
   chapters$: Observable<Chapter[]>;
   selectedFormat: 'pdf' | 'epub' | 'docx' | 'markdown' = 'pdf';
@@ -79,7 +81,11 @@ export class ExportComponent implements OnInit {
       let chapters = [...state.chapters];
 
       if (!chapters || chapters.length === 0) {
-        alert('No chapters to export. Generate some chapters first!');
+        await this.dialogService.alert({
+          title: this.t('export.noChaptersTitle') || 'No chapters',
+          message: 'No chapters to export. Generate some chapters first!',
+          variant: 'warning'
+        });
         this.isExporting = false;
         this.exportProgress = 0;
         return;
@@ -114,10 +120,12 @@ export class ExportComponent implements OnInit {
         if (expectedCount && chapters.length < expectedCount) {
           issues.push(`Book has ${chapters.length} chapters but the target length expects ~${expectedCount}.`);
         }
-        alert(
-          'Export blocked: ' + issues.join(' ') +
-          '\n\nRe-generate the missing chapter(s) and try again.',
-        );
+        await this.dialogService.alert({
+          title: this.t('export.exportBlockedTitle') || 'Export blocked',
+          message: 'Export blocked: ' + issues.join(' ') +
+            '\n\nRe-generate the missing chapter(s) and try again.',
+          variant: 'warning'
+        });
         this.isExporting = false;
         this.exportProgress = 0;
         return;
@@ -194,7 +202,11 @@ export class ExportComponent implements OnInit {
 
     } catch (error) {
       console.error('Export failed:', error);
-      alert('Export failed. Please try again.');
+      await this.dialogService.alert({
+        title: this.t('export.exportFailedTitle') || 'Export failed',
+        message: 'Export failed. Please try again.',
+        variant: 'error'
+      });
       this.isExporting = false;
       this.exportProgress = 0;
     }
@@ -331,21 +343,36 @@ export class ExportComponent implements OnInit {
     }
   }
 
-  clearData(): void {
-    if (confirm(this.t('export.confirmClearData'))) {
-      this.persistenceService.clearAll()
-        .pipe(takeUntil(new Subject()))
-        .subscribe({
-          next: () => {
-            this.bookStateService.reset();
-            this.chapterCount = 0;
-            alert(this.t('export.dataCleared'));
-          },
-          error: (err: Error) => {
-            console.error('Failed to clear data:', err);
-            alert(this.t('export.clearDataFailed'));
-          }
-        });
-    }
+  async clearData(): Promise<void> {
+    const confirmed = await this.dialogService.confirm({
+      title: this.t('export.confirmClearTitle') || 'Clear all data?',
+      message: this.t('export.confirmClearData'),
+      confirmText: this.t('export.clear') || 'Clear',
+      cancelText: this.t('export.cancel') || 'Cancel',
+      variant: 'warning'
+    });
+    if (!confirmed) return;
+
+    this.persistenceService.clearAll()
+      .pipe(takeUntil(new Subject()))
+      .subscribe({
+        next: async () => {
+          this.bookStateService.reset();
+          this.chapterCount = 0;
+          await this.dialogService.alert({
+            title: this.t('export.dataClearedTitle') || 'Data cleared',
+            message: this.t('export.dataCleared'),
+            variant: 'success'
+          });
+        },
+        error: async (err: Error) => {
+          console.error('Failed to clear data:', err);
+          await this.dialogService.alert({
+            title: this.t('export.clearDataFailedTitle') || 'Clear failed',
+            message: this.t('export.clearDataFailed'),
+            variant: 'error'
+          });
+        }
+      });
   }
 }

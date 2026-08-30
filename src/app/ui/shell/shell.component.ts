@@ -7,12 +7,13 @@ import { ApiService } from '../../core/api.service';
 import { TranslationService } from '../../i18n/translation.service';
 import { PersistenceService } from '../../core/persistence.service';
 import { BookStateService } from '../../book/state/book-state.service';
+import { DialogHostComponent } from '../../core/dialog-host.component';
 
 @Component({
   selector: 'app-shell',
   templateUrl: './shell.component.html',
   styleUrls: ['./shell.component.scss'],
-  imports: [CommonModule, FormsModule, RouterModule]
+  imports: [CommonModule, FormsModule, RouterModule, DialogHostComponent]
 })
 export class ShellComponent {
   protected themeService = inject(ThemeService);

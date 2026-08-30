@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { Observable, from, of, throwError } from 'rxjs';
+import { Observable, from, of, throwError, forkJoin } from 'rxjs';
 import { map, switchMap, catchError, shareReplay } from 'rxjs/operators';
 
 export interface BookMeta {
@@ -227,53 +227,25 @@ export class PersistenceService {
   }
 
   /**
-   * Clear all data (for testing or reset)
+   * Clear all data (for testing or reset). The two stores are
+   * cleared in independent transactions in parallel so a slow
+   * or failing clear on one store doesn't block the other, and
+   * each transaction gets a well-formed lifetime (request added
+   * synchronously with transaction creation, no risk of
+   * auto-commit before use).
    */
   clearAll(): Observable<void> {
-    return this.getDb().pipe(
-      switchMap(db => {
-        const checkpointTransaction = db.transaction([this.CHECKPOINTS_STORE], 'readwrite');
-        const checkpointStore = checkpointTransaction.objectStore(this.CHECKPOINTS_STORE);
-        const clearCheckpoints$ = new Observable<void>(subscriber => {
-          const request = checkpointStore.clear();
-          request.onsuccess = () => {
-            subscriber.next();
-            subscriber.complete();
-          };
-          request.onerror = () => {
-            subscriber.error(request.error);
-          };
-        });
-
-        const bookTransaction = db.transaction([this.BOOKS_STORE], 'readwrite');
-        const bookStore = bookTransaction.objectStore(this.BOOKS_STORE);
-        const clearBooks$ = new Observable<void>(subscriber => {
-          const request = bookStore.clear();
-          request.onsuccess = () => {
-            subscriber.next();
-            subscriber.complete();
-          };
-          request.onerror = () => {
-            subscriber.error(request.error);
-          };
-        });
-
-        return new Observable<void>(subscriber => {
-          clearCheckpoints$.subscribe({
-            next: () => {
-              clearBooks$.subscribe({
-                next: () => {
-                  subscriber.next();
-                  subscriber.complete();
-                },
-                error: (err) => subscriber.error(err)
-              });
-            },
-            error: (err) => subscriber.error(err)
-          });
-        });
-      }),
-      map(() => void 0)
-    );
+    return forkJoin({
+      checkpoints: this.executeInTransaction<void>(
+        this.CHECKPOINTS_STORE,
+        'readwrite',
+        store => store.clear()
+      ),
+      books: this.executeInTransaction<void>(
+        this.BOOKS_STORE,
+        'readwrite',
+        store => store.clear()
+      )
+    }).pipe(map(() => void 0));
   }
 }
