@@ -150,6 +150,24 @@ describe('buildPdfDocument', () => {
       }
     });
 
+    it('uses middle dots (U+00B7) — not asterism (U+2733) — for the chapter ornament', () => {
+      // The asterism (U+2733) lives in the Dingbats block; the Roboto
+      // font that pdfmake bundles is a subset and does not include it,
+      // so the glyph silently disappears in the rendered PDF. The
+      // middle dot (U+00B7) is in basic Latin-1 Supplement, every
+      // font has it, and it renders the same way the design intends.
+      const chapters = [makeChapter('1', 1, 'First', 'Body.')];
+      const doc = buildPdfDocument(chapters, baseOptions, {
+        state: baseState,
+        isPolish: false,
+      });
+      const flat = JSON.stringify(doc);
+      // Three middle dots (with spaces) for the chapter ornament
+      expect(flat).toContain('·  ·  ·');
+      // And no asterism anywhere in the document content
+      expect(flat).not.toContain('✳');
+    });
+
     it('renders a TOC entry for every chapter', () => {
       const chapters = [
         makeChapter('1', 1, 'First', 'Body one.'),

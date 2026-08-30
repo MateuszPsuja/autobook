@@ -294,7 +294,7 @@ function buildChapter(args: {
     });
 
     out.push({
-      text: '\u2733  \u2733  \u2733',  // ✳ asterism
+      text: '\u00B7  \u00B7  \u00B7',  // · middle-dot ornament
       style: 'chapterOrnament',
     });
   } else {
