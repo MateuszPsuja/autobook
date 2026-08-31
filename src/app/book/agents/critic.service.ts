@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { Observable, of } from 'rxjs';
+import { Observable, of, throwError } from 'rxjs';
 import { map, catchError, switchMap } from 'rxjs/operators';
 import { ApiService } from '../../core/api.service';
 import { JsonParserService } from '../../shared/utils/json-parser.service';
@@ -37,6 +37,18 @@ class CriticParseError extends Error {
   providedIn: 'root'
 })
 export class CriticService {
+  /**
+   * Total rescue attempts on top of the initial call. With the value
+   * of 3 below we get up to 4 critic API calls per chapter. Three is
+   * a pragmatic sweet spot: enough to ride out the model returning
+   * unparseable output on a single bad seed, low enough that a
+   * consistently broken model doesn't burn the user's tokens for a
+   * long time. After all rescues fail, the pipeline still continues
+   * with the `unavailableReason` sentinel so the chapter is exported
+   * intact.
+   */
+  private readonly MAX_CRITIC_RETRIES = 3;
+
   constructor(
     private apiService: ApiService,
     private jsonParser: JsonParserService
@@ -68,12 +80,14 @@ export class CriticService {
 
   /**
    * Process the first LLM response: extract content, parse it, and on
-   * parse failure (or empty content) kick off a single rescue retry
-   * that re-runs the *original* evaluation with a stricter
-   * "JSON only" system prompt — so the model still has the chapter
-   * to evaluate, unlike a generic "give me an empty critique" retry.
-   * If both attempts fail, fall through to the unavailableReason
-   * sentinel.
+   * parse failure (or empty content) kick off a chain of rescue
+   * retries. Each rescue re-runs the *original* evaluation with a
+   * stricter "JSON only" system prompt and a slightly higher
+   * temperature — the model still has the chapter to evaluate, but
+   * the higher temperature gives a different sample each time, so a
+   * model that produced garbage once will often produce a clean
+   * critique the second or third time. If all attempts fail, fall
+   * through to the unavailableReason sentinel.
    */
   private handleFirstResponse(
     response: any,
@@ -82,8 +96,7 @@ export class CriticService {
   ): Observable<CritiqueReport | CriticResult> {
     const content = response.choices?.[0]?.message?.content;
     if (!content || content.trim().length === 0) {
-      return this.rescueRetry(originalRequest, withUsage)
-        .pipe(catchError(error => this.handleCriticError(error, withUsage as any)));
+      return this.attemptCriticRescue(originalRequest, 0, withUsage);
     }
     try {
       if (withUsage) {
@@ -97,19 +110,60 @@ export class CriticService {
       // JSON. A more reliable rescue is to re-run the ORIGINAL
       // evaluation with a stricter "JSON only" system prompt — the
       // model still has the chapter to evaluate.
-      return this.rescueRetry(originalRequest, withUsage)
-        .pipe(catchError(error => this.handleCriticError(error, withUsage as any)));
+      return this.attemptCriticRescue(originalRequest, 0, withUsage);
     }
   }
 
   /**
-   * When the first response was empty, re-run the ORIGINAL evaluation
-   * with a stricter "JSON only" system prompt. Crucially, the user
-   * message is the same as the original — the model still has the
-   * chapter to evaluate, so it can produce a real critique instead
-   * of bailing with an empty object.
+   * Recursive rescue chain. Each call is one retry attempt; we give
+   * up after `MAX_CRITIC_RETRIES` failed rescues and surface the
+   * error to the outer `catchError` so it can render the
+   * `unavailableReason` sentinel. The chain is fully synchronous
+   * (`of(null)` between attempts) so the API call's own round-trip
+   * time is the only spacing — no artificial wait that would slow
+   * unit tests or paper bots.
    */
-  private rescueRetry(originalRequest: any, withUsage: boolean): Observable<CritiqueReport | CriticResult> {
+  private attemptCriticRescue(
+    request: any,
+    attempt: number,
+    withUsage: boolean
+  ): Observable<CritiqueReport | CriticResult> {
+    if (attempt >= this.MAX_CRITIC_RETRIES) {
+      console.warn(
+        `Critic: gave up after ${this.MAX_CRITIC_RETRIES} rescue attempts; falling back to unavailableReason.`
+      );
+      return throwError(() => new CriticEmptyResponseError());
+    }
+    return of(null).pipe(
+      switchMap(() => this.rescueRetry(request, withUsage, attempt).pipe(
+        catchError(err => {
+          if (err instanceof CriticEmptyResponseError || err instanceof CriticParseError) {
+            console.warn(
+              `Critic: rescue attempt ${attempt + 1}/${this.MAX_CRITIC_RETRIES} failed (${err.message}); retrying.`
+            );
+            return this.attemptCriticRescue(request, attempt + 1, withUsage);
+          }
+          return throwError(() => err);
+        })
+      ))
+    );
+  }
+
+  /**
+   * When the first response was empty or unparseable, re-run the
+   * ORIGINAL evaluation with a stricter "JSON only" system prompt.
+   * Crucially, the user message is the same as the original — the
+   * model still has the chapter to evaluate, so it can produce a
+   * real critique instead of bailing with an empty object. The
+   * temperature is bumped slightly on each retry so a bad seed
+   * doesn't deterministically produce the same broken output twice
+   * in a row.
+   */
+  private rescueRetry(
+    originalRequest: any,
+    withUsage: boolean,
+    attempt: number
+  ): Observable<CritiqueReport | CriticResult> {
     const messages: Array<{ role: 'system' | 'user'; content: string }> = [
       {
         role: 'system',
@@ -118,10 +172,13 @@ export class CriticService {
       // Keep the original user prompt — the model still has the chapter.
       originalRequest.messages[originalRequest.messages.length - 1]
     ];
+    // Higher temperature on later attempts so the second/third try
+    // doesn't repeat the same broken output as the first.
+    const temperature = 0.1 + (attempt * 0.1);
     return this.apiService.chatCompletion({
       model: originalRequest.model,
       messages,
-      temperature: 0.1,
+      temperature,
       max_tokens: 2000
     }).pipe(
       switchMap(response => {

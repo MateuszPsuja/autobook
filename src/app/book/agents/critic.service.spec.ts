@@ -355,6 +355,117 @@ describe('CriticService', () => {
         error: done.fail
       });
     });
+
+    it('should retry the rescue up to MAX_CRITIC_RETRIES times before giving up', (done) => {
+      // All four responses (1 original + 3 rescues) come back
+      // unparseable. The service must consume all of them, then
+      // surface the unavailableReason sentinel — the chapter is
+      // still safe to export, the user just doesn't get a critique.
+      const brokenResponse: any = {
+        id: 'test',
+        choices: [{
+          message: { role: 'assistant', content: 'not valid json at all' },
+          finish_reason: 'stop', index: 0
+        }],
+        created: 1, model: 'test/model', object: 'chat.completion',
+        usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 }
+      };
+      jsonParserSpy.parse.and.callFake((raw: string) => JSON.parse(raw));
+      apiServiceSpy.chatCompletion.and.returnValue(of(brokenResponse));
+
+      service.evaluateChapter('Test content', mockBrief, mockContext).subscribe({
+        next: (critique) => {
+          expect(critique).toBeDefined();
+          expect(critique.unavailableReason).toBeDefined();
+          // 1 original + 3 rescues = 4 total API calls.
+          expect(apiServiceSpy.chatCompletion).toHaveBeenCalledTimes(4);
+          done();
+        },
+        error: done.fail
+      });
+    });
+
+    it('should succeed on a later rescue retry (not just the first one)', (done) => {
+      // First two calls (original + rescue #1) return broken JSON.
+      // Third call (rescue #2) succeeds. The first parseable
+      // response must win, even if it isn't the rescue we tried first.
+      const brokenResponse: any = {
+        id: 'test',
+        choices: [{
+          message: { role: 'assistant', content: 'definitely not json' },
+          finish_reason: 'stop', index: 0
+        }],
+        created: 1, model: 'test/model', object: 'chat.completion',
+        usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 }
+      };
+      const goodResponse: any = {
+        id: 'test',
+        choices: [{
+          message: { role: 'assistant', content: '{"scores":{"prose":9,"pacing":9,"showVsTell":9,"dialogue":9,"continuity":9,"hookStrength":9,"thematicResonance":9},"overallScore":9,"feedback":"Nailed it.","mustFix":[],"suggestions":["keep going"]}' },
+          finish_reason: 'stop', index: 0
+        }],
+        created: 1, model: 'test/model', object: 'chat.completion',
+        usage: { prompt_tokens: 10, completion_tokens: 40, total_tokens: 50 }
+      };
+      jsonParserSpy.parse.and.callFake((raw: string) => JSON.parse(raw));
+      apiServiceSpy.chatCompletion.and.returnValues(
+        of(brokenResponse), // original
+        of(brokenResponse), // rescue #1 — still broken
+        of(goodResponse)    // rescue #2 — finally clean
+      );
+
+      service.evaluateChapter('Test content', mockBrief, mockContext).subscribe({
+        next: (critique) => {
+          expect(critique).toBeDefined();
+          expect(critique.unavailableReason).toBeUndefined();
+          expect(critique.overallScore).toBe(9);
+          expect(critique.feedback).toBe('Nailed it.');
+          // 3 API calls: 1 original + 2 rescues (the third rescue
+          // never happened because the second one succeeded).
+          expect(apiServiceSpy.chatCompletion).toHaveBeenCalledTimes(3);
+          done();
+        },
+        error: done.fail
+      });
+    });
+
+    it('should bump the rescue temperature on each retry attempt', (done) => {
+      // The rescue's whole point is to give the model a different
+      // sample when the first one came out broken. A retry that
+      // re-uses temperature 0.1 deterministically would just produce
+      // the same broken output again. Verify the temperature goes up
+      // across rescue attempts.
+      const brokenResponse: any = {
+        id: 'test',
+        choices: [{
+          message: { role: 'assistant', content: 'still not json' },
+          finish_reason: 'stop', index: 0
+        }],
+        created: 1, model: 'test/model', object: 'chat.completion',
+        usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 }
+      };
+      jsonParserSpy.parse.and.callFake((raw: string) => JSON.parse(raw));
+      apiServiceSpy.chatCompletion.and.returnValue(of(brokenResponse));
+
+      service.evaluateChapter('Test content', mockBrief, mockContext).subscribe({
+        next: () => {
+          const temps = apiServiceSpy.chatCompletion.calls.allArgs().map(args => args[0].temperature);
+          // The original is 0.3 (from buildRequest); the three
+          // rescues are 0.1, 0.2, 0.3. We only care that the
+          // rescue temperatures are non-decreasing and that they
+          // differ from the original.
+          const rescueTemps = temps.slice(1);
+          expect(rescueTemps.length).toBe(3);
+          // Use toBeCloseTo — 0.1 + 0.2 in JS is 0.30000000000000004
+          // and a strict `toBe(0.3)` would flake on floating point.
+          expect(rescueTemps[0]).toBeCloseTo(0.1, 10);
+          expect(rescueTemps[1]).toBeCloseTo(0.2, 10);
+          expect(rescueTemps[2]).toBeCloseTo(0.3, 10);
+          done();
+        },
+        error: done.fail
+      });
+    });
   });
 
   describe('compareRevisions', () => {
