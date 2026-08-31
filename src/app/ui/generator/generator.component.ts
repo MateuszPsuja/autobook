@@ -196,6 +196,19 @@ export class GeneratorComponent implements OnInit, OnDestroy {
   }
 
   private updateAgentStates(activeAgent: AgentType | null, status: GenerationStatus): void {
+    // When the whole book is done, every agent that ran should be
+    // shown as done with a green check — otherwise the pipeline
+    // looks like the agents never worked. The orchestrator never
+    // explicitly clears `activeAgent` on completion, so the
+    // previous "reset all then set the active one" logic would
+    // leave 5 of 6 agents stuck on idle after a successful run.
+    if (status === 'completed') {
+      Object.keys(this.agentStates).forEach(key => {
+        this.agentStates[key as AgentType] = { status: 'done', active: false };
+      });
+      return;
+    }
+
     // Reset all agent states
     Object.keys(this.agentStates).forEach(key => {
       this.agentStates[key as AgentType] = { status: 'idle', active: false };

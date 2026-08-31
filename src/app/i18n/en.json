@@ -159,6 +159,7 @@
     "stop": "Stop",
     "agentPipeline": "Agent Pipeline",
     "generationComplete": "Generation Complete!",
+    "bookReady": "Your book is ready to read",
     "generationStats": "Statistics",
     "timeElapsed": "Time",
     "totalWords": "Words",
