@@ -68,7 +68,11 @@ export class ApiService {
   private readonly API_KEY_KEY = 'openrouter_api_key';
   private readonly DEFAULT_HEADERS = {
     'Content-Type': 'application/json',
-    'HTTP-Referer': 'http://localhost:4200',
+    // Derived from the current origin so production deploys
+    // (e.g. https://autobook.example.com) report the real host
+    // to OpenRouter instead of localhost:4200. Empty string as a
+    // safe fallback if `window` is ever missing (SSR / tests).
+    'HTTP-Referer': typeof window !== 'undefined' ? window.location.origin : '',
     'X-Title': 'AutoBook'
   };
 

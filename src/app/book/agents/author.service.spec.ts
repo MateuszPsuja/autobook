@@ -55,7 +55,13 @@ describe('AuthorService', () => {
     chapterBrief: mockBrief,
     previousChapters: [],
     characterState: createMockCharacterState(),
-    worldState: 'The world is at peace.'
+    worldState: 'The world is at peace.',
+    styleContext: {
+      style: 'Literary',
+      tone: 'Dark',
+      pov: 'First Person',
+      tense: 'Past'
+    }
   };
 
   beforeEach(() => {
@@ -153,8 +159,8 @@ describe('AuthorService', () => {
         usage: { prompt_tokens: 100, completion_tokens: 200, total_tokens: 300 }
       }));
 
-      const result = service.reviseChapter(mockDraft, mockCritique, mockBrief, 'test/model');
-      
+      const result = service.reviseChapter(mockDraft, mockCritique, mockBrief, 'test/model', mockContext.styleContext);
+
       result.subscribe({
         next: (draft) => {
           expect(draft).toBeDefined();
@@ -170,8 +176,8 @@ describe('AuthorService', () => {
     it('should handle API errors', (done) => {
       apiServiceSpy.chatCompletion.and.returnValue(throwError(() => new Error('API Error')));
 
-      const result = service.reviseChapter(mockDraft, mockCritique, mockBrief, 'test/model');
-      
+      const result = service.reviseChapter(mockDraft, mockCritique, mockBrief, 'test/model', mockContext.styleContext);
+
       result.subscribe({
         next: () => done.fail('Should have errored'),
         error: (error) => {

@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { Observable, throwError } from 'rxjs';
+import { Observable, Subscription, throwError } from 'rxjs';
 import { switchMap, catchError } from 'rxjs/operators';
 import { BookStateService } from '../state/book-state.service';
 import { ArchitectService } from '../agents/architect.service';
@@ -9,7 +9,7 @@ import { CharacterService } from '../agents/character.service';
 import { ContinuityService } from '../agents/continuity.service';
 import { BookConfig } from '../../models/book-config.model';
 import { Blueprint, AgentType, GenerationStatus } from '../../models/book-state.model';
-import { ChapterBrief, CriticContext } from '../../models/book-state.model';
+import { ChapterBrief, CriticContext, AuthorStyleContext } from '../../models/book-state.model';
 import { ChapterDraft } from '../../models/chapter.model';
 import { PersistenceService } from '../../core/persistence.service';
 
@@ -17,6 +17,30 @@ import { PersistenceService } from '../../core/persistence.service';
   providedIn: 'root'
 })
 export class OrchestratorService {
+  /**
+   * The currently-running inner subscription, if any. Stored so
+   * `stop()` can unsubscribe it. Without this, clicking Stop only
+   * flipped status flags while the orchestrator kept firing API
+   * requests on the next tick.
+   */
+  private currentSubscription: Subscription | null = null;
+
+  /**
+   * Every `setTimeout` handle the orchestrator creates (retry
+   * timers, the timer in `writeChapterWithRetry`, and the one in
+   * `handleRevision`). All cleared on stop/unsubscribe so a
+   * pending retry can't fire after the user cancelled.
+   */
+  private pendingTimers: Set<ReturnType<typeof setTimeout>> = new Set();
+
+  /**
+   * `true` once `stop()` has been called for the current run.
+   * Checked at every timer-fire boundary so a timer that was
+   * already in the event loop when stop was called still no-ops
+   * instead of issuing a wasted API request.
+   */
+  private stopped: boolean = false;
+
   constructor(
     private bookStateService: BookStateService,
     private architectService: ArchitectService,
@@ -31,11 +55,23 @@ export class OrchestratorService {
    * Start the book generation process
    */
   orchestrate(config: BookConfig): Observable<any> {
+    // Reset the stop/lifecycle flags for a fresh run. A previous
+    // run may have left `stopped = true` and timers in the set.
+    this.stopped = false;
+    this.clearAllTimers();
+    if (this.currentSubscription) {
+      // A previous run is still in flight (caller didn't unsubscribe
+      // before starting a new one). Tear it down so two pipelines
+      // don't fight over the same state.
+      this.currentSubscription.unsubscribe();
+      this.currentSubscription = null;
+    }
+
     return new Observable(subscriber => {
       // Reset all state before starting new generation
       this.bookStateService.resetStats();
       this.bookStateService.startGenerationTimer();
-      
+
       this.bookStateService.setConfig(config);
       this.bookStateService.setChapters([]); // Reset chapters
       this.bookStateService.setCurrentDraft(null);
@@ -48,13 +84,13 @@ export class OrchestratorService {
       this.bookStateService.setActiveAgent('architect');
       this.bookStateService.setStatus('generating');
 
-      this.architectService.generateBlueprintWithUsage(config).pipe(
+      this.currentSubscription = this.architectService.generateBlueprintWithUsage(config).pipe(
         switchMap((result) => {
           // Record architect usage
           this.bookStateService.recordAgentUsage('architect', result.usage);
           this.bookStateService.setBlueprint(result.data);
           this.bookStateService.setActiveAgent('author');
-          
+
           // Process each chapter
           return this.processChapters(result.data, config);
         }),
@@ -66,12 +102,12 @@ export class OrchestratorService {
       ).subscribe({
         next: () => {
           this.bookStateService.endGenerationTimer();
-          
+
           // Calculate total words from chapters
           const chapters = this.bookStateService.getState().chapters;
           const totalWords = chapters.reduce((sum, ch) => sum + (ch.wordCount || 0), 0);
           this.bookStateService.updateTotalWords(totalWords);
-          
+
           this.bookStateService.setStatus('completed');
           subscriber.next('Book generation completed');
           subscriber.complete();
@@ -81,6 +117,18 @@ export class OrchestratorService {
           subscriber.error(error);
         }
       });
+
+      // Teardown: when the caller unsubscribes (or stop() unsubscribes
+      // for them), flip the stopped flag and clear every pending
+      // retry timer so no API call goes out after teardown.
+      return () => {
+        this.stopped = true;
+        this.clearAllTimers();
+        if (this.currentSubscription) {
+          this.currentSubscription.unsubscribe();
+          this.currentSubscription = null;
+        }
+      };
     });
   }
 
@@ -286,6 +334,21 @@ export class OrchestratorService {
   }
 
   /**
+   * Build the small style-context object the Author prompt template
+   * needs. Pulled out so the writer and reviser call sites stay in
+   * sync and the prompt template never has to depend on a full
+   * BookConfig (which it doesn't actually need).
+   */
+  private buildAuthorStyleContext(config: BookConfig): AuthorStyleContext {
+    return {
+      style: String(config.style),
+      tone: String(config.tone),
+      pov: String(config.pov),
+      tense: String(config.tense)
+    };
+  }
+
+  /**
    * Write chapter with retry logic. Retries on any failure —
    * network error, empty response, too-short response, or thrown
    * validation error from the author service. The first successful
@@ -299,20 +362,37 @@ export class OrchestratorService {
       let totalPromptTokens = 0;
       let totalCompletionTokens = 0;
       let gaveUp = false;
+      let finished = false;
 
       const self = this;
       const ctx: { attempt: () => void } = { attempt: () => {} };
       const scheduleRetry = () => {
+        if (finished) return;
+        if (self.stopped) {
+          // Tear down cleanly: signal completion with nothing, the
+          // caller treats this as "stopped, not failed". Subscribers
+          // get a normal complete so their own state machine doesn't
+          // flip to error.
+          finished = true;
+          subscriber.complete();
+          return;
+        }
         if (attempt >= maxRetries) {
           gaveUp = true;
+          finished = true;
           subscriber.error(new Error(`Failed to generate chapter ${brief.number} after ${maxRetries} attempts`));
           return;
         }
-        setTimeout(() => ctx.attempt(), 2000);
+        self.scheduleTimer(() => ctx.attempt(), 2000);
       };
 
       ctx.attempt = () => {
-        if (gaveUp) return;
+        if (finished || gaveUp) return;
+        if (self.stopped) {
+          finished = true;
+          subscriber.complete();
+          return;
+        }
         attempt++;
         console.log(`Writing chapter attempt ${attempt}/${maxRetries}`);
 
@@ -321,9 +401,11 @@ export class OrchestratorService {
           chapterBrief: brief,
           previousChapters: self.bookStateService.getState().chapters,
           characterState: self.bookStateService.getState().characterStore[brief.povCharacter] || null,
-          worldState: self.bookStateService.getState().worldStateDoc
+          worldState: self.bookStateService.getState().worldStateDoc,
+          styleContext: self.buildAuthorStyleContext(config)
         }).subscribe({
           next: (result) => {
+            if (finished) return;
             totalPromptTokens += result.usage.promptTokens;
             totalCompletionTokens += result.usage.completionTokens;
             const draft = result.draft;
@@ -333,6 +415,7 @@ export class OrchestratorService {
               return;
             }
             console.log(`Orchestrator: Received draft with ${draft.wordCount} words`);
+            finished = true;
             subscriber.next({
               draft,
               usage: {
@@ -344,6 +427,7 @@ export class OrchestratorService {
             subscriber.complete();
           },
           error: (error) => {
+            if (finished) return;
             console.error(`Author attempt ${attempt} errored:`, error?.message || error);
             scheduleRetry();
           }
@@ -351,6 +435,12 @@ export class OrchestratorService {
       };
 
       ctx.attempt();
+
+      // If the outer subscriber unsubscribes (e.g. stop() before
+      // we finished), make sure no scheduled retry ever fires.
+      return () => {
+        finished = true;
+      };
     });
   }
 
@@ -369,15 +459,10 @@ export class OrchestratorService {
     return new Observable(subscriber => {
       let currentDraft = draft;
       let completed = false;
-      let pendingRetry: ReturnType<typeof setTimeout> | null = null;
 
       const finish = (finalDraft: ChapterDraft, reason: string) => {
         if (completed) return;
         completed = true;
-        if (pendingRetry) {
-          clearTimeout(pendingRetry);
-          pendingRetry = null;
-        }
         console.log(`Orchestrator: chapter ${brief.number} revision done — ${reason}`);
         subscriber.next(finalDraft);
         subscriber.complete();
@@ -387,10 +472,18 @@ export class OrchestratorService {
       // success; resolves with the previous draft on exhaustion.
       const runReviserRound = (round: number): void => {
         if (completed) return;
+        if (this.stopped) {
+          finish(currentDraft, 'stopped');
+          return;
+        }
         let attempt = 0;
 
         const doAttempt = () => {
           if (completed) return;
+          if (this.stopped) {
+            finish(currentDraft, 'stopped');
+            return;
+          }
           if (attempt >= maxReviseRetries) {
             // Exhausted retries this round — keep the current draft
             // and call it done. The chapter still goes through
@@ -403,8 +496,9 @@ export class OrchestratorService {
           }
           attempt++;
 
-          this.authorService.reviseChapterWithUsage(currentDraft, critique, brief, config.model).subscribe({
+          this.authorService.reviseChapterWithUsage(currentDraft, critique, brief, config.model, this.buildAuthorStyleContext(config)).subscribe({
             next: (result) => {
+              if (completed) return;
               this.bookStateService.recordAgentUsage('reviser', result.usage);
               const newDraft = result.draft;
               const criticContext: CriticContext = {
@@ -418,6 +512,7 @@ export class OrchestratorService {
 
               this.criticService.evaluateChapterWithUsage(newDraft.content, brief, criticContext).subscribe({
                 next: (newCritiqueResult) => {
+                  if (completed) return;
                   this.bookStateService.recordAgentUsage('critic', newCritiqueResult.usage);
                   currentDraft = newDraft;
                   const score = newCritiqueResult.data?.overallScore ?? 0;
@@ -442,11 +537,11 @@ export class OrchestratorService {
               });
             },
             error: (error) => {
+              if (completed) return;
               console.warn(
                 `Orchestrator: reviser attempt ${attempt}/${maxReviseRetries} for chapter ${brief.number} failed: ${error?.message || error}`
               );
-              if (completed) return;
-              pendingRetry = setTimeout(doAttempt, 2000);
+              this.scheduleTimer(doAttempt, 2000);
             }
           });
         };
@@ -455,6 +550,14 @@ export class OrchestratorService {
       };
 
       runReviserRound(1);
+
+      // Teardown: if the outer subscriber unsubscribes (e.g.
+      // stop()), flip the completed flag so no in-flight timer
+      // callback re-issues an API call. Timers themselves are
+      // cleared by the orchestrator-level teardown in orchestrate().
+      return () => {
+        completed = true;
+      };
     });
   }
 
@@ -492,9 +595,48 @@ export class OrchestratorService {
   }
 
   /**
-   * Stop the generation process
+   * Schedule a timer and register its handle so we can clear it
+   * on stop/unsubscribe. Returns the handle for the rare caller
+   * that wants to cancel a specific timer early.
+   */
+  private scheduleTimer(fn: () => void, delayMs: number): ReturnType<typeof setTimeout> {
+    if (this.stopped) {
+      // Don't even queue a timer for a stopped run.
+      return -1 as unknown as ReturnType<typeof setTimeout>;
+    }
+    const handle = setTimeout(() => {
+      this.pendingTimers.delete(handle);
+      if (this.stopped) return;
+      fn();
+    }, delayMs);
+    this.pendingTimers.add(handle);
+    return handle;
+  }
+
+  /**
+   * Cancel every pending retry timer and clear the registry.
+   * Idempotent — safe to call multiple times.
+   */
+  private clearAllTimers(): void {
+    for (const handle of this.pendingTimers) {
+      clearTimeout(handle);
+    }
+    this.pendingTimers.clear();
+  }
+
+  /**
+   * Stop the generation process. Sets the stopped flag so any
+   * in-flight timer callback that already fired will no-op, clears
+   * every pending retry timer, and unsubscribes the inner pipeline
+   * subscription so no further API calls go out.
    */
   stop(): void {
+    this.stopped = true;
+    this.clearAllTimers();
+    if (this.currentSubscription) {
+      this.currentSubscription.unsubscribe();
+      this.currentSubscription = null;
+    }
     this.bookStateService.setStatus('idle');
     this.bookStateService.setActiveAgent(null);
     this.bookStateService.endGenerationTimer();

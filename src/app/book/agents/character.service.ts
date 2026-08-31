@@ -80,7 +80,7 @@ export class CharacterService {
     chapterNumber: number,
     model: string
   ): Observable<CharacterStore> {
-    const request = this.buildCharacterUpdateRequest(chapterContent, brief, characterStore);
+    const request = this.buildCharacterUpdateRequest(chapterContent, brief, characterStore, model);
     return this.runWithRescue(request, (parsed) =>
       this.applyCharacterUpdates(characterStore, parsed.characterStates, chapterNumber)
     ).pipe(
@@ -98,7 +98,7 @@ export class CharacterService {
     chapterNumber: number,
     model: string
   ): Observable<ApiResult<CharacterStore>> {
-    const request = this.buildCharacterUpdateRequest(chapterContent, brief, characterStore);
+    const request = this.buildCharacterUpdateRequest(chapterContent, brief, characterStore, model);
     return this.runWithRescue(request, (parsed, response) => ({
       data: this.applyCharacterUpdates(characterStore, parsed.characterStates, chapterNumber),
       usage: extractUsage(response)
@@ -221,12 +221,12 @@ export class CharacterService {
     return { model, messages, temperature: 0.3, max_tokens: 2000 };
   }
 
-  private buildCharacterUpdateRequest(chapterContent: string, brief: ChapterBrief, characterStore: CharacterStore) {
+  private buildCharacterUpdateRequest(chapterContent: string, brief: ChapterBrief, characterStore: CharacterStore, model: string) {
     const messages = [
       { role: 'system' as const, content: characterSystemPrompt },
       { role: 'user' as const, content: characterUpdatePrompt(chapterContent, brief, characterStore) }
     ];
-    return { model: 'gpt-4o', messages, temperature: 0.4, max_tokens: 1500 };
+    return { model, messages, temperature: 0.4, max_tokens: 1500 };
   }
 
   private applyCharacterUpdates(

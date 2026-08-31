@@ -156,8 +156,8 @@ describe('ArchitectService', () => {
 
       const callArgs = apiServiceSpy.chatCompletion.calls.mostRecent().args[0];
       const userMessage = callArgs.messages.find((m: { role: string }) => m.role === 'user');
-      expect(userMessage.content).toContain('User Plot / Story Description');
-      expect(userMessage.content).toContain('(none');
+      expect(userMessage!.content).toContain('User Plot / Story Description');
+      expect(userMessage!.content).toContain('(none');
     });
 
     it('should thread the user plot into the user prompt as the authoritative source', () => {
@@ -179,9 +179,9 @@ describe('ArchitectService', () => {
 
       const callArgs = apiServiceSpy.chatCompletion.calls.mostRecent().args[0];
       const userMessage = callArgs.messages.find((m: { role: string }) => m.role === 'user');
-      expect(userMessage.content).toContain('User Plot / Story Description (authoritative)');
-      expect(userMessage.content).toContain('cartographer');
-      expect(userMessage.content).toContain('city that doesn\'t exist');
+      expect(userMessage!.content).toContain('User Plot / Story Description (authoritative)');
+      expect(userMessage!.content).toContain('cartographer');
+      expect(userMessage!.content).toContain('city that doesn\'t exist');
     });
 
     it('should declare user-plot authority in the system prompt', () => {
@@ -202,8 +202,8 @@ describe('ArchitectService', () => {
 
       const callArgs = apiServiceSpy.chatCompletion.calls.mostRecent().args[0];
       const systemMessage = callArgs.messages.find((m: { role: string }) => m.role === 'system');
-      expect(systemMessage.content.toLowerCase()).toContain('user plot');
-      expect(systemMessage.content.toLowerCase()).toContain('authoritative');
+      expect(systemMessage!.content.toLowerCase()).toContain('user plot');
+      expect(systemMessage!.content.toLowerCase()).toContain('authoritative');
     });
 
     it('should parse JSON response into Blueprint', (done) => {

@@ -1,5 +1,4 @@
-import { BookConfig } from '../../models/book-config.model';
-import { ChapterBrief, AuthorContext } from '../../models/book-state.model';
+import { ChapterBrief, AuthorContext, AuthorStyleContext } from '../../models/book-state.model';
 import { Chapter } from '../../models/chapter.model';
 import { stripRunningWordCount } from '../../shared/utils/chapter-cleanup';
 
@@ -14,9 +13,9 @@ const getPreviousChapterClosing = (previousChapters: Chapter[]): string => {
   return stripRunningWordCount(lastChapter.content).slice(-500);
 };
 
-export const authorSystemPrompt = (config: BookConfig): string => `
-You are a literary novelist writing in the ${config.style} style.
-Tone: ${config.tone}. POV: ${config.pov}. Tense: ${config.tense}.
+export const authorSystemPrompt = (style: AuthorStyleContext): string => `
+You are a literary novelist writing in the ${style.style} style.
+Tone: ${style.tone}. POV: ${style.pov}. Tense: ${style.tense}.
 
 **Core Principles:**
 - You never summarize when you can dramatize

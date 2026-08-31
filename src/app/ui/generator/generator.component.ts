@@ -163,7 +163,16 @@ export class GeneratorComponent implements OnInit, OnDestroy {
   }
 
   stopGeneration(): void {
+    // Tell the orchestrator to tear down (sets stopped flag,
+    // clears retry timers, unsubscribes the inner pipeline). The
+    // unsubscribes are belt-and-braces — stop() also unsubscribes
+    // its tracked subscription, so even if the orchestrator's
+    // internal handle is somehow stale the outer subscription here
+    // is still released.
     this.orchestratorService.stop();
+    if (this.generationSubscription) {
+      this.generationSubscription.unsubscribe();
+    }
     this.isGenerating = false;
     this.showStopButton = false;
     this.stopElapsedTimer();

@@ -2,7 +2,7 @@ import { Injectable } from '@angular/core';
 import { Observable, Subject } from 'rxjs';
 import { map, takeUntil } from 'rxjs/operators';
 import { ApiService, TokenUsage } from '../../core/api.service';
-import { ChapterBrief, AuthorContext } from '../../models/book-state.model';
+import { ChapterBrief, AuthorContext, AuthorStyleContext } from '../../models/book-state.model';
 import { ChapterDraft } from '../../models/chapter.model';
 import { authorSystemPrompt, authorChapterPrompt, authorRevisionPrompt } from '../prompts/author.prompts';
 import { stripRunningWordCount } from '../../shared/utils/chapter-cleanup';
@@ -23,7 +23,7 @@ export class AuthorService {
    */
   writeChapter(brief: ChapterBrief, ctx: AuthorContext): Observable<ChapterDraft> {
     const messages = [
-      { role: 'system' as const, content: authorSystemPrompt(ctx as any) },
+      { role: 'system' as const, content: authorSystemPrompt(ctx.styleContext) },
       { role: 'user' as const, content: authorChapterPrompt(brief, ctx) }
     ];
 
@@ -112,7 +112,7 @@ export class AuthorService {
    */
   writeChapterWithUsage(brief: ChapterBrief, ctx: AuthorContext): Observable<AuthorResult> {
     const messages = [
-      { role: 'system' as const, content: authorSystemPrompt(ctx as any) },
+      { role: 'system' as const, content: authorSystemPrompt(ctx.styleContext) },
       { role: 'user' as const, content: authorChapterPrompt(brief, ctx) }
     ];
 
@@ -167,9 +167,9 @@ export class AuthorService {
   /**
    * Revise a chapter based on critique
    */
-  reviseChapter(draft: ChapterDraft, critique: any, brief: ChapterBrief, model: string): Observable<ChapterDraft> {
+  reviseChapter(draft: ChapterDraft, critique: any, brief: ChapterBrief, model: string, styleContext: AuthorStyleContext): Observable<ChapterDraft> {
     const messages = [
-      { role: 'system' as const, content: authorSystemPrompt(brief as any) },
+      { role: 'system' as const, content: authorSystemPrompt(styleContext) },
       { role: 'user' as const, content: authorRevisionPrompt(draft.content, critique, brief) }
     ];
 
@@ -197,9 +197,9 @@ export class AuthorService {
   /**
    * Revise a chapter with usage tracking
    */
-  reviseChapterWithUsage(draft: ChapterDraft, critique: any, brief: ChapterBrief, model: string): Observable<AuthorResult> {
+  reviseChapterWithUsage(draft: ChapterDraft, critique: any, brief: ChapterBrief, model: string, styleContext: AuthorStyleContext): Observable<AuthorResult> {
     const messages = [
-      { role: 'system' as const, content: authorSystemPrompt(brief as any) },
+      { role: 'system' as const, content: authorSystemPrompt(styleContext) },
       { role: 'user' as const, content: authorRevisionPrompt(draft.content, critique, brief) }
     ];
 

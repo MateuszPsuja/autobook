@@ -40,6 +40,16 @@ export class ExportComponent implements OnInit {
   exportStatus = '';
   chapterCount = 0;
 
+  /**
+   * Handle for the fake progress interval started in `exportBook`.
+   * Stored on the instance (not on `window`) and cleared in a
+   * `finally` so a thrown error in any of the `generate*` calls
+   * can't leak the interval. Previously this lived at
+   * `window.__exportProgressInterval`, which had the same leak and
+   * also polluted the global namespace.
+   */
+  private progressInterval: ReturnType<typeof setInterval> | null = null;
+
   constructor(
     private bookStateService: BookStateService,
     private persistenceService: PersistenceService,
@@ -72,7 +82,7 @@ export class ExportComponent implements OnInit {
   async exportBook(): Promise<void> {
     this.isExportStopped = false;
     if (this.isExporting) return;
-    
+
     this.isExporting = true;
     this.exportProgress = 1;
 
@@ -86,8 +96,6 @@ export class ExportComponent implements OnInit {
           message: 'No chapters to export. Generate some chapters first!',
           variant: 'warning'
         });
-        this.isExporting = false;
-        this.exportProgress = 0;
         return;
       }
 
@@ -126,8 +134,6 @@ export class ExportComponent implements OnInit {
             '\n\nRe-generate the missing chapter(s) and try again.',
           variant: 'warning'
         });
-        this.isExporting = false;
-        this.exportProgress = 0;
         return;
       }
 
@@ -137,13 +143,13 @@ export class ExportComponent implements OnInit {
           this.exportProgress = 5;
           this.exportStatus = `Tlumaczenie ${chapters.length} rozdzialow...`;
         });
-        
+
         const translatedChapters = await this.translationService.translateBookToPolish(chapters);
-        
+
         this.ngZone.run(() => {
           this.exportProgress = 65;
         });
-        
+
         for (let i = 0; i < translatedChapters.length; i++) {
           chapters[i] = {
             ...chapters[i],
@@ -154,14 +160,13 @@ export class ExportComponent implements OnInit {
       }
 
       this.ngZone.run(() => {
-        const progressInterval = setInterval(() => {
+        this.progressInterval = setInterval(() => {
           if (shouldTranslate && this.exportProgress < 85) {
             this.exportProgress += 5;
           } else if (!shouldTranslate && this.exportProgress < 90) {
             this.exportProgress += 10;
           }
         }, 150);
-        (window as any).__exportProgressInterval = progressInterval;
       });
 
       await new Promise(resolve => setTimeout(resolve, 200));
@@ -189,9 +194,6 @@ export class ExportComponent implements OnInit {
           break;
       }
 
-      const intervalId = (window as any).__exportProgressInterval;
-      if (intervalId) clearInterval(intervalId);
-
       this.downloadFile(content, filename);
       this.exportProgress = 100;
 
@@ -209,6 +211,14 @@ export class ExportComponent implements OnInit {
       });
       this.isExporting = false;
       this.exportProgress = 0;
+    } finally {
+      // Always clear the progress interval, even if a `generate*`
+      // call threw. Without this the interval would keep ticking
+      // and incrementing the progress bar forever.
+      if (this.progressInterval !== null) {
+        clearInterval(this.progressInterval);
+        this.progressInterval = null;
+      }
     }
   }
 

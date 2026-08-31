@@ -1,6 +1,4 @@
 import { CritiqueReport } from './critique.model';
-import { CharacterState } from './character.model';
-import { ChapterBrief } from './book-state.model';
 
 export interface Chapter {
   id: string;
@@ -30,20 +28,4 @@ export interface ChapterRevision {
   reason: string;
   createdAt: Date;
   critique?: CritiqueReport;
-}
-
-export interface AuthorContext {
-  chapterBrief: ChapterBrief;
-  previousChapters: Chapter[];
-  characterState: CharacterState | null;
-  worldState: string;
-  currentChapterNumber: number;
-}
-
-export interface CriticContext {
-  chapterBrief: ChapterBrief;
-  chapterContent: string;
-  previousChapters: Chapter[];
-  characterState: CharacterState | null;
-  worldState: string;
 }

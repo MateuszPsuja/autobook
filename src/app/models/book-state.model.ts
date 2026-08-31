@@ -125,6 +125,20 @@ export type GenerationStatus =
   | 'completed'
   | 'error';
 
+/**
+ * The style fields the Author's system prompt needs to render
+ * the book-voice preamble. Kept small and stringy on purpose so the
+ * prompt template doesn't have to depend on a full BookConfig — and
+ * so a future change to BookConfig (e.g. renaming a field) can't
+ * silently break the LLM prompt.
+ */
+export interface AuthorStyleContext {
+  style: string;
+  tone: string;
+  pov: string;
+  tense: string;
+}
+
 export interface AuthorContext {
   model: string;
   chapterBrief: ChapterBrief;
@@ -132,6 +146,7 @@ export interface AuthorContext {
   characterState: CharacterState;
   worldState: string;
   currentDraft?: ChapterDraft;
+  styleContext: AuthorStyleContext;
 }
 
 export interface CriticContext {

@@ -2,6 +2,7 @@ import { Component, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterModule } from '@angular/router';
+import { firstValueFrom } from 'rxjs';
 import { ThemeService } from '../../core/theme.service';
 import { ApiService } from '../../core/api.service';
 import { TranslationService } from '../../i18n/translation.service';
@@ -93,12 +94,17 @@ export class ShellComponent {
   async toggleLanguage(): Promise<void> {
     const state = this.bookStateService.getState();
     const hasData = state.chapters && state.chapters.length > 0;
-    
+
     if (hasData) {
-      await this.persistenceService.clearAll();
+      // clearAll() returns an Observable, not a Promise. Awaiting
+      // an Observable resolves to the Observable itself on the next
+      // tick — the language would toggle before the IndexedDB clear
+      // finished. firstValueFrom converts the Observable to a real
+      // Promise that only resolves when the clear completes.
+      await firstValueFrom(this.persistenceService.clearAll());
       this.bookStateService.reset();
     }
-    
+
     this.translationService.toggleLanguage();
   }
 

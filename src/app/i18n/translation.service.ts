@@ -72,18 +72,15 @@ const polishToEnglishMappings: Record<string, Record<string, string>> = {
     'Utopijny': 'Utopian'
   },
   bookLengths: {
-    'Opowiadanie (5000-10000 słów)': 'Short Story (5,000-10,000 words)',
-    'Nowela (20000-40000 słów)': 'Novella (20,000-40,000 words)',
-    'Krótka Powieść (50000-70000 słów)': 'Short Novel (50,000-70,000 words)',
-    'Powieść (80000-100000 słów)': 'Novel (80,000-100,000 words)',
-    'Długa Powieść (100000-150000 słów)': 'Long Novel (100,000-150,000 words)'
+    'Opowiadanie': 'Short Story',
+    'Nowela': 'Novella',
+    'Powieść': 'Novel',
+    'Epika': 'Epic'
   },
   chapterLengths: {
-    'Bardzo Krótki (500-1000 słów)': 'Very Short (500-1,000 words)',
-    'Krótki (1000-2000 słów)': 'Short (1,000-2,000 words)',
-    'Średni (2000-3000 słów)': 'Medium (2,000-3,000 words)',
-    'Długi (3000-5000 słów)': 'Long (3,000-5,000 words)',
-    'Bardzo Długi (5000-8000 słów)': 'Very Long (5,000-8,000 words)'
+    'Krótki': 'Short',
+    'Standardowy': 'Standard',
+    'Długi': 'Long'
   },
   plotArchetypes: {
     'Podróż Bohatera': "Hero's Journey",
@@ -165,18 +162,15 @@ const englishToPolishMappings: Record<string, Record<string, string>> = {
     'Utopian': 'Utopijny'
   },
   bookLengths: {
-    'Short Story (5,000-10,000 words)': 'Opowiadanie (5000-10000 słów)',
-    'Novella (20,000-40,000 words)': 'Nowela (20000-40000 słów)',
-    'Short Novel (50,000-70,000 words)': 'Krótka Powieść (50000-70000 słów)',
-    'Novel (80,000-100,000 words)': 'Powieść (80000-100000 słów)',
-    'Long Novel (100,000-150,000 words)': 'Długa Powieść (100000-150000 słów)'
+    'Short Story': 'Opowiadanie',
+    'Novella': 'Nowela',
+    'Novel': 'Powieść',
+    'Epic': 'Epika'
   },
   chapterLengths: {
-    'Very Short (500-1,000 words)': 'Bardzo Krótki (500-1000 słów)',
-    'Short (1,000-2,000 words)': 'Krótki (1000-2000 słów)',
-    'Medium (2,000-3,000 words)': 'Średni (2000-3000 słów)',
-    'Long (3,000-5,000 words)': 'Długi (3000-5000 słów)',
-    'Very Long (5,000-8,000 words)': 'Bardzo Długi (5000-8000 słów)'
+    'Short': 'Krótki',
+    'Standard': 'Standardowy',
+    'Long': 'Długi'
   },
   plotArchetypes: {
     "Hero's Journey": 'Podróż Bohatera',

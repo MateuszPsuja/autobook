@@ -328,18 +328,15 @@
     "Utopian"
   ],
   "bookLengths": [
-    "Short Story (5,000-10,000 words)",
-    "Novella (20,000-40,000 words)",
-    "Short Novel (50,000-70,000 words)",
-    "Novel (80,000-100,000 words)",
-    "Long Novel (100,000-150,000 words)"
+    "Short Story",
+    "Novella",
+    "Novel",
+    "Epic"
   ],
   "chapterLengths": [
-    "Very Short (500-1,000 words)",
-    "Short (1,000-2,000 words)",
-    "Medium (2,000-3,000 words)",
-    "Long (3,000-5,000 words)",
-    "Very Long (5,000-8,000 words)"
+    "Short",
+    "Standard",
+    "Long"
   ],
   "plotArchetypes": [
     "Hero's Journey",

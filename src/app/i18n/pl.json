@@ -327,18 +327,15 @@
     "Utopijny"
   ],
   "bookLengths": [
-    "Opowiadanie (5000-10000 słów)",
-    "Nowela (20000-40000 słów)",
-    "Krótka Powieść (50000-70000 słów)",
-    "Powieść (80000-100000 słów)",
-    "Długa Powieść (100000-150000 słów)"
+    "Opowiadanie",
+    "Nowela",
+    "Powieść",
+    "Epika"
   ],
   "chapterLengths": [
-    "Bardzo Krótki (500-1000 słów)",
-    "Krótki (1000-2000 słów)",
-    "Średni (2000-3000 słów)",
-    "Długi (3000-5000 słów)",
-    "Bardzo Długi (5000-8000 słów)"
+    "Krótki",
+    "Standardowy",
+    "Długi"
   ],
   "plotArchetypes": [
     "Podróż Bohatera",
