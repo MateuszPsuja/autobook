@@ -3,7 +3,7 @@
   "version": 1,
   "newProjectRoot": "projects",
   "projects": {
-    "book-generator": {
+    "autobook": {
       "projectType": "application",
       "schematics": {
         "@schematics/angular:component": {
@@ -69,10 +69,10 @@
           },
           "configurations": {
             "production": {
-              "buildTarget": "book-generator:build:production"
+              "buildTarget": "autobook:build:production"
             },
             "development": {
-              "buildTarget": "book-generator:build:development"
+              "buildTarget": "autobook:build:development"
             }
           },
           "defaultConfiguration": "development"

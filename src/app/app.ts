@@ -12,7 +12,7 @@ import { BookStateService } from './book/state/book-state.service';
   styleUrl: './app.scss'
 })
 export class App implements OnInit, OnDestroy {
-  protected title = 'book-generator';
+  protected title = 'AutoBook';
   
   private persistenceService = inject(PersistenceService);
   private bookStateService = inject(BookStateService);
