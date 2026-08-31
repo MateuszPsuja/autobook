@@ -492,6 +492,15 @@ export class ConfigComponent implements OnInit {
     this.bookStateService.reset();
 
     const randomFromArray = <T>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
+
+    // Pick two distinct elements from an array (guaranteed different).
+    // Used so the protagonist and antagonist never get the same name.
+    const pickTwoDistinct = <T>(arr: T[]): [T, T] => {
+      const i = Math.floor(Math.random() * arr.length);
+      let j = Math.floor(Math.random() * (arr.length - 1));
+      if (j >= i) j++;
+      return [arr[i], arr[j]];
+    };
     
     // Use English content for internal storage (AI needs English)
     // But display the translated values from the dropdown arrays
@@ -637,9 +646,10 @@ export class ConfigComponent implements OnInit {
     });
 
     // Step 1: Characters
+    const [protagonistName, antagonistName] = pickTwoDistinct(names);
     this.configForm.patchValue({
       protagonist: {
-        name: randomFromArray(names),
+        name: protagonistName,
         role: 'Protagonist',
         age: Math.floor(Math.random() * 40) + 20,
         background: randomFromArray(backgrounds),
@@ -648,7 +658,7 @@ export class ConfigComponent implements OnInit {
         arc: randomFromArray(arcs)
       },
       antagonist: {
-        name: randomFromArray(names),
+        name: antagonistName,
         role: 'Antagonist',
         age: Math.floor(Math.random() * 30) + 30,
         background: randomFromArray(backgrounds),
