@@ -74,6 +74,7 @@ export class ConfigComponent implements OnInit {
 
       // Step 1: Creative Settings
       title: ['', Validators.required],
+      plot: [''],
       genre: ['', Validators.required],
       style: ['', Validators.required],
       tone: ['', Validators.required],
@@ -217,6 +218,7 @@ export class ConfigComponent implements OnInit {
   private clearFormValues(): void {
     this.configForm.patchValue({
       title: '',
+      plot: '',
       genre: '',
       style: '',
       tone: '',

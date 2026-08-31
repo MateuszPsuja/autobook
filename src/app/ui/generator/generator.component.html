@@ -12,19 +12,7 @@
         <p class="text-sm text-gray-600 dark:text-gray-400">{{ isGenerating ? t('generator.watchCreate') : t('generator.clickToStart') }}</p>
       </div>
     </div>
-    
-    <div class="flex items-center gap-3">
-      <div class="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-800 rounded-xl">
-        <div class="w-2 h-2 rounded-full"
-          [class]="{
-            'bg-green-500 animate-pulse': (status$ | async) === 'generating',
-            'bg-amber-500 animate-pulse': (status$ | async) === 'writing',
-            'bg-gray-400': (status$ | async) === 'idle' || (status$ | async) === 'completed'
-          }">
-        </div>
-        <span class="text-xs font-medium text-gray-600 dark:text-gray-400">{{ formatStatus(status$ | async) }}</span>
-      </div>
-    </div>
+
   </div>
 
   <!-- Chapter Progress - Top -->

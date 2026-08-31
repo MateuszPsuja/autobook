@@ -65,7 +65,7 @@
               {{ t('config.fillRandom') }}
             </button>
           </div>
-          
+
           <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div class="p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
               <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">{{ t('config.title') }}</label>
@@ -83,7 +83,7 @@
                 </p>
               }
             </div>
-            
+
             <div class="p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
               <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">{{ t('config.genre') }}</label>
               <select formControlName="genre" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all">
@@ -93,6 +93,27 @@
                 }
               </select>
             </div>
+          </div>
+
+          <div class="p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
+            <div class="flex items-baseline justify-between mb-2">
+              <label for="book-plot" class="block text-sm font-semibold text-gray-700 dark:text-gray-300">
+                {{ t('config.plot') }}
+              </label>
+              <span class="text-xs text-gray-400 dark:text-gray-500">
+                {{ (configForm.get('plot')?.value || '').length }} / 2000
+              </span>
+            </div>
+            <textarea
+              id="book-plot"
+              formControlName="plot"
+              rows="6"
+              maxlength="2000"
+              [placeholder]="t('config.plotPlaceholder')"
+              class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all resize-y leading-relaxed"></textarea>
+            <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">
+              {{ t('config.plotHelp') }}
+            </p>
           </div>
 
           <div class="grid grid-cols-1 md:grid-cols-2 gap-5">

@@ -26,6 +26,7 @@ describe('OrchestratorService', () => {
 
   const mockConfig: BookConfig = {
     title: 'Test Book',
+    plot: '',
     genre: 'Fantasy' as Genre,
     style: 'Literary' as WritingStyle,
     tone: 'Dark' as Tone,

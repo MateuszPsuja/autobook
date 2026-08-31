@@ -10,6 +10,11 @@ You are a master architect for long-form narrative fiction. Your task is to desi
 - Character motivations must be clear and consistent
 - World-building must be integrated naturally into the plot
 - The blueprint must be detailed enough to guide chapter-by-chapter writing
+- If the user provided a plot / story description, it is authoritative.
+  Use it as the source of truth for the central conflict, characters, and
+  setting. Structural inputs (genre, archetype, act structure) shape the
+  form; the user plot shapes the substance. When the two conflict, the
+  user plot wins.
 
 **Output Format:**
 Return a JSON object with the following structure:
@@ -73,6 +78,14 @@ Design a blueprint for a book with the following specifications:
 
 **Book Details:**
 - Title: ${config.title}
+${
+  config.plot && config.plot.trim().length > 0
+    ? `- User Plot / Story Description (authoritative):\n${config.plot
+        .split('\n')
+        .map(line => `  > ${line}`)
+        .join('\n')}`
+    : `- User Plot / Story Description: (none — invent from the genre, archetype, and characters below)`
+}
 - Genre: ${config.genre}
 - Writing Style: ${config.style}
 - Tone: ${config.tone}

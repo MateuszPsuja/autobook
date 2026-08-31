@@ -122,8 +122,9 @@ describe('BookStateService', () => {
 
   describe('State Setters', () => {
     it('should set config', () => {
-      const mockConfig: BookConfig = { 
+      const mockConfig: BookConfig = {
         title: 'Test Book',
+        plot: '',
         genre: 'Fantasy' as Genre,
         style: 'Literary' as WritingStyle,
         tone: 'Dark' as Tone,

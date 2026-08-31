@@ -12,6 +12,7 @@ describe('ArchitectService', () => {
 
   const mockConfig: BookConfig = {
     title: 'Test Book',
+    plot: '',
     genre: 'Fantasy' as Genre,
     style: 'Literary' as WritingStyle,
     tone: 'Dark' as Tone,
@@ -119,7 +120,7 @@ describe('ArchitectService', () => {
       }));
 
       const result = service.generateBlueprint(mockConfig);
-      
+
       result.subscribe({
         next: (blueprint) => {
           expect(blueprint).toBeDefined();
@@ -135,6 +136,74 @@ describe('ArchitectService', () => {
       expect(callArgs.model).toBe(mockConfig.model);
       expect(callArgs.messages).toBeDefined();
       expect(callArgs.messages.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it('should include an empty-plot marker in the user prompt when plot is empty', () => {
+      apiServiceSpy.chatCompletion.and.returnValue(of({
+        id: 'test',
+        choices: [{
+          message: { role: 'assistant', content: JSON.stringify(mockBlueprint) },
+          finish_reason: 'stop',
+          index: 0
+        }],
+        created: 123,
+        model: 'test/model',
+        object: 'chat.completion',
+        usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 }
+      }));
+
+      service.generateBlueprint({ ...mockConfig, plot: '' }).subscribe();
+
+      const callArgs = apiServiceSpy.chatCompletion.calls.mostRecent().args[0];
+      const userMessage = callArgs.messages.find((m: { role: string }) => m.role === 'user');
+      expect(userMessage.content).toContain('User Plot / Story Description');
+      expect(userMessage.content).toContain('(none');
+    });
+
+    it('should thread the user plot into the user prompt as the authoritative source', () => {
+      apiServiceSpy.chatCompletion.and.returnValue(of({
+        id: 'test',
+        choices: [{
+          message: { role: 'assistant', content: JSON.stringify(mockBlueprint) },
+          finish_reason: 'stop',
+          index: 0
+        }],
+        created: 123,
+        model: 'test/model',
+        object: 'chat.completion',
+        usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 }
+      }));
+
+      const userPlot = 'A retired cartographer discovers her late father\'s map is a key to a city that doesn\'t exist on any chart.';
+      service.generateBlueprint({ ...mockConfig, plot: userPlot }).subscribe();
+
+      const callArgs = apiServiceSpy.chatCompletion.calls.mostRecent().args[0];
+      const userMessage = callArgs.messages.find((m: { role: string }) => m.role === 'user');
+      expect(userMessage.content).toContain('User Plot / Story Description (authoritative)');
+      expect(userMessage.content).toContain('cartographer');
+      expect(userMessage.content).toContain('city that doesn\'t exist');
+    });
+
+    it('should declare user-plot authority in the system prompt', () => {
+      apiServiceSpy.chatCompletion.and.returnValue(of({
+        id: 'test',
+        choices: [{
+          message: { role: 'assistant', content: JSON.stringify(mockBlueprint) },
+          finish_reason: 'stop',
+          index: 0
+        }],
+        created: 123,
+        model: 'test/model',
+        object: 'chat.completion',
+        usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 }
+      }));
+
+      service.generateBlueprint(mockConfig).subscribe();
+
+      const callArgs = apiServiceSpy.chatCompletion.calls.mostRecent().args[0];
+      const systemMessage = callArgs.messages.find((m: { role: string }) => m.role === 'system');
+      expect(systemMessage.content.toLowerCase()).toContain('user plot');
+      expect(systemMessage.content.toLowerCase()).toContain('authoritative');
     });
 
     it('should parse JSON response into Blueprint', (done) => {

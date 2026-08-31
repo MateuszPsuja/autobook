@@ -1,5 +1,12 @@
 export interface BookConfig {
   title: string;
+  /**
+   * Optional free-form plot / story description from the user. When set,
+   * the Architect uses it as the authoritative anchor for the blueprint;
+   * structural inputs (genre, archetype, characters) fill in the gaps.
+   * When empty, the Architect invents the plot from those structural inputs.
+   */
+  plot?: string;
   genre: Genre;
   style: WritingStyle;
   tone: Tone;
