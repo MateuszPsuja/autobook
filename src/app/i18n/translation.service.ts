@@ -314,13 +314,20 @@ export class TranslationService {
    * reader in place of the chapter body. If the cleaned response is
    * empty, we retry; if we still get nothing usable after all
    * retries the outer callers fall back to the original text.
+   *
+   * Retry budget: 15 attempts with exponential backoff capped at
+   * 8s. The cap matters — without it, the 10th retry would wait
+   * 8.5 minutes, and a chapter's worth of title + content + critique
+   * translations could each burn that, leaving the user staring at
+   * a frozen "Translating…" header for an hour.
    */
   private translateWithRetry(
     text: string,
     systemPrompt: string,
     maxTokens: number = 4000
   ): Observable<string> {
-    const maxRetries = 10;
+    const maxRetries = 15;
+    const maxBackoffMs = 8000;
 
     return new Observable<string>(subscriber => {
       let attempt = 0;
@@ -350,19 +357,25 @@ export class TranslationService {
               subscriber.next(cleaned);
               subscriber.complete();
             } else if (attempt < maxRetries) {
-              console.warn(`Translation attempt ${attempt} returned no usable content (raw length=${(content || '').length}), retrying...`);
-              const delayMs = 1000 * Math.pow(2, attempt - 1);
+              const delayMs = Math.min(maxBackoffMs, 500 * Math.pow(1.7, attempt - 1));
+              console.warn(
+                `Translation attempt ${attempt}/${maxRetries} returned no usable content (raw length=${(content || '').length}), retrying in ${Math.round(delayMs)}ms...`
+              );
               setTimeout(tryTranslate, delayMs);
             } else {
+              console.error(
+                `Translation gave up after ${maxRetries} attempts (last raw length=${(content || '').length})`
+              );
               subscriber.error(new Error('Translation returned empty content after all retries'));
             }
           },
           error: error => {
-            console.warn(`Translation attempt ${attempt} failed:`, error);
+            console.warn(`Translation attempt ${attempt}/${maxRetries} failed:`, error);
             if (attempt < maxRetries) {
-              const delayMs = 1000 * Math.pow(2, attempt - 1);
+              const delayMs = Math.min(maxBackoffMs, 500 * Math.pow(1.7, attempt - 1));
               setTimeout(tryTranslate, delayMs);
             } else {
+              console.error(`Translation gave up after ${maxRetries} attempts`);
               subscriber.error(error);
             }
           }
@@ -711,10 +724,12 @@ export class TranslationService {
    *
    * The title, content, and critique translations all run in
    * parallel via forkJoin. If the current language is English the
-   * chapter is returned unchanged. On any per-field failure the
-   * helpers fall back to the original text, so a broken API call
-   * can't take the whole chapter down — the user just gets a
-   * partially-Polish chapter.
+   * chapter is returned unchanged. On any per-field failure (after
+   * the per-field retry budget in `translateWithRetry` is exhausted)
+   * the field falls back to its original text — so a broken API
+   * call for one field can't take the whole chapter down. The
+   * user gets a partially-Polish chapter rather than a fully-broken
+   * one.
    */
   translateGeneratedChapter$(chapter: Chapter): Observable<Chapter> {
     if (!chapter) {
@@ -724,12 +739,26 @@ export class TranslationService {
       return of(chapter);
     }
 
+    const safeTitle$ = this.translateTitleToPolish$(chapter.title).pipe(
+      catchError(err => {
+        console.warn(`Title translation to Polish failed for chapter "${chapter.title}"; keeping English title.`, err);
+        return of(chapter.title);
+      })
+    );
+    const safeContent$ = this.translateContentToPolish$(chapter.content).pipe(
+      catchError(err => {
+        console.warn(`Content translation to Polish failed for chapter ${chapter.number} (${chapter.content.length} chars); keeping English content.`, err);
+        return of(chapter.content);
+      })
+    );
+    const safeCritique$ = chapter.critique
+      ? this.translateCritiqueToPolish$(chapter.critique)
+      : of(undefined);
+
     return forkJoin({
-      title: this.translateTitleToPolish$(chapter.title),
-      content: this.translateContentToPolish$(chapter.content),
-      critique: chapter.critique
-        ? this.translateCritiqueToPolish$(chapter.critique)
-        : of(undefined)
+      title: safeTitle$,
+      content: safeContent$,
+      critique: safeCritique$
     }).pipe(
       map(({ title, content, critique }) => ({
         ...chapter,

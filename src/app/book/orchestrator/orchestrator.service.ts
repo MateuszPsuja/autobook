@@ -180,14 +180,28 @@ export class OrchestratorService {
    * Translate every chapter's user-visible text fields (title,
    * content, critique) to Polish in parallel and return the new
    * array. The translation service is responsible for per-field
-   * fallbacks on failure; this wrapper's job is just batching.
-   * Used by the post-generation step in `orchestrate()`.
+   * fallbacks on failure; this wrapper's job is just batching
+   * with a per-chapter safety net so a single bad response
+   * (e.g. a chapter whose LLM call exhausted all 15 retries)
+   * doesn't reject the whole book. A failing chapter stays in
+   * English so the user can still read it; the other chapters
+   * still get translated.
    */
   private async translateChaptersToPolish(chapters: Chapter[]): Promise<Chapter[]> {
     return Promise.all(
-      chapters.map(chapter =>
-        firstValueFrom(this.translationService.translateGeneratedChapter$(chapter))
-      )
+      chapters.map(async (chapter): Promise<Chapter> => {
+        try {
+          return await firstValueFrom(
+            this.translationService.translateGeneratedChapter$(chapter)
+          );
+        } catch (err) {
+          console.error(
+            `Orchestrator: post-translation gave up on chapter ${chapter.number} ("${chapter.title}"); keeping English copy.`,
+            err
+          );
+          return chapter;
+        }
+      })
     );
   }
 

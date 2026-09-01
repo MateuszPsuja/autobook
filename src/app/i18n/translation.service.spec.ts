@@ -361,6 +361,37 @@ describe('TranslationService', () => {
         done();
       });
     });
+
+    it('falls back to the original title when title translation errors (per-field resilience)', (done) => {
+      service.setLanguage('pl');
+      // Title call throws — everything else succeeds. The chapter
+      // should still come back with the original English title and
+      // Polish content / critique.
+      (service.translateTitleToPolish$ as jasmine.Spy).and.callFake(() =>
+        throwError(() => new Error('title API down'))
+      );
+      const original = buildChapter();
+      service.translateGeneratedChapter$(original).pipe(take(1)).subscribe(result => {
+        expect(result.title).toBe('Chapter 1: The Beginning');
+        expect(result.content).toBe('[PL-C] A long opening paragraph.');
+        expect(result.critique?.feedback).toBe('[PL-F] Solid chapter.');
+        done();
+      });
+    });
+
+    it('falls back to the original content when content translation errors', (done) => {
+      service.setLanguage('pl');
+      (service.translateContentToPolish$ as jasmine.Spy).and.callFake(() =>
+        throwError(() => new Error('content API down'))
+      );
+      const original = buildChapter();
+      service.translateGeneratedChapter$(original).pipe(take(1)).subscribe(result => {
+        expect(result.title).toBe('[PL-T] Chapter 1: The Beginning');
+        expect(result.content).toBe('A long opening paragraph.');
+        expect(result.critique?.feedback).toBe('[PL-F] Solid chapter.');
+        done();
+      });
+    });
   });
 
   describe('cleanTranslation', () => {

@@ -539,6 +539,71 @@ describe('OrchestratorService', () => {
           }
         });
       });
+
+      it('keeps the English copy of just the failing chapter (per-chapter resilience)', (done) => {
+        // One chapter's translation exhausts its retry budget and
+        // errors. The orchestrator should log it, keep that one
+        // chapter in English, and still translate every other
+        // chapter. Previously this would have rejected the whole
+        // batch via Promise.all and left the state fully English.
+        translationServiceSpy.isPolish.and.returnValue(true);
+        const englishChapter2: Chapter = {
+          ...englishChapter,
+          number: 2,
+          title: 'Chapter 2: A Bad Day',
+          content: 'Second chapter body in English.'
+        };
+        // Generic Polish transformer: take the input chapter and
+        // prepend a [PL] marker to title / content. Lets the
+        // test assert the right chapter came back without
+        // hard-coding a separate fixture per chapter.
+        translationServiceSpy.translateGeneratedChapter$.and.callFake((ch: Chapter) => {
+          if (ch.number === 2) {
+            // Simulate "all retries exhausted" by erroring.
+            return throwError(() => new Error('chapter 2 retries exhausted'));
+          }
+          return of({ ...ch, title: '[PL] ' + ch.title, content: '[PL] ' + ch.content });
+        });
+        bookStateServiceSpy.getState.and.returnValue({
+          chapters: [englishChapter, englishChapter2],
+          characterStore: {},
+          worldStateDoc: '',
+          status: 'generating',
+          activeAgent: 'author',
+          blueprint: null,
+          currentDraft: null,
+          critique: null,
+          revisionCount: 0,
+          config: mockConfig,
+          error: null,
+          continuityFlags: [],
+          skippedChapters: [],
+          stats: createInitialStats()
+        });
+
+        service.orchestrate(mockConfig).subscribe({
+          complete: () => {
+            // Translator called once per chapter.
+            expect(translationServiceSpy.translateGeneratedChapter$).toHaveBeenCalledTimes(2);
+            // Final setChapters should hold the Polish version of
+            // chapter 1 AND the English fallback for chapter 2.
+            const lastSetChaptersCall = bookStateServiceSpy.setChapters.calls.mostRecent();
+            const finalChapters: Chapter[] = lastSetChaptersCall.args[0];
+            expect(finalChapters.length).toBe(2);
+            // Chapter 1 translated successfully.
+            expect(finalChapters[0].title).toBe('[PL] Chapter 1: The Beginning');
+            expect(finalChapters[0].content).toBe('[PL] An opening paragraph in English.');
+            // Chapter 2 fell back to its English copy because the
+            // translator errored after all retries.
+            expect(finalChapters[1].title).toBe(englishChapter2.title);
+            expect(finalChapters[1].content).toBe(englishChapter2.content);
+            // The English critique is preserved for the failed
+            // chapter (so the user can still see the feedback).
+            expect(finalChapters[1].critique).toBe(englishChapter2.critique);
+            done();
+          }
+        });
+      });
     });
   });
 
