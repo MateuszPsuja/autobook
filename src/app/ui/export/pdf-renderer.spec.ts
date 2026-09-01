@@ -188,6 +188,36 @@ describe('buildPdfDocument', () => {
       expect(chapterIdCount).toBe(chapters.length);
     });
 
+    it('gives the chapter title its own column (width: *) so Polish titles do not break on a narrow sibling', () => {
+      // Regression for the "Polish chapter titles broken to two lines"
+      // bug. The eyebrow + title used to be one inline `text: [...]`
+      // run in a single column, so the column sized to the eyebrow
+      // and the title had to wrap inside that narrow band. Splitting
+      // into three columns (eyebrow auto, title *, page-number auto)
+      // gives the title the full remaining width.
+      const chapters = [
+        makeChapter('1', 1, 'Pierwszy krok ku przeznaczeniu, gdzie wszystko się zaczyna', 'Body one.'),
+      ];
+      const doc = buildPdfDocument(chapters, baseOptions, {
+        state: baseState,
+        isPolish: true,
+      });
+      const flat = JSON.stringify(doc);
+      // The TOC entry block is the one with `pageReference` set
+      // alongside a text payload — match that block and inspect its
+      // columns. Look for the marker string that only appears in
+      // the title column.
+      const tocEntryMatch = flat.match(/\{"columns":\[\{[^]*?"Rozdział 1"[\s\S]*?"pageReference":"ch-1"[\s\S]*?\}\]/);
+      expect(tocEntryMatch).not.toBeNull();
+      const tocEntry = tocEntryMatch![0];
+      // The title-bearing column should have width "*" so it claims
+      // the remaining space and Polish titles fit on a single line.
+      expect(tocEntry).toContain('"width":"*"');
+      // The eyebrow column should be width "auto" so it doesn't
+      // bloat — only "Rozdział N" lives there.
+      expect(tocEntry).toContain('"text":"Rozdział 1"');
+    });
+
     it('preserves chapter order', () => {
       const chapters = [
         makeChapter('1', 1, 'Alpha', 'alpha body'),

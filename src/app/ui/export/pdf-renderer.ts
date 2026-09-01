@@ -219,24 +219,28 @@ function buildToc(args: {
 
   for (const chapter of chapters) {
     out.push({
+      // 3-column layout: eyebrow (auto) | title (`*` — takes the
+      // remaining width) | page number (auto). Previously the
+      // eyebrow and title were bundled into a single `text: [...]`
+      // array inside one column, so the column sized to the
+      // eyebrow's width and the title had to wrap inside that
+      // narrow column. Polish chapter titles (longer words, more
+      // diacritics, often 3-4× the character count of their
+      // English equivalents) break onto two lines as a result.
+      // Splitting into explicit columns gives the title the full
+      // available width, and a long title can still wrap to a
+      // second line without dragging the page number down with it.
       columns: [
         {
-          text: [
-            {
-              text: `${chapterLabel} ${chapter.number}`,
-              style: 'tocEyebrow',
-            },
-            {
-              text: '   ',
-              style: 'tocEyebrow',
-            },
-            {
-              text: chapter.title,
-              style: 'tocTitle2',
-            },
-          ],
+          text: `${chapterLabel} ${chapter.number}`,
+          style: 'tocEyebrow',
+          width: 'auto',
         },
-        { text: '', width: '*' },
+        {
+          text: chapter.title,
+          style: 'tocTitle2',
+          width: '*',
+        },
         {
           text: '',
           pageReference: `ch-${chapter.id}`,
