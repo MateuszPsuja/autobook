@@ -5,7 +5,14 @@
   <title>AutoBook</title>
   <base href="/">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel="icon" type="image/x-icon" href="favicon.ico">
+  <!-- Inline data-URI SVG so the favicon never 404s even when the
+       dev server's public-folder cache doesn't pick up new files
+       on the fly, and so the browser never auto-requests the
+       missing /favicon.ico. Standalone favicon.svg and
+       favicon.ico are still shipped in /public for the
+       production build (they show up in dist/); this inline
+       version is just a belt-and-braces fallback. -->
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCIgZmlsbD0ibm9uZSI+CiAgPHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTIiIGZpbGw9IiM0ZjQ2ZTUiLz4KICA8cGF0aCBkPSJNMTYgMTRoMTNhNiA2IDAgMCAxIDYgNnYzMGE0IDQgMCAwIDAtNC00SDE2VjE0eiIgZmlsbD0iI2ZmZiIvPgogIDxwYXRoIGQ9Ik00OCAxNEgzNWE2IDYgMCAwIDAtNiA2djMwYTQgNCAwIDAgMSA0LTRoMTVWMTR6IiBmaWxsPSIjZTBlN2ZmIi8+CiAgPHBhdGggZD0iTTIxIDIyaDhNMjEgMjhoOE0zNSAyMmg4TTM1IDI4aDgiIHN0cm9rZT0iIzRmNDZlNSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KPC9zdmc+Cg==">
 </head>
 <body>
   <app-root></app-root>
