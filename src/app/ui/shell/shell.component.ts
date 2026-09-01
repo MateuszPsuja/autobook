@@ -92,18 +92,22 @@ export class ShellComponent {
   }
 
   async toggleLanguage(): Promise<void> {
-    const state = this.bookStateService.getState();
-    const hasData = state.chapters && state.chapters.length > 0;
-
-    if (hasData) {
-      // clearAll() returns an Observable, not a Promise. Awaiting
-      // an Observable resolves to the Observable itself on the next
-      // tick — the language would toggle before the IndexedDB clear
-      // finished. firstValueFrom converts the Observable to a real
-      // Promise that only resolves when the clear completes.
-      await firstValueFrom(this.persistenceService.clearAll());
-      this.bookStateService.reset();
-    }
+    // Always reset the book to its default state when the UI language
+    // switches, not only when chapters exist. The book's content was
+    // generated in the previous language (chapters in Polish mode are
+    // post-translated to Polish by the orchestrator), so carrying the
+    // in-memory state — and the persisted IndexedDB checkpoint — into
+    // the new language would leave the viewer/export out of sync with
+    // the UI. Resetting unconditionally keeps the two views consistent.
+    //
+    // clearAll() returns an Observable, not a Promise. Awaiting an
+    // Observable resolves to the Observable itself on the next tick —
+    // the language would toggle before the IndexedDB clear finished.
+    // firstValueFrom converts the Observable to a real Promise that
+    // only resolves when the clear completes, so the reset is
+    // observable to the user before the language flips.
+    await firstValueFrom(this.persistenceService.clearAll());
+    this.bookStateService.reset();
 
     this.translationService.toggleLanguage();
   }

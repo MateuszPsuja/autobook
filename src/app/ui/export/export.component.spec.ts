@@ -81,6 +81,39 @@ describe('ExportComponent', () => {
     // component ships to the download (it goes through
     // generateMarkdown -> buildBookContent which inlines the
     // critique feedback into the text).
+
+    it('does not re-translate chapter title or content (orchestrator already did)', async () => {
+      // Regression: the orchestrator translates every chapter to
+      // Polish during post-generation, so the chapters in state are
+      // already in the target language. The export must ship them
+      // through untouched — re-translating would burn a full extra
+      // LLM pass and risk the model "improving" already-Polish
+      // prose. We assert the bulk translator is not invoked.
+      (mockTranslation as any).isPolish = () => true;
+      const translateBookSpy = spyOn(mockTranslation as any, 'translateBookToPolish')
+        .and.callFake(async (chapters: any[]) => chapters);
+
+      chaptersSubject.next([
+        {
+          number: 1,
+          title: 'Już przetłumaczony tytuł',
+          content: 'Już przetłumaczona treść rozdziału.'
+        }
+      ]);
+      fixture.detectChanges();
+
+      spyOn(window.URL, 'createObjectURL').and.returnValue('blob:mock');
+      spyOn(document.body, 'appendChild').and.stub();
+      spyOn(document.body, 'removeChild').and.stub();
+      spyOn(HTMLAnchorElement.prototype, 'click').and.stub();
+
+      component.setFormat('markdown');
+      await component.exportBook();
+
+      expect(translateBookSpy).not.toHaveBeenCalled();
+
+      (mockTranslation as any).isPolish = () => false;
+    });
     it('translates critique feedback when isPolish is true and chapter has a critique', async () => {
       // Override the isPolish flag and the translator spy for this test.
       (mockTranslation as any).isPolish = () => true;

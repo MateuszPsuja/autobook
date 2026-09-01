@@ -66,7 +66,10 @@ describe('ShellComponent', () => {
     translationSpy.isPolish.and.returnValue(false);
 
     const persistenceSpy = jasmine.createSpyObj('PersistenceService', ['clearAll']);
-    persistenceSpy.clearAll.and.returnValue(Promise.resolve());
+    // The real PersistenceService.clearAll() returns Observable<void>;
+    // the production code wraps it with firstValueFrom. Match the
+    // real shape here so toggleLanguage's await actually resolves.
+    persistenceSpy.clearAll.and.returnValue(of(undefined));
 
     const bookStateSpy = jasmine.createSpyObj('BookStateService', ['getState', 'reset']);
     bookStateSpy.getState.and.returnValue(mockBookState);
@@ -179,13 +182,31 @@ describe('ShellComponent', () => {
   });
 
   describe('toggleLanguage', () => {
-    it('should call translationService.toggleLanguage when no data', async () => {
+    it('always resets the book to its default state and toggles the language', async () => {
+      // The book is reset unconditionally — the chapter content was
+      // generated in the previous UI language, so carrying it across
+      // a language switch would leave the viewer/export out of sync.
       await component.toggleLanguage();
-      
+
+      expect(persistenceServiceSpy.clearAll).toHaveBeenCalled();
+      expect(bookStateServiceSpy.reset).toHaveBeenCalled();
       expect(translationServiceSpy.toggleLanguage).toHaveBeenCalled();
     });
 
-    it('should clear data when data exists', async () => {
+    it('resets the book even when it has no chapters', async () => {
+      // Defensive: previously the reset was gated on `hasData`, so a
+      // language switch on a fresh project (no chapters yet) would skip
+      // clearAll/reset and leave any persisted config sitting around.
+      bookStateServiceSpy.getState.and.returnValue({ ...mockBookState });
+
+      await component.toggleLanguage();
+
+      expect(persistenceServiceSpy.clearAll).toHaveBeenCalled();
+      expect(bookStateServiceSpy.reset).toHaveBeenCalled();
+      expect(translationServiceSpy.toggleLanguage).toHaveBeenCalled();
+    });
+
+    it('resets the book when chapters exist', async () => {
       const chapterWithData = {
         id: 'chapter-1',
         number: 1,
@@ -201,9 +222,9 @@ describe('ShellComponent', () => {
         chapters: [chapterWithData]
       };
       bookStateServiceSpy.getState.and.returnValue(stateWithData);
-      
+
       await component.toggleLanguage();
-      
+
       expect(persistenceServiceSpy.clearAll).toHaveBeenCalled();
       expect(bookStateServiceSpy.reset).toHaveBeenCalled();
       expect(translationServiceSpy.toggleLanguage).toHaveBeenCalled();

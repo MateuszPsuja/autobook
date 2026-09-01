@@ -137,17 +137,24 @@ export class ExportComponent implements OnInit {
         return;
       }
 
+      // The orchestrator already translates chapter title + content
+      // to Polish after generation (when the user is in Polish mode),
+      // so the chapters in the state are already in the target
+      // language. Re-translating them here would burn an extra full
+      // LLM pass for the entire book and risk the model "improving"
+      // already-Polish prose, so we just ship the chapters as-is.
+      //
+      // Critiques are a narrow exception: if the user generated the
+      // book in English mode and then flipped the UI to Polish
+      // without resetting (pre-existing language-toggle behaviour
+      // preserved a no-data book, so any stale critique would slip
+      // through), the critique text is still English. Translating
+      // critiques here keeps the exported file consistent with the
+      // chosen UI language without re-touching the chapter bodies.
       const shouldTranslate = this.translationService.isPolish();
       if (shouldTranslate) {
         this.ngZone.run(() => {
-          this.exportProgress = 5;
-          this.exportStatus = `Tlumaczenie ${chapters.length} rozdzialow...`;
-        });
-
-        const translatedChapters = await this.translationService.translateBookToPolish(chapters);
-
-        this.ngZone.run(() => {
-          this.exportProgress = 60;
+          this.exportProgress = 30;
           this.exportStatus = `Tlumaczenie raportow krytyki...`;
         });
 
@@ -164,16 +171,16 @@ export class ExportComponent implements OnInit {
         );
 
         this.ngZone.run(() => {
-          this.exportProgress = 70;
+          this.exportProgress = 60;
         });
 
-        for (let i = 0; i < translatedChapters.length; i++) {
-          chapters[i] = {
-            ...chapters[i],
-            title: translatedChapters[i].title,
-            content: translatedChapters[i].content,
-            critique: translatedCritiques[i] || chapters[i].critique
-          };
+        for (let i = 0; i < chapters.length; i++) {
+          if (translatedCritiques[i]) {
+            chapters[i] = {
+              ...chapters[i],
+              critique: translatedCritiques[i]
+            };
+          }
         }
       }
 
