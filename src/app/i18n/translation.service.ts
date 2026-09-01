@@ -6,6 +6,7 @@ import pl from './pl.json';
 import { ApiService } from '../core/api.service';
 import { CritiqueReport } from '../models/critique.model';
 import { Chapter } from '../models/chapter.model';
+import { isRefusalOrSafety } from '../shared/utils/safety.util';
 
 export type Language = 'en' | 'pl';
 
@@ -351,6 +352,31 @@ export class TranslationService {
         ).subscribe({
           next: response => {
             const content = response.choices[0]?.message?.content;
+            const finishReason = response.choices[0]?.finish_reason;
+
+            // Safety-filter / content-policy responses are not a
+            // translation — they're a refusal. Retry the same way
+            // we retry an empty response; the model might pick a
+            // different code path on a re-prompt, and if all
+            // retries hit the safety filter, the caller falls back
+            // to the original text (so the chapter stays in
+            // English rather than rendering a metadata block).
+            if (isRefusalOrSafety(content, finishReason)) {
+              if (attempt < maxRetries) {
+                const delayMs = Math.min(maxBackoffMs, 500 * Math.pow(1.7, attempt - 1));
+                console.warn(
+                  `Translation attempt ${attempt}/${maxRetries} returned a safety / content-policy response (finish_reason=${finishReason ?? 'n/a'}), retrying in ${Math.round(delayMs)}ms...`
+                );
+                setTimeout(tryTranslate, delayMs);
+                return;
+              }
+              console.error(
+                `Translation gave up after ${maxRetries} attempts (model kept returning safety responses)`
+              );
+              subscriber.error(new Error('Translation returned a safety / content-policy response after all retries'));
+              return;
+            }
+
             const cleaned = TranslationService.cleanTranslation(content || '');
 
             if (cleaned) {

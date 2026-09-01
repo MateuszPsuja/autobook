@@ -6,6 +6,7 @@ import { ChapterBrief, AuthorContext, AuthorStyleContext } from '../../models/bo
 import { ChapterDraft } from '../../models/chapter.model';
 import { authorSystemPrompt, authorChapterPrompt, authorRevisionPrompt } from '../prompts/author.prompts';
 import { stripRunningWordCount } from '../../shared/utils/chapter-cleanup';
+import { isRefusalOrSafety } from '../../shared/utils/safety.util';
 
 export interface AuthorResult {
   draft: ChapterDraft;
@@ -126,7 +127,24 @@ export class AuthorService {
 
     return this.apiService.chatCompletion(request).pipe(
       map(response => {
-        const content = stripRunningWordCount(response.choices[0]?.message?.content || '');
+        const rawContent = response.choices[0]?.message?.content || '';
+        const finishReason = response.choices[0]?.finish_reason;
+
+        // Detect safety-filter / content-policy metadata blocks
+        // ("User Safety: unsafe", "Safety Categories: Violence, ...")
+        // that some OpenRouter routes return instead of refusing in
+        // prose. Without this check, the metadata block would land
+        // in `chapter.content` and be rendered to the user. Throw
+        // so the orchestrator's retry path re-asks the model — the
+        // same path that handles plain-language refusals.
+        if (isRefusalOrSafety(rawContent, finishReason)) {
+          throw new Error(
+            'Author returned a safety / content-policy response instead of chapter prose. ' +
+            'Will retry — this is the model refusing the prompt, not a model error.'
+          );
+        }
+
+        const content = stripRunningWordCount(rawContent);
         const wordCount = this.countWords(content);
 
         // Treat "mostly preamble" or "tiny fragment" as a failure so the
@@ -213,6 +231,18 @@ export class AuthorService {
     return this.apiService.chatCompletion(request).pipe(
       map(response => {
         const raw = response.choices[0]?.message?.content || draft.content;
+        const finishReason = response.choices[0]?.finish_reason;
+
+        // Same safety-filter detection as writeChapterWithUsage —
+        // a model that refused the revision prompt would otherwise
+        // get its metadata block stored as the chapter content.
+        if (isRefusalOrSafety(raw, finishReason)) {
+          throw new Error(
+            'Reviser returned a safety / content-policy response instead of revised chapter prose. ' +
+            'Will retry — the model is refusing the prompt, not failing.'
+          );
+        }
+
         const content = stripRunningWordCount(raw);
         const wordCount = this.countWords(content);
 
