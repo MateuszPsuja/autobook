@@ -5,6 +5,7 @@ import { BookConfig } from '../../models/book-config.model';
 import { ApiService } from '../../core/api.service';
 import { BookStateService } from '../../book/state/book-state.service';
 import { TranslationService } from '../../i18n/translation.service';
+import { ProviderService } from '../../core/providers/provider.service';
 
 @Component({
   selector: 'app-config',
@@ -16,6 +17,7 @@ import { TranslationService } from '../../i18n/translation.service';
 export class ConfigComponent implements OnInit {
   protected translationService = inject(TranslationService);
   protected apiService = inject(ApiService);
+  protected providerService = inject(ProviderService);
   private bookStateService = inject(BookStateService);
 
   configForm: FormGroup;
@@ -136,8 +138,8 @@ export class ConfigComponent implements OnInit {
 
     // Load saved config if exists
     const savedConfig = localStorage.getItem('book-config');
-    // Always get the selected model from localStorage (user's current choice in settings)
-    const selectedModelFromStorage = localStorage.getItem('selected-model') || this.apiService.getDefaultModel().id;
+    // Always get the selected model from the active provider (user's current choice in settings)
+    const selectedModelFromStorage = this.providerService.getSelectedModel() || this.apiService.getDefaultModel().id;
     
     if (savedConfig) {
       this.bookConfig = JSON.parse(savedConfig);
@@ -353,8 +355,8 @@ export class ConfigComponent implements OnInit {
     // Translate dropdown values from Polish to English
     const translatedFormValue = this.translateFormValuesToEnglish(formValue);
     
-    // Build complete config with the selected model - always use localStorage value
-    const currentSelectedModel = localStorage.getItem('selected-model') || this.apiService.getDefaultModel().id;
+    // Build complete config with the selected model - always use the active provider's choice
+    const currentSelectedModel = this.providerService.getSelectedModel() || this.apiService.getDefaultModel().id;
     this.bookConfig = {
       ...translatedFormValue,
       themes: themesArray,
@@ -415,12 +417,12 @@ export class ConfigComponent implements OnInit {
 
   // Get selected model ID
   getSelectedModel(): string {
-    return localStorage.getItem('selected-model') || this.apiService.getDefaultModel().id;
+    return this.providerService.getSelectedModel() || this.apiService.getDefaultModel().id;
   }
 
   // Get selected model name for display
   getSelectedModelName(): string {
-    const selectedModelId = localStorage.getItem('selected-model');
+    const selectedModelId = this.providerService.getSelectedModel();
     if (!selectedModelId) {
       return this.apiService.getDefaultModel().name;
     }

@@ -4,6 +4,7 @@ import { map, switchMap, catchError, take, delay as rxDelay } from 'rxjs/operato
 import en from './en.json';
 import pl from './pl.json';
 import { ApiService } from '../core/api.service';
+import { ProviderService } from '../core/providers/provider.service';
 import { CritiqueReport } from '../models/critique.model';
 import { Chapter } from '../models/chapter.model';
 import { isRefusalOrSafety } from '../shared/utils/safety.util';
@@ -200,6 +201,7 @@ const englishToPolishMappings: Record<string, Record<string, string>> = {
 export class TranslationService {
   private readonly STORAGE_KEY = 'app-language';
   private apiService = inject(ApiService);
+  private providerService = inject(ProviderService);
   
   private currentLanguage = signal<Language>(this.getStoredLanguage());
   
@@ -207,6 +209,23 @@ export class TranslationService {
   
   readonly isEnglish = computed(() => this.currentLanguage() === 'en');
   readonly isPolish = computed(() => this.currentLanguage() === 'pl');
+
+  /**
+   * Cheap heuristic for "this string is already in Polish". Looks for
+   * the diacritics that don't occur in English source text: ą, ć, ę,
+   * ł, ń, ó, ś, ź, ż and their uppercase forms. Used by the chapter
+   * viewer to skip an API call when the source critique is already
+   * Polish (e.g. after the post-generation translation pass).
+   *
+   * The check is intentionally low-cost and conservative — it
+   * returns true only when at least one Polish-specific character is
+   * present, so an English string with the occasional "a" or "e"
+   * doesn't false-positive.
+   */
+  looksPolish(text: string | null | undefined): boolean {
+    if (!text) return false;
+    return /[ąćęłńóśźżĄĆĘŁŃÓŚŹŻ]/.test(text);
+  }
 
   constructor() {
     effect(() => {
@@ -341,7 +360,7 @@ export class TranslationService {
         ];
 
         const request = {
-          model: localStorage.getItem('selected-model') || this.apiService.getDefaultModel().id,
+          model: this.providerService.getSelectedModel() || this.apiService.getDefaultModel().id,
           messages,
           temperature: 0.3,
           max_tokens: maxTokens
@@ -697,10 +716,17 @@ export class TranslationService {
    * not the sum of all of them.
    *
    * Returns the original report unchanged when the current language
-   * is English. Empty / missing fields are preserved as-is. On a
-   * translation failure for any field, that field is left as the
-   * original English text (logged) rather than failing the whole
-   * critique — partial Polish is better than nothing.
+   * is English, or when every translatable field is already in
+   * Polish (the post-generation translation pass writes Polish
+   * text into `chapter.critique` for new runs — without this
+   * short-circuit, the export would re-translate every chapter's
+   * critique for the entire book, firing one LLM call per item in
+   * `mustFix`/`suggestions` on top of the per-field feedback /
+   * unavailableReason calls. For a 5-chapter book that was 30-40
+   * wasted chat completions). Empty / missing fields are preserved
+   * as-is. On a translation failure for any field, that field is
+   * left as the original English text (logged) rather than failing
+   * the whole critique — partial Polish is better than nothing.
    */
   translateCritiqueToPolish$(critique: CritiqueReport): Observable<CritiqueReport> {
     if (!critique) {
@@ -710,8 +736,37 @@ export class TranslationService {
       return of(critique);
     }
 
+    // Already-Polish short-circuit. The post-generation translation
+    // pass translates the entire critique to Polish and writes it
+    // back to the chapter state. The export (and the chapter
+    // viewer) re-call us on every chapter, so a strict "all fields
+    // Polish" check would still fire 6-8 LLM calls per chapter
+    // whenever the post-translation pass left any single mustFix /
+    // suggestions item untranslated (e.g. a `safeText$` failure
+    // for one item, a per-field retry that exhausted its budget,
+    // or simply a Polish phrase with no diacritics like
+    // "Wzmocnij akapit" that the heuristic can't fingerprint).
+    //
+    // The user-visible signal is `feedback` — that's what the
+    // critique panel shows prominently. If feedback is in Polish
+    // the rest of the critique is almost certainly Polish too
+    // (it was translated by the same model in the same pass), and
+    // the few items without diacritics aren't worth 6+ LLM calls
+    // to round-trip. We short-circuit on a non-empty Polish
+    // feedback; empty / English feedback falls through to the
+    // per-field forkJoin as before.
+    if (critique.feedback && critique.feedback.trim() && this.looksPolish(critique.feedback)) {
+      return of(critique);
+    }
+
     const safeText$ = (text: string | undefined): Observable<string> => {
       if (!text || !text.trim()) return of(text || '');
+      // Per-field short-circuit: a single Polish item in a mostly-
+      // English critique shouldn't cost an LLM call either. This
+      // also matters when the whole critique is Polish (the
+      // top-level `allFieldsPolish` check passes through here with
+      // every individual field Polish, so each is a no-op).
+      if (this.looksPolish(text)) return of(text);
       return this.translateTextToPolish$(text).pipe(
         catchError(err => {
           console.warn('Critique field translation to Polish failed:', err);

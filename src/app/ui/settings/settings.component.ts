@@ -1,8 +1,10 @@
-import { Component, OnInit, inject, OnDestroy } from '@angular/core';
+import { Component, OnInit, OnDestroy, inject, effect, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ApiService, OpenRouterModel } from '../../core/api.service';
 import { TranslationService } from '../../i18n/translation.service';
+import { ProviderService } from '../../core/providers/provider.service';
+import { LLMProvider, LLMModel } from '../../core/providers/provider.types';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 
@@ -16,8 +18,19 @@ import { takeUntil } from 'rxjs/operators';
 export class SettingsComponent implements OnInit, OnDestroy {
   protected apiService = inject(ApiService);
   protected translationService = inject(TranslationService);
+  protected providerService = inject(ProviderService);
 
   private destroy$ = new Subject<void>();
+
+  // Provider state
+  providers = this.apiService.listProviders();
+  activeProvider = this.providerService.getActiveProvider();
+  /** Live signal of the post-checks preference for the template binding. */
+  skipPostChecks = this.providerService.skipPostChecks;
+
+  onSkipPostChecksChange(checked: boolean): void {
+    this.providerService.setSkipPostChecks(checked);
+  }
 
   // API Key state
   apiKeyInput = '';
@@ -27,8 +40,11 @@ export class SettingsComponent implements OnInit, OnDestroy {
   apiError = '';
   apiSuccess = false;
 
+  // Base URL state (LM Studio)
+  baseUrlInput = '';
+
   // Model state
-  models: OpenRouterModel[] = [];
+  models: LLMModel[] = [];
   selectedModel = '';
   isLoadingModels = false;
   modelsError = '';
@@ -38,16 +54,20 @@ export class SettingsComponent implements OnInit, OnDestroy {
 
   // Current values
   currentApiKey = '';
+  currentBaseUrl = '';
   currentModel = '';
 
   constructor() {
-    this.loadCurrentValues();
+    // Re-pull active provider / model state whenever the user switches.
+    effect(() => {
+      this.activeProvider = this.providerService.activeProvider();
+      this.refreshFromStorage();
+    });
   }
 
   ngOnInit(): void {
-    this.loadCurrentValues();
-    // Auto-load models if API is configured
-    if (this.apiService.isConfigured()) {
+    this.refreshFromStorage();
+    if (this.providerService.isActiveConfigured()) {
       this.loadModels();
     }
   }
@@ -57,22 +77,49 @@ export class SettingsComponent implements OnInit, OnDestroy {
     this.destroy$.complete();
   }
 
-  private loadCurrentValues(): void {
-    this.currentApiKey = this.apiService.getApiKey() || '';
-    // Subscribe to default model
-    this.apiService.getDefaultModel$()
-      .pipe(takeUntil(this.destroy$))
-      .subscribe(model => {
-        this.currentModel = localStorage.getItem('selected-model') || model.id;
-        this.selectedModel = this.currentModel;
-      });
+  /**
+   * Pull the current values for the active provider from the service
+   * into the local component state used by the form.
+   */
+  private refreshFromStorage(): void {
+    const id = this.activeProvider.id;
+    this.currentApiKey = this.providerService.getApiKey(id) ?? '';
+    this.currentBaseUrl = this.providerService.getBaseUrl(id) ?? this.activeProvider.baseUrl;
+    this.baseUrlInput = this.currentBaseUrl;
+    this.currentModel = this.providerService.getSelectedModel(id) ?? '';
+    this.selectedModel = this.currentModel;
+
+    // Reset transient form state
+    this.apiKeyInput = '';
+    this.apiTested = false;
+    this.apiSuccess = false;
+    this.apiError = '';
+    this.models = [];
+    this.modelsError = '';
   }
 
-  t(key: string): string {
-    return this.translationService.get(key);
+  t(key: string, params?: Record<string, string | number>): string {
+    const value = this.translationService.get(key);
+    if (!params) return value;
+    return Object.keys(params).reduce(
+      (acc, name) => acc.split(`{${name}}`).join(String(params[name])),
+      value
+    );
   }
 
-  // API Key methods
+  // === Provider switching ===
+
+  onProviderChange(providerId: string): void {
+    if (providerId === this.activeProvider.id) return;
+    this.providerService.setActiveProvider(providerId);
+    // The effect() will re-run refreshFromStorage + loadModels.
+    if (this.providerService.isActiveConfigured()) {
+      this.loadModels();
+    }
+  }
+
+  // === API Key methods ===
+
   toggleApiKeyVisibility(): void {
     this.isApiKeyVisible = !this.isApiKeyVisible;
   }
@@ -82,16 +129,15 @@ export class SettingsComponent implements OnInit, OnDestroy {
     this.apiTesting = true;
     this.apiError = '';
     this.apiSuccess = false;
-    
+
     const apiKey = this.apiKeyInput || this.currentApiKey;
-    if (!apiKey) {
+    if (this.activeProvider.requiresApiKey && !apiKey) {
       this.apiTesting = false;
       this.apiError = this.t('settings.apiKeyRequired');
       return;
     }
 
-    // Use Observable-based method
-    this.apiService.testApiKey$(apiKey)
+    this.apiService.testApiKey$(apiKey, this.activeProvider.id)
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (result) => {
@@ -114,19 +160,17 @@ export class SettingsComponent implements OnInit, OnDestroy {
   }
 
   saveApiKey(): void {
-    if (this.apiService.isValidApiKey(this.apiKeyInput)) {
-      this.apiService.saveApiKey(this.apiKeyInput);
-      this.currentApiKey = this.apiKeyInput;
-      this.apiKeyInput = '';
-      this.apiTested = false;
-      this.apiSuccess = false;
-      // Reload models after saving API key
-      this.loadModels();
-    }
+    if (!this.apiService.isValidApiKey(this.apiKeyInput)) return;
+    this.providerService.saveApiKey(this.apiKeyInput, this.activeProvider.id);
+    this.currentApiKey = this.apiKeyInput;
+    this.apiKeyInput = '';
+    this.apiTested = false;
+    this.apiSuccess = false;
+    this.loadModels();
   }
 
   clearApiKey(): void {
-    this.apiService.clearApiKey();
+    this.providerService.clearApiKey(this.activeProvider.id);
     this.currentApiKey = '';
     this.apiKeyInput = '';
     this.models = [];
@@ -140,9 +184,24 @@ export class SettingsComponent implements OnInit, OnDestroy {
     this.apiSuccess = false;
   }
 
-  // Model methods
+  // === Base URL methods (LM Studio and override-able providers) ===
+
+  saveBaseUrl(): void {
+    const value = (this.baseUrlInput ?? '').trim();
+    if (value.length === 0) return;
+    this.providerService.saveBaseUrl(value, this.activeProvider.id);
+    this.currentBaseUrl = value;
+    this.loadModels();
+  }
+
+  resetBaseUrl(): void {
+    this.baseUrlInput = this.activeProvider.defaultBaseUrl;
+  }
+
+  // === Model methods ===
+
   loadModels(): void {
-    if (!this.apiService.isConfigured()) {
+    if (!this.providerService.isActiveConfigured()) {
       this.modelsError = this.t('settings.configureApiKeyFirst');
       this.models = [];
       return;
@@ -150,53 +209,46 @@ export class SettingsComponent implements OnInit, OnDestroy {
 
     this.isLoadingModels = true;
     this.modelsError = '';
+    this.models = [];
 
     this.apiService.getModels$()
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (fetchedModels) => {
           this.models = fetchedModels;
-          
-          // If current model is not in the list, try to find it
-          if (!this.models.find(m => m.id === this.currentModel)) {
-            // Model not found, keep current selection
-          }
           this.isLoadingModels = false;
         },
         error: (error) => {
-          console.warn('Failed to fetch models from API:', error);
+          console.warn(`Failed to fetch ${this.activeProvider.name} models:`, error);
           this.modelsError = this.t('settings.usingFallbackModels');
-          // In case of error, getModels$() will return fallback models
           this.isLoadingModels = false;
         }
       });
   }
 
   saveModel(): void {
-    if (this.selectedModel) {
-      localStorage.setItem('selected-model', this.selectedModel);
-      this.currentModel = this.selectedModel;
-      this.isModelSaving = true;
-      setTimeout(() => {
-        this.isModelSaving = false;
-      }, 500);
-    }
+    if (!this.selectedModel) return;
+    this.providerService.saveSelectedModel(this.selectedModel, this.activeProvider.id);
+    this.currentModel = this.selectedModel;
+    this.isModelSaving = true;
+    setTimeout(() => {
+      this.isModelSaving = false;
+    }, 500);
   }
 
   getModelName(modelId: string): string {
     const model = this.models.find(m => m.id === modelId);
-    return model?.name || modelId;
+    return model?.name ?? modelId;
   }
 
-  getSelectedModelInfo(): OpenRouterModel | undefined {
+  getSelectedModelInfo(): LLMModel | undefined {
     return this.models.find(m => m.id === this.selectedModel);
   }
 
   isConfigured(): boolean {
-    return this.apiService.isConfigured();
+    return this.providerService.isActiveConfigured();
   }
 
-  // Get tier badge class
   getTierBadgeClass(tier: string): string {
     switch (tier) {
       case 'premium':
@@ -219,33 +271,48 @@ export class SettingsComponent implements OnInit, OnDestroy {
       'Mistral': '❄️',
       'DeepSeek': '🔮',
       'Cohere': '🌊',
-      'Perplexity': '✨'
+      'Perplexity': '✨',
+      'OpenRouter': '🛰️',
+      'LM Studio': '💻',
+      'Minimax': '⚡',
+      'ChatGPT': '💬',
+      'MiniMax': '🐉'
     };
     return icons[provider] || '💻';
   }
 
-  get filteredModels(): OpenRouterModel[] {
+  get filteredModels(): LLMModel[] {
     let result = this.models;
-    
-    // Filter by free only - models with "free" in the name
     if (this.showFreeOnly) {
-      result = result.filter(m => m.name.toLowerCase().includes('free'));
+      result = result.filter(m => m.name.toLowerCase().includes('free') || m.free === true);
     }
-    
-    // Filter by search query
     if (this.searchQuery.trim()) {
       const query = this.searchQuery.toLowerCase();
-      result = result.filter(m => 
+      result = result.filter(m =>
         m.name.toLowerCase().includes(query) ||
         m.id.toLowerCase().includes(query) ||
         m.provider.toLowerCase().includes(query)
       );
     }
-    
     return result;
   }
 
-  getCurrentModelInfo(): OpenRouterModel | undefined {
+  getCurrentModelInfo(): LLMModel | undefined {
     return this.models.find(m => m.id === this.currentModel);
+  }
+
+  /** Quick helper: is the current provider's key valid for the format check? */
+  isKeyFormatValid(): boolean {
+    if (!this.apiKeyInput) return false;
+    return this.apiService.isValidApiKey(this.apiKeyInput);
+  }
+
+  isBaseUrlValid(): boolean {
+    try {
+      const u = new URL(this.baseUrlInput);
+      return u.protocol === 'http:' || u.protocol === 'https:';
+    } catch {
+      return false;
+    }
   }
 }

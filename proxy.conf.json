@@ -7,5 +7,41 @@
     "pathRewrite": {
       "^/api/openrouter": ""
     }
+  },
+  "/api/lmstudio": {
+    "target": "http://localhost:1234",
+    "secure": false,
+    "changeOrigin": true,
+    "logLevel": "debug",
+    "pathRewrite": {
+      "^/api/lmstudio": ""
+    }
+  },
+  "/api/minimax": {
+    "target": "https://api.minimax.io",
+    "secure": true,
+    "changeOrigin": true,
+    "logLevel": "debug",
+    "pathRewrite": {
+      "^/api/minimax": ""
+    }
+  },
+  "/api/anthropic": {
+    "target": "https://api.anthropic.com",
+    "secure": true,
+    "changeOrigin": true,
+    "logLevel": "debug",
+    "pathRewrite": {
+      "^/api/anthropic": ""
+    }
+  },
+  "/api/openai": {
+    "target": "https://api.openai.com",
+    "secure": true,
+    "changeOrigin": true,
+    "logLevel": "debug",
+    "pathRewrite": {
+      "^/api/openai": ""
+    }
   }
 }

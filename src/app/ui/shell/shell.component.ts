@@ -5,6 +5,7 @@ import { Router, RouterModule } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { ThemeService } from '../../core/theme.service';
 import { ApiService } from '../../core/api.service';
+import { ProviderService } from '../../core/providers/provider.service';
 import { TranslationService } from '../../i18n/translation.service';
 import { PersistenceService } from '../../core/persistence.service';
 import { BookStateService } from '../../book/state/book-state.service';
@@ -19,6 +20,7 @@ import { DialogHostComponent } from '../../core/dialog-host.component';
 export class ShellComponent {
   protected themeService = inject(ThemeService);
   protected apiService = inject(ApiService);
+  protected providerService = inject(ProviderService);
   protected translationService = inject(TranslationService);
   protected router = inject(Router);
   
@@ -34,7 +36,7 @@ export class ShellComponent {
   }
 
   private loadSelectedModel(): void {
-    const saved = localStorage.getItem('selected-model');
+    const saved = this.providerService.getSelectedModel();
     this.selectedModel = saved || this.apiService.getDefaultModel().id;
   }
 
@@ -117,8 +119,8 @@ export class ShellComponent {
   }
 
   getModelName(): string {
-    // Always read from localStorage to get the current model
-    const selectedModelId = localStorage.getItem('selected-model');
+    // Always read from the active provider config to get the current model
+    const selectedModelId = this.providerService.getSelectedModel();
     if (!selectedModelId) {
       return this.apiService.getDefaultModel().name;
     }

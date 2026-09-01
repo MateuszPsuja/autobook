@@ -5,6 +5,7 @@ import { Subscription, Observable, interval } from 'rxjs';
 import { BookStateService } from '../../book/state/book-state.service';
 import { OrchestratorService } from '../../book/orchestrator/orchestrator.service';
 import { ApiService } from '../../core/api.service';
+import { ProviderService } from '../../core/providers/provider.service';
 import { BookConfig } from '../../models/book-config.model';
 import { AgentType, GenerationStatus, BookState, GenerationStats } from '../../models/book-state.model';
 import { ChapterDraft } from '../../models/chapter.model';
@@ -57,6 +58,7 @@ export class GeneratorComponent implements OnInit, OnDestroy {
     private bookStateService: BookStateService,
     private orchestratorService: OrchestratorService,
     private apiService: ApiService,
+    private providerService: ProviderService,
     private router: Router
   ) {
     this.bookState$ = this.bookStateService.getState$();
@@ -76,9 +78,9 @@ export class GeneratorComponent implements OnInit, OnDestroy {
 
     this.savedConfig = JSON.parse(savedConfig);
     
-    // Always use the selected model from localStorage, or default
+    // Always use the selected model from the active provider config, or default
     // This ensures the user sees what they actually selected in settings
-    const selectedModel = localStorage.getItem('selected-model');
+    const selectedModel = this.providerService.getSelectedModel();
     if (this.savedConfig) {
       this.savedConfig.model = selectedModel || this.apiService.getDefaultModel().id;
       // Update localStorage with the correct model

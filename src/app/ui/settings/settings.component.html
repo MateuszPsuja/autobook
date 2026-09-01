@@ -5,6 +5,38 @@
     <p class="text-gray-600 dark:text-gray-400">{{ t('settings.subtitle') }}</p>
   </div>
 
+  <!-- Provider Section -->
+  <div class="p-6 bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-lg">
+    <div class="flex items-center gap-3 mb-6">
+      <div class="w-12 h-12 bg-indigo-100 dark:bg-indigo-900/30 rounded-xl flex items-center justify-center">
+        <svg class="w-6 h-6 text-indigo-600 dark:text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+        </svg>
+      </div>
+      <div>
+        <h2 class="text-xl font-semibold text-gray-900 dark:text-white">{{ t('settings.providerTitle') }}</h2>
+        <p class="text-sm text-gray-500 dark:text-gray-400">{{ t('settings.providerDescription') }}</p>
+      </div>
+    </div>
+
+    <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+      {{ t('settings.providerLabel') }}
+    </label>
+    <select
+      [ngModel]="activeProvider.id"
+      (ngModelChange)="onProviderChange($event)"
+      class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all">
+      @for (provider of providers; track provider.id) {
+        <option [value]="provider.id">
+          {{ getProviderIcon(provider.name) }} {{ provider.name }}
+        </option>
+      }
+    </select>
+    <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">
+      {{ activeProvider.description }}
+    </p>
+  </div>
+
   <!-- API Key Section -->
   <div class="p-6 bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-lg">
     <div class="flex items-center gap-3 mb-6">
@@ -14,127 +46,223 @@
         </svg>
       </div>
       <div>
-        <h2 class="text-xl font-semibold text-gray-900 dark:text-white">{{ t('settings.apiKeyTitle') }}</h2>
-        <p class="text-sm text-gray-500 dark:text-gray-400">{{ t('settings.apiKeyDescription') }}</p>
+        <h2 class="text-xl font-semibold text-gray-900 dark:text-white">
+          {{ activeProvider.name }} {{ t('settings.apiKeyTitle') }}
+        </h2>
+        <p class="text-sm text-gray-500 dark:text-gray-400">
+          @if (activeProvider.requiresApiKey) {
+            {{ t('settings.apiKeyDescription') }}
+          } @else {
+            {{ t('settings.noKeyRequired') }}
+          }
+        </p>
       </div>
     </div>
 
-    <!-- Current Status -->
-    @if (currentApiKey) {
-      <div class="mb-6 p-4 bg-green-50 dark:bg-green-900/20 rounded-xl border border-green-200 dark:border-green-800">
+    @if (!activeProvider.requiresApiKey) {
+      <div class="p-4 bg-green-50 dark:bg-green-900/20 rounded-xl border border-green-200 dark:border-green-800">
         <div class="flex items-center gap-2">
           <div class="w-2.5 h-2.5 bg-green-500 rounded-full"></div>
-          <span class="text-sm font-medium text-green-700 dark:text-green-400">{{ t('settings.apiKeyConfigured') }}</span>
+          <span class="text-sm font-medium text-green-700 dark:text-green-400">
+            {{ t('settings.localProviderReady') }}
+          </span>
         </div>
+        <p class="mt-2 text-xs text-gray-600 dark:text-gray-400">
+          {{ t('settings.localProviderHint', { url: activeProvider.defaultBaseUrl }) }}
+        </p>
       </div>
     } @else {
-      <div class="mb-6 p-4 bg-red-50 dark:bg-red-900/20 rounded-xl border border-red-200 dark:border-red-800">
-        <div class="flex items-center gap-2">
-          <div class="w-2.5 h-2.5 bg-red-500 rounded-full"></div>
-          <span class="text-sm font-medium text-red-700 dark:text-red-400">{{ t('settings.apiKeyNotConfigured') }}</span>
+      <!-- Current Status -->
+      @if (currentApiKey) {
+        <div class="mb-6 p-4 bg-green-50 dark:bg-green-900/20 rounded-xl border border-green-200 dark:border-green-800">
+          <div class="flex items-center gap-2">
+            <div class="w-2.5 h-2.5 bg-green-500 rounded-full"></div>
+            <span class="text-sm font-medium text-green-700 dark:text-green-400">{{ t('settings.apiKeyConfigured') }}</span>
+          </div>
+        </div>
+      } @else {
+        <div class="mb-6 p-4 bg-red-50 dark:bg-red-900/20 rounded-xl border border-red-200 dark:border-red-800">
+          <div class="flex items-center gap-2">
+            <div class="w-2.5 h-2.5 bg-red-500 rounded-full"></div>
+            <span class="text-sm font-medium text-red-700 dark:text-red-400">{{ t('settings.apiKeyNotConfigured') }}</span>
+          </div>
+        </div>
+      }
+
+      <!-- API Key Input -->
+      <div class="space-y-4">
+        <div class="relative">
+          <input
+            [type]="isApiKeyVisible ? 'text' : 'password'"
+            [(ngModel)]="apiKeyInput"
+            [placeholder]="activeProvider.keyValidation?.prefix || 'sk-...'"
+            autocomplete="off"
+            autocapitalize="off"
+            autocorrect="off"
+            spellcheck="false"
+            data-1p-ignore="true"
+            data-bwignore="true"
+            data-form-type="other"
+            data-lpignore="true"
+            class="w-full px-4 py-3 pr-20 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all">
+          <div class="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1">
+            @if (apiKeyInput) {
+              <button
+                type="button"
+                (click)="clearApiKeyInput()"
+                class="px-2 py-1 bg-red-500 text-white text-xs font-medium rounded-lg hover:bg-red-600 transition-colors"
+                title="Clear input">
+                Clear
+              </button>
+            }
+            <button
+              type="button"
+              (click)="toggleApiKeyVisibility()"
+              class="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
+              @if (isApiKeyVisible) {
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"></path>
+                </svg>
+              } @else {
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+                </svg>
+              }
+            </button>
+          </div>
+        </div>
+
+        <!-- Status Messages -->
+        @if (apiError) {
+          <div class="p-3 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800">
+            <p class="text-sm text-red-600 dark:text-red-400 flex items-center gap-2">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+              </svg>
+              {{ apiError }}
+            </p>
+          </div>
+        }
+
+        @if (apiSuccess) {
+          <div class="p-3 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
+            <p class="text-sm text-green-600 dark:text-green-400 flex items-center gap-2">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+              </svg>
+              {{ t('settings.apiKeyValid') }}
+            </p>
+          </div>
+        }
+
+        <!-- Action Buttons -->
+        <div class="flex flex-wrap gap-3">
+          <button
+            type="button"
+            (click)="testApiKey()"
+            [disabled]="apiTesting || (!apiKeyInput && !currentApiKey)"
+            class="px-5 py-2.5 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 font-medium rounded-xl hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+            @if (apiTesting) {
+              <span class="flex items-center gap-2">
+                <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                {{ t('settings.testing') }}
+              </span>
+            } @else {
+              {{ t('settings.testKey') }}
+            }
+          </button>
+
+          @if (apiKeyInput) {
+            <button
+              type="button"
+              (click)="saveApiKey()"
+              [disabled]="!isKeyFormatValid()"
+              class="px-5 py-2.5 bg-brand-500 text-white font-medium rounded-xl hover:bg-brand-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-md">
+              {{ t('settings.saveKey') }}
+            </button>
+          }
+
+          @if (currentApiKey) {
+            <button
+              type="button"
+              (click)="clearApiKey()"
+              class="px-5 py-2.5 bg-red-500 text-white font-medium rounded-xl hover:bg-red-600 transition-colors shadow-md">
+              {{ t('settings.clearKey') }}
+            </button>
+          }
         </div>
       </div>
     }
 
-    <!-- API Key Input -->
-    <div class="space-y-4">
-      <div class="relative">
-        <input
-          [type]="isApiKeyVisible ? 'text' : 'password'"
-          [(ngModel)]="apiKeyInput"
-          [placeholder]="t('settings.apiKeyPlaceholder')"
-          class="w-full px-4 py-3 pr-20 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all">
-        <div class="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1">
-          @if (apiKeyInput) {
-            <button
-              type="button"
-              (click)="clearApiKeyInput()"
-              class="px-2 py-1 bg-red-500 text-white text-xs font-medium rounded-lg hover:bg-red-600 transition-colors"
-              title="Clear input">
-              Clear
-            </button>
-          }
-          <button
-            type="button"
-            (click)="toggleApiKeyVisibility()"
-            class="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
-            @if (isApiKeyVisible) {
-              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"></path>
-              </svg>
-            } @else {
-              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
-              </svg>
-            }
-          </button>
+  </div>
+
+  <!-- Base URL Section (only for providers that allow override) -->
+  @if (activeProvider.baseUrlEditable) {
+    <div class="p-6 bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-lg">
+      <div class="flex items-center gap-3 mb-6">
+        <div class="w-12 h-12 bg-cyan-100 dark:bg-cyan-900/30 rounded-xl flex items-center justify-center">
+          <svg class="w-6 h-6 text-cyan-600 dark:text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path>
+          </svg>
+        </div>
+        <div>
+          <h2 class="text-xl font-semibold text-gray-900 dark:text-white">{{ t('settings.baseUrlTitle') }}</h2>
+          <p class="text-sm text-gray-500 dark:text-gray-400">{{ t('settings.baseUrlDescription') }}</p>
         </div>
       </div>
 
-      <!-- Status Messages -->
-      @if (apiError) {
-        <div class="p-3 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800">
-          <p class="text-sm text-red-600 dark:text-red-400 flex items-center gap-2">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-            </svg>
-            {{ apiError }}
-          </p>
-        </div>
-      }
-
-      @if (apiSuccess) {
-        <div class="p-3 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
-          <p class="text-sm text-green-600 dark:text-green-400 flex items-center gap-2">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-            </svg>
-            {{ t('settings.apiKeyValid') }}
-          </p>
-        </div>
-      }
-
-      <!-- Action Buttons -->
-      <div class="flex flex-wrap gap-3">
+      <div class="flex flex-col sm:flex-row gap-3">
+        <input
+          type="text"
+          [(ngModel)]="baseUrlInput"
+          [placeholder]="activeProvider.defaultBaseUrl"
+          class="flex-1 px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all font-mono text-sm">
         <button
           type="button"
-          (click)="testApiKey()"
-          [disabled]="apiTesting || (!apiKeyInput && !currentApiKey)"
-          class="px-5 py-2.5 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 font-medium rounded-xl hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-          @if (apiTesting) {
-            <span class="flex items-center gap-2">
-              <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>
-              {{ t('settings.testing') }}
-            </span>
-          } @else {
-            {{ t('settings.testKey') }}
-          }
+          (click)="saveBaseUrl()"
+          [disabled]="!isBaseUrlValid() || baseUrlInput === currentBaseUrl"
+          class="px-5 py-2.5 bg-brand-500 text-white font-medium rounded-xl hover:bg-brand-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-md">
+          {{ t('settings.saveBaseUrl') }}
         </button>
-
-        @if (apiKeyInput) {
-          <button
-            type="button"
-            (click)="saveApiKey()"
-            [disabled]="!apiService.isValidApiKey(apiKeyInput)"
-            class="px-5 py-2.5 bg-brand-500 text-white font-medium rounded-xl hover:bg-brand-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-md">
-            {{ t('settings.saveKey') }}
-          </button>
-        }
-
-        @if (currentApiKey) {
-          <button
-            type="button"
-            (click)="clearApiKey()"
-            class="px-5 py-2.5 bg-red-500 text-white font-medium rounded-xl hover:bg-red-600 transition-colors shadow-md">
-            {{ t('settings.clearKey') }}
-          </button>
-        }
+        <button
+          type="button"
+          (click)="resetBaseUrl()"
+          class="px-5 py-2.5 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 font-medium rounded-xl hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">
+          {{ t('settings.resetBaseUrl') }}
+        </button>
       </div>
     </div>
+  }
+
+  <!-- Generation Preferences -->
+  <div class="p-6 bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-lg">
+    <div class="flex items-center gap-3 mb-6">
+      <div class="w-12 h-12 bg-amber-100 dark:bg-amber-900/30 rounded-xl flex items-center justify-center">
+        <svg class="w-6 h-6 text-amber-600 dark:text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+        </svg>
+      </div>
+      <div>
+        <h2 class="text-xl font-semibold text-gray-900 dark:text-white">{{ t('settings.generationTitle') }}</h2>
+        <p class="text-sm text-gray-500 dark:text-gray-400">{{ t('settings.generationDescription') }}</p>
+      </div>
+    </div>
+
+    <label class="flex items-start gap-3 p-4 rounded-xl border border-gray-200 dark:border-gray-700 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-colors">
+      <input
+        type="checkbox"
+        [checked]="skipPostChecks()"
+        (change)="onSkipPostChecksChange($any($event.target).checked)"
+        class="mt-1 w-4 h-4 text-brand-500 rounded focus:ring-brand-500">
+      <div class="flex-1">
+        <div class="font-medium text-gray-900 dark:text-white">{{ t('settings.skipPostChecksTitle') }}</div>
+        <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">{{ t('settings.skipPostChecksDescription') }}</p>
+      </div>
+    </label>
   </div>
 
   <!-- Model Selection Section -->
@@ -217,13 +345,15 @@
               placeholder="Search models..."
               class="w-full pl-10 pr-4 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-brand-500 focus:border-transparent">
           </div>
-          <label class="flex items-center gap-2 px-4 py-2 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
-            <input
-              type="checkbox"
-              [(ngModel)]="showFreeOnly"
-              class="w-4 h-4 text-brand-500 rounded focus:ring-brand-500">
-            <span class="text-sm font-medium text-gray-700 dark:text-gray-300">Free</span>
-          </label>
+          @if (activeProvider.id === 'openrouter') {
+            <label class="flex items-center gap-2 px-4 py-2 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
+              <input
+                type="checkbox"
+                [(ngModel)]="showFreeOnly"
+                class="w-4 h-4 text-brand-500 rounded focus:ring-brand-500">
+              <span class="text-sm font-medium text-gray-700 dark:text-gray-300">Free</span>
+            </label>
+          }
         </div>
 
         <!-- Model List with Scroll -->

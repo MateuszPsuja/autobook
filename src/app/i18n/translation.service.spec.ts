@@ -192,6 +192,56 @@ describe('TranslationService', () => {
       });
     });
 
+    it('returns the original critique unchanged when feedback is already Polish', (done) => {
+      // Post-generation translation pass writes Polish into the
+      // chapter's critique. Re-translating it for export would burn
+      // ~8 LLM calls per chapter (feedback + per-item mustFix +
+      // per-item suggestions + unavailableReason) for text the user
+      // already sees as Polish. The export short-circuits on a
+      // non-empty Polish feedback — see the implementation comment
+      // for the rationale (single field instead of "all fields
+      // Polish" because partial mustFix / suggestions without
+      // diacritics would otherwise still fire 6+ calls).
+      service.setLanguage('pl');
+      const polishCritique = buildCritique({
+        // Feedback is Polish; mustFix / suggestions intentionally
+        // contain phrases without diacritics that the strict
+        // "all fields Polish" check would have flagged.
+        feedback: 'Rozdział napisany solidnym głosem narracyjnym.',
+        mustFix: ['Wzmocnij drugi akapit.'], // no diacritics — by design
+        suggestions: ['Inny akapit do poprawy.']
+      });
+      service.translateCritiqueToPolish$(polishCritique).pipe(take(1)).subscribe(result => {
+        // No API calls — the short-circuit fires on feedback alone.
+        expect(translateTextSpy).not.toHaveBeenCalled();
+        // Reference equality is preserved because the short-circuit
+        // returns the original (the inner `map` only runs when the
+        // short-circuit doesn't fire).
+        expect(result).toBe(polishCritique);
+        done();
+      });
+    });
+
+    it('still translates when feedback is empty or English', (done) => {
+      // Two cases that must fall through to the per-field forkJoin:
+      //  1) feedback is the empty string (no content to detect)
+      //  2) feedback is genuinely English (e.g. legacy book where
+      //     the post-translation pass never ran)
+      service.setLanguage('pl');
+      const englishCritique = buildCritique({
+        feedback: 'Solid chapter with a clear voice.', // English
+        mustFix: ['Tighten the second paragraph.'],
+        suggestions: ['Consider varying sentence length.']
+      });
+      service.translateCritiqueToPolish$(englishCritique).pipe(take(1)).subscribe(result => {
+        expect(result.feedback).toBe('[PL] Solid chapter with a clear voice.');
+        expect(result.mustFix).toEqual(['[PL] Tighten the second paragraph.']);
+        expect(result.suggestions).toEqual(['[PL] Consider varying sentence length.']);
+        expect(translateTextSpy).toHaveBeenCalled();
+        done();
+      });
+    });
+
     it('translates feedback, mustFix, and suggestions in Polish', (done) => {
       service.setLanguage('pl');
       const original = buildCritique();

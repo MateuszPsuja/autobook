@@ -73,11 +73,16 @@ describe('ChapterViewComponent', () => {
       'get',
       'isEnglish',
       'language',
+      'looksPolish',
       'translateCritiqueToPolish$'
     ]);
     translationSpy.get.and.callFake((key: string) => key);
     translationSpy.isEnglish.and.returnValue(true);
     translationSpy.language.and.returnValue('en');
+    // Default: source is English, so the viewer proceeds to translate.
+    // Individual tests override this to simulate the post-translation
+    // pass already having run.
+    translationSpy.looksPolish.and.returnValue(false);
     // Pass-through so tests that select a chapter don't kick off
     // real translation work; the component mirrors the source
     // critique into displayCritique when language is English.
@@ -359,6 +364,42 @@ describe('ChapterViewComponent', () => {
         expect(component.getFeedback()).toBe('Świetny rozdział.');
         expect(component.getMustFix()).toEqual(['Popraw drugi akapit.']);
         expect(component.getSuggestions()).toEqual(['Dodaj więcej dialogu.']);
+      });
+    });
+
+    it('skips the API call entirely when the source critique is already Polish', () => {
+      // Simulate the post-generation translation pass: the critique
+      // in the state is already Polish (feedback contains diacritics),
+      // so the diacritics check fires and no LLM call should go out
+      // on every chapter switch.
+      translationServiceSpy.isEnglish.and.returnValue(false);
+      translationServiceSpy.language.and.returnValue('pl');
+      translationServiceSpy.looksPolish.and.returnValue(true);
+
+      component.selectChapter(mockChapters[0], 0);
+      return Promise.resolve().then(() => {
+        expect(translationServiceSpy.translateCritiqueToPolish$).not.toHaveBeenCalled();
+        // Source critique (English) is still mirrored so the panel
+        // shows the original English text — that's the right fallback
+        // when we deliberately skip translation.
+        expect(component.getFeedback()).toBe('Good chapter overall.');
+      });
+    });
+
+    it('still requests translation when feedback is empty or English', () => {
+      // The new "feedback is Polish" heuristic only short-circuits
+      // when feedback itself contains diacritics. An empty feedback
+      // (critique was a sentinel like `unavailableReason`) or an
+      // English feedback (legacy book) must fall through to the
+      // translator so the rest of the fields get translated.
+      translationServiceSpy.isEnglish.and.returnValue(false);
+      translationServiceSpy.language.and.returnValue('pl');
+      translationServiceSpy.looksPolish.and.returnValue(false);
+      translationServiceSpy.translateCritiqueToPolish$.and.callFake(() => of(mockChapters[0].critique!));
+
+      component.selectChapter(mockChapters[0], 0);
+      return Promise.resolve().then(() => {
+        expect(translationServiceSpy.translateCritiqueToPolish$).toHaveBeenCalledTimes(1);
       });
     });
 

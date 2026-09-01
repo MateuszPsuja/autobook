@@ -77,6 +77,13 @@ export class ChapterViewComponent implements OnInit, OnDestroy {
    * the source is mirrored directly; in Polish the service is
    * called (or no-op if the field is empty) and the signal is
    * updated when the translation lands.
+   *
+   * Important: the post-generation translation pass already writes
+   * Polish text into `chapter.critique` for new runs. We detect
+   * that with a diacritics check and skip the per-render API call,
+   * otherwise every chapter switch in the viewer would fire a new
+   * chat completion against the LLM just to translate text that is
+   * already Polish.
    */
   private refreshDisplayCritique(critique: CritiqueReport | null): void {
     this.critiqueSub?.unsubscribe();
@@ -88,6 +95,25 @@ export class ChapterViewComponent implements OnInit, OnDestroy {
     }
 
     if (this.translationService.isEnglish()) {
+      this.displayCritique.set(critique);
+      return;
+    }
+
+    // Polish mode. If the source critique's feedback is in Polish
+    // the post-generation pass has done the work; render it
+    // directly. Falls through to the API only when the feedback
+    // is missing or genuinely English (e.g. a legacy book from
+    // before the translation pass existed, or a critique that the
+    // service fell back to English on).
+    //
+    // Why `feedback` and not "all fields Polish": see
+    // `translateCritiqueToPolish$` for the full reasoning. The
+    // short answer is that a strict "all fields Polish" check
+    // would still fire 6-8 LLM calls per chapter whenever a
+    // single mustFix / suggestions item is missing a diacritic,
+    // and the user-visible feedback is enough to make that
+    // judgement call.
+    if (critique.feedback && critique.feedback.trim() && this.translationService.looksPolish(critique.feedback)) {
       this.displayCritique.set(critique);
       return;
     }
