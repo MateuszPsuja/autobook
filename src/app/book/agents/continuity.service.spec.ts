@@ -304,4 +304,36 @@ describe('ContinuityService', () => {
       });
     });
   });
+
+  describe('malformed response resilience', () => {
+    // The orchestrator reported TypeError "Cannot read properties
+    // of undefined (reading '0')" when the API returned a response
+    // without a `choices` array (some providers return 200 OK with
+    // an error envelope under certain conditions). The fix was to
+    // use `response.choices?.[0]?.message?.content` — the `?.` must
+    // be on `choices` itself, not on the index, otherwise the
+    // `[0]` access throws before the optional chaining fires.
+    it('checkContinuityWithUsage does not throw when response has no choices array', (done) => {
+      apiServiceSpy.chatCompletion.and.returnValue(of({
+        id: 'test',
+        // no `choices` key at all
+        created: 123,
+        model: 'test/model',
+        object: 'chat.completion',
+        usage: { prompt_tokens: 100, completion_tokens: 200, total_tokens: 300 }
+      } as any));
+
+      service.checkContinuityWithUsage('Test content', mockBrief, [], 'test/model').subscribe({
+        next: (result) => {
+          // Empty content triggers the existing empty-response
+          // branch which surfaces an `unavailableReason` so the
+          // chapter is still approved, just without a critique.
+          expect(result).toBeDefined();
+          expect(result.data.issues).toEqual([]);
+          done();
+        },
+        error: done.fail
+      });
+    });
+  });
 });

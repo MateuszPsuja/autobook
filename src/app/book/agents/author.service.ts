@@ -127,8 +127,8 @@ export class AuthorService {
 
     return this.apiService.chatCompletion(request).pipe(
       map(response => {
-        const rawContent = response.choices[0]?.message?.content || '';
-        const finishReason = response.choices[0]?.finish_reason;
+        const rawContent = response.choices?.[0]?.message?.content || '';
+        const finishReason = response.choices?.[0]?.finish_reason;
 
         // Detect safety-filter / content-policy metadata blocks
         // ("User Safety: unsafe", "Safety Categories: Violence, ...")
@@ -200,7 +200,7 @@ export class AuthorService {
 
     return this.apiService.chatCompletion(request).pipe(
       map(response => {
-        const content = stripRunningWordCount(response.choices[0].message.content);
+        const content = stripRunningWordCount(response.choices?.[0]?.message?.content ?? '');
         const revisedDraft: ChapterDraft = {
           ...draft,
           content,
@@ -230,8 +230,8 @@ export class AuthorService {
 
     return this.apiService.chatCompletion(request).pipe(
       map(response => {
-        const raw = response.choices[0]?.message?.content || draft.content;
-        const finishReason = response.choices[0]?.finish_reason;
+        const raw = response.choices?.[0]?.message?.content || draft.content;
+        const finishReason = response.choices?.[0]?.finish_reason;
 
         // Same safety-filter detection as writeChapterWithUsage —
         // a model that refused the revision prompt would otherwise

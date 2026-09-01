@@ -312,7 +312,7 @@ export class CriticService {
 
     return this.apiService.chatCompletion(request).pipe(
       map(response => {
-        const content = response.choices[0].message.content;
+        const content = response.choices?.[0]?.message?.content;
         return this.jsonParser.parse(content);
       })
     );

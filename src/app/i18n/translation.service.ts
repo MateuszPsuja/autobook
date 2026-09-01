@@ -351,8 +351,8 @@ export class TranslationService {
           take(1)
         ).subscribe({
           next: response => {
-            const content = response.choices[0]?.message?.content;
-            const finishReason = response.choices[0]?.finish_reason;
+            const content = response.choices?.[0]?.message?.content;
+            const finishReason = response.choices?.[0]?.finish_reason;
 
             // Safety-filter / content-policy responses are not a
             // translation — they're a refusal. Retry the same way

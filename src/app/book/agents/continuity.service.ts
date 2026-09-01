@@ -76,7 +76,7 @@ export class ContinuityService {
 
     return this.apiService.chatCompletion(request).pipe(
       map(response => {
-        const content = response.choices[0]?.message?.content;
+        const content = response.choices?.[0]?.message?.content;
         if (!content || content.trim().length === 0) {
           throw new ContinuityEmptyResponseError();
         }
@@ -99,7 +99,7 @@ export class ContinuityService {
 
     return this.apiService.chatCompletion(request).pipe(
       map(response => {
-        const content = response.choices[0]?.message?.content;
+        const content = response.choices?.[0]?.message?.content;
         if (!content || content.trim().length === 0) {
           throw new ContinuityEmptyResponseError();
         }
@@ -180,7 +180,7 @@ export class ContinuityService {
     
     return this.apiService.chatCompletion(request).pipe(
       map(response => {
-        const content = response.choices[0].message.content;
+        const content = response.choices?.[0]?.message?.content;
         const parsed = this.jsonParser.parse(content) as ContinuityFlagsResponse;
         const newFlagsWithChapter = this.addChapterToIssues(parsed.newFlags || [], chapterNumber);
         return {
@@ -213,7 +213,7 @@ export class ContinuityService {
     
     return this.apiService.chatCompletion(request).pipe(
       map(response => {
-        const content = response.choices[0].message.content;
+        const content = response.choices?.[0]?.message?.content;
         const parsed = this.jsonParser.parse(content) as ContinuityFlagsResponse;
         const newFlagsWithChapter = this.addChapterToIssues(parsed.newFlags || [], chapterNumber);
         return {
