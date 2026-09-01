@@ -179,6 +179,8 @@
     "characterDesc": "Checks character consistency",
     "continuity": "Continuity",
     "continuityDesc": "Checks story consistency",
+    "call": "call",
+    "calls": "calls",
     "liveOutput": "Live Output",
     "waitingForGeneration": "Waiting for generation to begin...",
     "yourBookAppear": "Your book will appear here as it's being written",

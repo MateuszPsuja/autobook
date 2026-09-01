@@ -344,7 +344,7 @@
               <div class="flex items-center justify-between text-sm">
                 <div class="flex items-center gap-2">
                   <span class="w-20 font-medium text-gray-700 dark:text-gray-300">{{ getAgentDisplayName(agent) }}</span>
-                  <span class="text-xs text-gray-500 dark:text-gray-400">({{ generationStats.agentStats[agent].calls }} {{ generationStats.agentStats[agent].calls === 1 ? 'call' : 'calls' }})</span>
+                  <span class="text-xs text-gray-500 dark:text-gray-400">({{ generationStats.agentStats[agent].calls }} {{ generationStats.agentStats[agent].calls === 1 ? t('generator.call') : t('generator.calls') }})</span>
                 </div>
                 <div class="flex items-center gap-4 text-xs">
                   <span class="text-gray-500 dark:text-gray-400">
