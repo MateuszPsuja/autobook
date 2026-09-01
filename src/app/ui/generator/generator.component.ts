@@ -286,6 +286,7 @@ export class GeneratorComponent implements OnInit, OnDestroy {
       case 'critiquing': return this.t('status.critiquing') || 'Critiquing';
       case 'revising': return this.t('status.revising') || 'Revising';
       case 'generating': return this.t('status.generating');
+      case 'translating': return this.t('status.translating') || 'Translating';
       default: return status.charAt(0).toUpperCase() + status.slice(1);
     }
   }

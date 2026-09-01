@@ -4,6 +4,8 @@ import { map, switchMap, catchError, take, delay as rxDelay } from 'rxjs/operato
 import en from './en.json';
 import pl from './pl.json';
 import { ApiService } from '../core/api.service';
+import { CritiqueReport } from '../models/critique.model';
+import { Chapter } from '../models/chapter.model';
 
 export type Language = 'en' | 'pl';
 
@@ -304,7 +306,14 @@ export class TranslationService {
   }
 
   /**
-   * Translate with retry using RxJS
+   * Translate with retry using RxJS. Every successful response is
+   * run through `cleanTranslation()` to strip LLM planning text
+   * (e.g. "We'll go through paragraph by paragraph. Original:") that
+   * some models emit before getting to the actual translation —
+   * without that step the planning text ended up rendered in the
+   * reader in place of the chapter body. If the cleaned response is
+   * empty, we retry; if we still get nothing usable after all
+   * retries the outer callers fall back to the original text.
    */
   private translateWithRetry(
     text: string,
@@ -312,10 +321,10 @@ export class TranslationService {
     maxTokens: number = 4000
   ): Observable<string> {
     const maxRetries = 10;
-    
+
     return new Observable<string>(subscriber => {
       let attempt = 0;
-      
+
       const tryTranslate = () => {
         attempt++;
         const messages = [
@@ -335,12 +344,13 @@ export class TranslationService {
         ).subscribe({
           next: response => {
             const content = response.choices[0]?.message?.content;
-            
-            if (content && content.trim()) {
-              subscriber.next(content.trim());
+            const cleaned = TranslationService.cleanTranslation(content || '');
+
+            if (cleaned) {
+              subscriber.next(cleaned);
               subscriber.complete();
             } else if (attempt < maxRetries) {
-              console.warn(`Translation attempt ${attempt} returned empty content, retrying...`);
+              console.warn(`Translation attempt ${attempt} returned no usable content (raw length=${(content || '').length}), retrying...`);
               const delayMs = 1000 * Math.pow(2, attempt - 1);
               setTimeout(tryTranslate, delayMs);
             } else {
@@ -364,6 +374,111 @@ export class TranslationService {
   }
 
   /**
+   * Strip LLM planning / preamble / scaffolding from a raw
+   * translation response. Several models occasionally produce
+   * output like:
+   *
+   *   "We need to translate the given English text into Polish,
+   *    preserving style, tone, formatting, paragraph breaks, and
+   *    return ONLY the translation. ... We'll go through paragraph
+   *    by paragraph. Original:"
+   *
+   *   <actual translation>
+   *
+   * …or wrap the translation in markdown code fences. Without
+   * cleaning, that scaffolding was being rendered to the user
+   * inside the chapter body / feedback panel. Strategy:
+   *
+   *   1. If the response has a [T]...[/T] marker pair (we now
+   *      instruct models to use it), return the inner content.
+   *   2. Else if the response is wrapped in a single ``` fenced
+   *      code block, return the block contents.
+   *   3. Else strip known preamble lines (case-insensitive)
+   *      until we find something that looks like actual translated
+   *      text. Returns the cleaned text, or null when nothing
+   *      usable remains (caller retries / falls back).
+   */
+  static cleanTranslation(raw: string): string | null {
+    if (!raw) return null;
+    const text = raw.trim();
+    if (!text) return null;
+
+    // 1. Explicit [T]...[/T] markers (our prompt asks for them).
+    const markerMatch = text.match(/\[T\]([\s\S]*?)\[\/T\]/);
+    if (markerMatch && markerMatch[1] && markerMatch[1].trim()) {
+      return markerMatch[1].trim();
+    }
+
+    // 2. A single fenced code block (```...```) wrapping the body.
+    const fenceMatch = text.match(/^```(?:[a-zA-Z]*\n)?([\s\S]*?)```\s*$/);
+    if (fenceMatch && fenceMatch[1] && fenceMatch[1].trim()) {
+      return fenceMatch[1].trim();
+    }
+
+    // 3. Strip known preamble / scaffold lines until we find
+    //    something that looks like the actual translation. We
+    //    keep stripping while the first remaining line matches
+    //    one of the well-known "I'm about to translate"
+    //    phrasings. The list is intentionally broad: a stricter
+    //    filter would let through novel planning phrasings the
+    //    user has already hit in production.
+    const preamblePatterns: RegExp[] = [
+      // "we need to translate..." / "we will translate..." /
+      // "let's translate..." / "let me translate..." /
+      // "i will translate..." / "i'll translate..."
+      /^(we need to translate[^\n]*|we will translate[^\n]*|we'?ll translate[^\n]*|let'?s translate[^\n]*|let me translate[^\n]*|let us translate[^\n]*|i will translate[^\n]*|i'?ll translate[^\n]*|i'?m going to translate[^\n]*|i am going to translate[^\n]*)/i,
+      // "we'll go through..." / "we will proceed..."
+      /^(we'?ll go through[^\n]*|we will go through[^\n]*|i'?ll go through[^\n]*|i will go through[^\n]*|we'?ll proceed[^\n]*|i'?ll proceed[^\n]*|i will proceed[^\n]*)/i,
+      // "paragraph by paragraph" / "section by section"
+      /^(paragraph by paragraph[^\n]*|section by section[^\n]*|line by line[^\n]*|sentence by sentence[^\n]*)/i,
+      // Acknowledgement openers: "Sure." / "Of course." / "Certainly."
+      /^(sure[^\n,.]*[,.]\s*$|of course[^\n,.]*[,.]\s*$|certainly[^\n,.]*[,.]\s*$|okay[^\n,.]*[,.]\s*$|alright[^\n,.]*[,.]\s*$|got it[^\n,.]*[,.]\s*$|i understand[^\n,.]*[,.]\s*$|here you go[^\n,.]*[,.]\s*$)/i,
+      // Header lines like "Original:" / "Translation:" / "Tłumaczenie:"
+      /^(original[:：].*|translation[:：].*|tlumaczenie[:：].*|tłumaczenie[:：].*|translated text[:：].*|here is the translation[:：]?\s*|here'?s the translation[:：]?\s*|translated version[:：]?\s*|polish translation[:：]?\s*|przetłumaczone[:：]?\s*|tl[:：].*|tłum[:：].*|translated content[:：]?\s*)/i
+    ];
+
+    let lines = text.split(/\r?\n/);
+    let stripped = 0;
+    while (lines.length > 0) {
+      const first = lines[0].trim();
+      if (!first) {
+        // Skip leading blank lines.
+        lines.shift();
+        stripped++;
+        continue;
+      }
+      const matchesPreamble = preamblePatterns.some(p => p.test(first));
+      if (!matchesPreamble) break;
+      lines.shift();
+      stripped++;
+    }
+
+    let cleaned = lines.join('\n').trim();
+    if (!cleaned) {
+      // Last-resort: try to find a Polish block after a sentinel
+      // line like "Original:" that some models emit before the
+      // actual translation. Drop the sentinel itself (no newline
+      // required — the sentinel can be the last line of the
+      // response, in which case the replace still strips it and
+      // `afterSentinel` is empty, and we return null so the
+      // caller retries instead of rendering the bare "Original:"
+      // header).
+      const sentinelIdx = text.search(/^\s*original[:：]\s*$/im);
+      if (sentinelIdx < 0) {
+        return null;
+      }
+      const afterSentinel = text.slice(sentinelIdx).replace(/^\s*original[:：]\s*/i, '').trim();
+      if (!afterSentinel) {
+        return null;
+      }
+      cleaned = afterSentinel;
+    }
+
+    if (!cleaned) return null;
+    return cleaned;
+  }
+
+  /**
    * Translate text field to English using AI - returns Observable
    * Used for character names, backgrounds, themes, etc.
    */
@@ -371,8 +486,10 @@ export class TranslationService {
     if (!text || this.isEnglish()) return of(text);
     if (!text.trim()) return of(text);
 
-    const systemPrompt = 'You are a translator. Translate the following Polish text to English. Return ONLY the translation, nothing else.';
-    
+    const systemPrompt = 'You are a translator. Translate the Polish text below into English. ' +
+      'Wrap your response with [T] and [/T] markers, e.g. "[T]translation[/T]". ' +
+      'Do not include any preamble, explanation, or the original text inside or outside the markers.';
+
     return this.translateWithRetry(text, systemPrompt).pipe(
       catchError(error => {
         console.error('Translation to English failed:', error);
@@ -399,8 +516,10 @@ export class TranslationService {
     if (!text) return of(text);
     if (!text.trim()) return of(text);
 
-    const systemPrompt = 'You are a translator. Translate the following English text to Polish. Return ONLY the translation, nothing else.';
-    
+    const systemPrompt = 'You are a translator. Translate the English text below into Polish. ' +
+      'Wrap your response with [T] and [/T] markers, e.g. "[T]tłumaczenie[/T]". ' +
+      'Do not include any preamble, explanation, or the original text inside or outside the markers.';
+
     return this.translateWithRetry(text, systemPrompt).pipe(
       catchError(error => {
         console.error('Translation to Polish failed:', error);
@@ -427,8 +546,12 @@ export class TranslationService {
     if (!content) return of(content);
     if (!content.trim()) return of(content);
 
-    const systemPrompt = 'You are a professional literary translator. Translate the following English book content to Polish. Preserve the writing style, tone, and formatting. Maintain paragraph breaks. Return ONLY the translation.';
-    
+    const systemPrompt = 'You are a professional literary translator. Translate the English book content below into Polish. ' +
+      'Preserve the writing style, tone, formatting, and paragraph breaks. ' +
+      'Wrap your response with [T] and [/T] markers, e.g. "[T]polish content[/T]". ' +
+      'Do not include any preamble, plan, explanation, or the original text inside or outside the markers. ' +
+      'Do not say "we will go through paragraph by paragraph" or "Original:" — start directly with the Polish translation inside the markers.';
+
     return this.translateWithRetry(content, systemPrompt, 8000).pipe(
       catchError(error => {
         console.error('Content translation to Polish failed:', error);
@@ -452,13 +575,15 @@ export class TranslationService {
    */
   translateTitleToPolish$(title: string): Observable<string> {
     if (!title) return of(title);
-    
+
     // Remove "Chapter X: " prefix if present
     const match = title.match(/^Chapter\s+\d+:\s*(.*)$/i);
     const titlePart = match ? match[1] : title;
 
-    const systemPrompt = 'Translate the following English book chapter title to Polish. Return ONLY the translation, nothing else.';
-    
+    const systemPrompt = 'Translate the English book chapter title below into Polish. ' +
+      'Wrap your response with [T] and [/T] markers, e.g. "[T]polish title[/T]". ' +
+      'Do not include any preamble, explanation, or the original text inside or outside the markers.';
+
     return this.translateWithRetry(titlePart, systemPrompt, 500).pipe(
       map(translatedTitle => {
         // Restore the "Chapter X: " prefix
@@ -524,5 +649,94 @@ export class TranslationService {
     return new Promise(resolve => {
       this.translateBookToPolish$(chapters).pipe(take(1)).subscribe(result => resolve(result));
     });
+  }
+
+  /**
+   * Translate a critique's text fields (feedback, mustFix, suggestions,
+   * unavailableReason) to Polish. Runs the field translations in
+   * parallel via forkJoin so the user waits for the slowest one,
+   * not the sum of all of them.
+   *
+   * Returns the original report unchanged when the current language
+   * is English. Empty / missing fields are preserved as-is. On a
+   * translation failure for any field, that field is left as the
+   * original English text (logged) rather than failing the whole
+   * critique — partial Polish is better than nothing.
+   */
+  translateCritiqueToPolish$(critique: CritiqueReport): Observable<CritiqueReport> {
+    if (!critique) {
+      return of(null as unknown as CritiqueReport);
+    }
+    if (this.isEnglish()) {
+      return of(critique);
+    }
+
+    const safeText$ = (text: string | undefined): Observable<string> => {
+      if (!text || !text.trim()) return of(text || '');
+      return this.translateTextToPolish$(text).pipe(
+        catchError(err => {
+          console.warn('Critique field translation to Polish failed:', err);
+          return of(text);
+        })
+      );
+    };
+
+    const safeList$ = (items: string[] | undefined): Observable<string[]> => {
+      if (!items || items.length === 0) return of(items || []);
+      const translated$ = items.map(item => safeText$(item));
+      return forkJoin(translated$);
+    };
+
+    return forkJoin({
+      feedback: safeText$(critique.feedback),
+      mustFix: safeList$(critique.mustFix),
+      suggestions: safeList$(critique.suggestions),
+      unavailableReason: safeText$(critique.unavailableReason)
+    }).pipe(
+      map(({ feedback, mustFix, suggestions, unavailableReason }) => ({
+        ...critique,
+        feedback,
+        mustFix,
+        suggestions,
+        unavailableReason: unavailableReason || critique.unavailableReason
+      }))
+    );
+  }
+
+  /**
+   * Translate every user-visible text field of a generated chapter
+   * (title, content, and critique if present) to Polish. Used by
+   * the orchestrator's post-generation step so the viewer's state
+   * ends up in the user's chosen language without per-render work.
+   *
+   * The title, content, and critique translations all run in
+   * parallel via forkJoin. If the current language is English the
+   * chapter is returned unchanged. On any per-field failure the
+   * helpers fall back to the original text, so a broken API call
+   * can't take the whole chapter down — the user just gets a
+   * partially-Polish chapter.
+   */
+  translateGeneratedChapter$(chapter: Chapter): Observable<Chapter> {
+    if (!chapter) {
+      return of(null as unknown as Chapter);
+    }
+    if (this.isEnglish()) {
+      return of(chapter);
+    }
+
+    return forkJoin({
+      title: this.translateTitleToPolish$(chapter.title),
+      content: this.translateContentToPolish$(chapter.content),
+      critique: chapter.critique
+        ? this.translateCritiqueToPolish$(chapter.critique)
+        : of(undefined)
+    }).pipe(
+      map(({ title, content, critique }) => ({
+        ...chapter,
+        title,
+        content,
+        critique: critique || chapter.critique
+      }))
+    );
   }
 }

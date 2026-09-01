@@ -115,13 +115,14 @@ export type AgentType =
   | 'character'
   | 'continuity';
 
-export type GenerationStatus = 
+export type GenerationStatus =
   | 'idle'
   | 'configuring'
   | 'generating'
   | 'writing'
   | 'critiquing'
   | 'revising'
+  | 'translating'
   | 'completed'
   | 'error';
 

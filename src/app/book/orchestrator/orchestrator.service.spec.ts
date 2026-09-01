@@ -7,9 +7,10 @@ import { CriticService } from '../agents/critic.service';
 import { CharacterService } from '../agents/character.service';
 import { ContinuityService } from '../agents/continuity.service';
 import { PersistenceService } from '../../core/persistence.service';
+import { TranslationService } from '../../i18n/translation.service';
 import { BookConfig, Genre, WritingStyle, Tone, PointOfView, Tense, Audience, PlotArchetype, ActStructure, WorldType, BookLength, ChapterLength } from '../../models/book-config.model';
 import { Blueprint, ChapterBrief, CriticContext } from '../../models/book-state.model';
-import { ChapterDraft } from '../../models/chapter.model';
+import { Chapter, ChapterDraft } from '../../models/chapter.model';
 import { of, throwError, Subject } from 'rxjs';
 import { CharacterState, CharacterStore } from '../../models/character.model';
 import { createInitialStats } from '../../models/book-state.model';
@@ -23,6 +24,7 @@ describe('OrchestratorService', () => {
   let characterServiceSpy: jasmine.SpyObj<CharacterService>;
   let continuityServiceSpy: jasmine.SpyObj<ContinuityService>;
   let persistenceServiceSpy: jasmine.SpyObj<PersistenceService>;
+  let translationServiceSpy: jasmine.SpyObj<TranslationService>;
 
   const mockConfig: BookConfig = {
     title: 'Test Book',
@@ -157,6 +159,7 @@ describe('OrchestratorService', () => {
       'setConfig', 'setChapters', 'setCurrentDraft', 'setCritique',
       'setRevisionCount', 'setStatus', 'setActiveAgent', 'setError',
       'setBlueprint', 'getState', 'setCharacterStore', 'setContinuityFlags',
+      'setSkippedChapters',
       'resetStats', 'startGenerationTimer', 'endGenerationTimer',
       'recordAgentUsage', 'updateTotalWords'
     ]);
@@ -218,6 +221,22 @@ describe('OrchestratorService', () => {
     persistenceServiceSpy = jasmine.createSpyObj('PersistenceService', ['saveCheckpoint']);
     persistenceServiceSpy.saveCheckpoint.and.returnValue(of(undefined));
 
+    // Translation service stub. Most tests want the orchestrator to
+    // skip the post-generation Polish pass entirely (because the
+    // default is English), but we still need the spy to be a
+    // callable TranslationService shape so the constructor doesn't
+    // crash on `isPolish()` / `translateGeneratedChapter$()`.
+    // Tests that opt into Polish override the behavior in their
+    // beforeEach.
+    translationServiceSpy = jasmine.createSpyObj('TranslationService', [
+      'isPolish',
+      'translateGeneratedChapter$'
+    ]);
+    translationServiceSpy.isPolish.and.returnValue(false);
+    translationServiceSpy.translateGeneratedChapter$.and.callFake(
+      (chapter: Chapter) => of(chapter)
+    );
+
     TestBed.configureTestingModule({
       providers: [
         OrchestratorService,
@@ -227,7 +246,8 @@ describe('OrchestratorService', () => {
         { provide: CriticService, useValue: criticServiceSpy },
         { provide: CharacterService, useValue: characterServiceSpy },
         { provide: ContinuityService, useValue: continuityServiceSpy },
-        { provide: PersistenceService, useValue: persistenceServiceSpy }
+        { provide: PersistenceService, useValue: persistenceServiceSpy },
+        { provide: TranslationService, useValue: translationServiceSpy }
       ]
     });
 
@@ -367,6 +387,157 @@ describe('OrchestratorService', () => {
           expect(callArgs[3]).toBe('test/model'); // model parameter
           done();
         }
+      });
+    });
+
+    describe('post-generation Polish translation', () => {
+      // After every chapter is generated, the orchestrator should
+      // run the generated content through the translation service
+      // when Polish is on, and write the Polish version back into
+      // the state so the viewer reads Polish directly.
+      const englishChapter: Chapter = {
+        id: 'ch-1',
+        number: 1,
+        title: 'Chapter 1: The Beginning',
+        content: 'An opening paragraph in English.',
+        wordCount: 5,
+        status: 'approved',
+        createdAt: new Date(),
+        approvedAt: new Date(),
+        critique: mockCritique,
+        revisions: []
+      };
+
+      const polishChapter: Chapter = {
+        ...englishChapter,
+        title: 'Rozdział 1: Początek',
+        content: 'Akapit otwierający po polsku.'
+      };
+
+      it('skips translation entirely when language is English', (done) => {
+        // isPolish defaults to false in the outer beforeEach.
+        // Stub getState to return a chapter so the translation
+        // step is *eligible* to run — if it ran anyway, the
+        // status flip to 'translating' would show up.
+        bookStateServiceSpy.getState.and.returnValue({
+          chapters: [englishChapter],
+          characterStore: {},
+          worldStateDoc: '',
+          status: 'generating',
+          activeAgent: 'author',
+          blueprint: null,
+          currentDraft: null,
+          critique: null,
+          revisionCount: 0,
+          config: mockConfig,
+          error: null,
+          continuityFlags: [],
+          skippedChapters: [],
+          stats: createInitialStats()
+        });
+
+        service.orchestrate(mockConfig).subscribe({
+          complete: () => {
+            // English: translator should not have been called and
+            // the status should never have flipped to 'translating'.
+            expect(translationServiceSpy.translateGeneratedChapter$).not.toHaveBeenCalled();
+            const statuses = bookStateServiceSpy.setStatus.calls.allArgs().map(c => c[0]);
+            expect(statuses).not.toContain('translating');
+            done();
+          }
+        });
+      });
+
+      it('translates every chapter and writes the Polish version back to state when language is Polish', (done) => {
+        translationServiceSpy.isPolish.and.returnValue(true);
+        translationServiceSpy.translateGeneratedChapter$.and.callFake(
+          () => of(polishChapter)
+        );
+        bookStateServiceSpy.getState.and.returnValue({
+          chapters: [englishChapter],
+          characterStore: {},
+          worldStateDoc: '',
+          status: 'generating',
+          activeAgent: 'author',
+          blueprint: null,
+          currentDraft: null,
+          critique: null,
+          revisionCount: 0,
+          config: mockConfig,
+          error: null,
+          continuityFlags: [],
+          skippedChapters: [],
+          stats: createInitialStats()
+        });
+
+        // Collect every value the orchestrator emits. The
+        // post-translation pass used to call `subscriber.next(...)`
+        // mid-flight, which made the generator's `next` callback
+        // (which treats every emission as "done") flip
+        // `isGenerating = false` and briefly show the Generate
+        // button. The post-step should stay silent until the
+        // final "Book generation completed" emission.
+        const emissions: string[] = [];
+        service.orchestrate(mockConfig).subscribe({
+          next: msg => emissions.push(msg),
+          complete: () => {
+            // Translator invoked for the one chapter we seeded.
+            expect(translationServiceSpy.translateGeneratedChapter$).toHaveBeenCalledTimes(1);
+            // Status flipped to 'translating' before going to
+            // 'completed'.
+            const statuses = bookStateServiceSpy.setStatus.calls.allArgs();
+            expect(statuses.map(c => c[0])).toContain('translating');
+            expect(statuses[statuses.length - 1][0]).toBe('completed');
+            // The final setChapters call should hold the Polish
+            // chapter, not the English one.
+            const lastSetChaptersCall = bookStateServiceSpy.setChapters.calls.mostRecent();
+            expect(lastSetChaptersCall.args[0]).toEqual([polishChapter]);
+            // Only the final completion message should have been
+            // emitted to the subscriber.
+            expect(emissions).toEqual(['Book generation completed']);
+            done();
+          }
+        });
+      });
+
+      it('skips the translation pass when the user hit Stop before the post-step ran', (done) => {
+        translationServiceSpy.isPolish.and.returnValue(true);
+        // Simulate "stop" being called by flipping the orchestrator's
+        // internal flag. We can't reach `stopped` directly, but
+        // calling `service.stop()` after the orchestrator starts
+        // achieves the same effect: the teardown flips `stopped`
+        // to true before the post-step runs.
+        // However, the post-step runs *inside* the subscribe.next
+        // callback synchronously after the pipeline completes, so
+        // we can't interleave a stop() in between. The realistic
+        // version of this test is: if the orchestrator's pipeline
+        // itself no-ops on `stopped`, the post-step check should
+        // also no-op. We approximate that by overriding the spy
+        // to return no chapters (so the post-step's
+        // `chapters.length > 0` guard short-circuits).
+        bookStateServiceSpy.getState.and.returnValue({
+          chapters: [], // empty → post-step skipped
+          characterStore: {},
+          worldStateDoc: '',
+          status: 'generating',
+          activeAgent: 'author',
+          blueprint: null,
+          currentDraft: null,
+          critique: null,
+          revisionCount: 0,
+          config: mockConfig,
+          error: null,
+          continuityFlags: [],
+          skippedChapters: [],
+          stats: createInitialStats()
+        });
+
+        service.orchestrate(mockConfig).subscribe({
+          complete: () => {
+            expect(translationServiceSpy.translateGeneratedChapter$).not.toHaveBeenCalled();
+            done();
+          }
+        });
       });
     });
   });

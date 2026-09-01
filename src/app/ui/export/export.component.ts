@@ -4,7 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { BookStateService } from '../../book/state/book-state.service';
 import { PersistenceService } from '../../core/persistence.service';
 import { Chapter } from '../../models/chapter.model';
-import { Observable, Subject } from 'rxjs';
+import { Observable, Subject, firstValueFrom } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { TranslationService } from '../../i18n/translation.service';
 import { DialogService } from '../../core/dialog.service';
@@ -147,14 +147,32 @@ export class ExportComponent implements OnInit {
         const translatedChapters = await this.translationService.translateBookToPolish(chapters);
 
         this.ngZone.run(() => {
-          this.exportProgress = 65;
+          this.exportProgress = 60;
+          this.exportStatus = `Tlumaczenie raportow krytyki...`;
+        });
+
+        // Translate the critique (feedback / mustFix / suggestions /
+        // unavailableReason) for each chapter in parallel, then write
+        // the translated critique back onto the in-memory chapter so
+        // the markdown / PDF / EPUB / DOCX builders pick it up.
+        const translatedCritiques = await Promise.all(
+          chapters.map(chapter =>
+            chapter.critique
+              ? firstValueFrom(this.translationService.translateCritiqueToPolish$(chapter.critique))
+              : Promise.resolve(undefined)
+          )
+        );
+
+        this.ngZone.run(() => {
+          this.exportProgress = 70;
         });
 
         for (let i = 0; i < translatedChapters.length; i++) {
           chapters[i] = {
             ...chapters[i],
             title: translatedChapters[i].title,
-            content: translatedChapters[i].content
+            content: translatedChapters[i].content,
+            critique: translatedCritiques[i] || chapters[i].critique
           };
         }
       }

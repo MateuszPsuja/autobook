@@ -12,6 +12,16 @@
           <h1 class="text-2xl font-bold text-green-700 dark:text-green-400">{{ t('generator.generationComplete') }}</h1>
           <p class="text-sm text-green-600 dark:text-green-500">{{ t('generator.bookReady') }}</p>
         </div>
+      } @else if (currentStatus === 'translating') {
+        <div class="w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg">
+          <svg class="w-6 h-6 text-white animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129"></path>
+          </svg>
+        </div>
+        <div>
+          <h1 class="text-2xl font-bold text-blue-700 dark:text-blue-400">{{ t('status.translating') }}</h1>
+          <p class="text-sm text-blue-600 dark:text-blue-500">Tlumaczenie wygenerowanej tresci na jezyk polski...</p>
+        </div>
       } @else {
         <div class="w-12 h-12 bg-gradient-to-br from-brand-500 to-brand-700 rounded-xl flex items-center justify-center shadow-lg">
           <svg class="w-6 h-6 text-white" [class.animate-pulse]="isGenerating" fill="none" stroke="currentColor" viewBox="0 0 24 24">
