@@ -249,10 +249,6 @@ describe('OrchestratorService', () => {
         { provide: ContinuityService, useValue: continuityServiceSpy },
         { provide: PersistenceService, useValue: persistenceServiceSpy },
         { provide: TranslationService, useValue: translationServiceSpy },
-        // Real ProviderService (the orchestrator only reads the
-        // skipPostChecks signal; nothing else from the registry is
-        // touched in these tests). Default value is `false` so the
-        // existing post-revision flow keeps running.
         ProviderService
       ]
     });
@@ -394,32 +390,6 @@ describe('OrchestratorService', () => {
           done();
         }
       });
-    });
-
-    it('skips character + continuity agents when skipPostChecks preference is on', (done) => {
-      // Flip the preference on, then run a full orchestrate. The
-      // character / continuity / character-update spies must never
-      // fire — that's the entire point of the toggle. Author + critic
-      // still run normally (they run before the post-revision phase).
-      const providerService = TestBed.inject(ProviderService);
-      providerService.setSkipPostChecks(true);
-      // Re-read the orchestrator: the constructor captured the service
-      // reference, but the signal is read on every chapter, so a
-      // fresh inject is enough to verify the signal.
-      try {
-        service.orchestrate(mockConfig).subscribe({
-          complete: () => {
-            expect(characterServiceSpy.checkCharacterConsistencyWithUsage).not.toHaveBeenCalled();
-            expect(characterServiceSpy.updateCharacterStatesWithUsage).not.toHaveBeenCalled();
-            expect(continuityServiceSpy.checkContinuityWithUsage).not.toHaveBeenCalled();
-            done();
-          },
-          error: done.fail
-        });
-      } finally {
-        // Reset for subsequent tests in the suite.
-        providerService.setSkipPostChecks(false);
-      }
     });
 
     describe('post-generation Polish translation', () => {

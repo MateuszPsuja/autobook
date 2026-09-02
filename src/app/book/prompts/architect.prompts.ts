@@ -22,13 +22,24 @@ Return a JSON object with the following structure:
   "chapters": [
     {
       "number": 1,
-      "title": "Chapter Title",
-      "plotBeat": "What happens in this chapter",
-      "povCharacter": "Character name",
-      "emotionalState": "Character's emotional state",
-      "location": "Where this chapter takes place",
-      "keyEvents": ["Event 1", "Event 2", "Event 3"],
-      "hookType": "What hooks the reader for the next chapter",
+      "title": "The Cartographer's Confession",
+      "plotBeat": "Mara discovers her late father's hidden map and a journal entry that frames the novel's central question.",
+      "povCharacter": "Mara",
+      "emotionalState": "curious, guarded",
+      "location": "Her father's study at dusk",
+      "keyEvents": ["Mara finds the map", "Reads the journal", "Decides to travel to Millhaven"],
+      "hookType": "A knock at the door interrupts her packing",
+      "targetWordCount": 3000
+    },
+    {
+      "number": 2,
+      "title": "Shadows over Millhaven",
+      "plotBeat": "Mara arrives in Millhaven and learns the town has been waiting for someone from her bloodline.",
+      "povCharacter": "Mara",
+      "emotionalState": "uneasy, intrigued",
+      "location": "The pier at Millhaven",
+      "keyEvents": ["Ferry arrival", "Meets the innkeeper", "Sees the symbol from the map carved into a door"],
+      "hookType": "The innkeeper locks the door behind her and asks a question she can't answer",
       "targetWordCount": 3000
     }
   ],
@@ -52,6 +63,12 @@ Return a JSON object with the following structure:
   "themes": ["Theme 1", "Theme 2", "Theme 3"],
   "keyPlotPoints": ["Plot Point 1", "Plot Point 2", "Plot Point 3"]
 }
+
+**Title rules (strict):**
+- Every chapter's \`title\` must be a UNIQUE 2–6 word phrase that hints at what happens in that chapter. It is what the reader sees in the chapter list and the PDF table of contents.
+- Titles must be derived from each chapter's own \`plotBeat\` — not from a template.
+- BANNED title patterns (a post-processor will rewrite these, but you should not produce them): "Chapter", "Chapter N", "Chapter 1", "Chapter Title", "Untitled", or any title that is just the word "Chapter" with an optional number/colon.
+- Concrete examples of GOOD titles: "The Cartographer's Confession", "Shadows over Millhaven", "A Bargain in the Bone Orchard", "The Last Train North". Keep them evocative, not generic.
 
 **Important:**
 - Do not write prose, only the blueprint structure

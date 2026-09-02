@@ -342,5 +342,86 @@ describe('ArchitectService', () => {
         }
       });
     });
+
+    // The post-processor that rewrites placeholder titles (e.g. "Chapter",
+    // "Chapter 1", "Chapter Title") is the user-facing fix for the
+    // "all chapters named 'Chapter'" bug. It must:
+    //   - rewrite any banned / placeholder title using the chapter's
+    //     own plotBeat,
+    //   - leave real, descriptive titles (like "Chapter 1: The Beginning")
+    //     untouched.
+    describe('placeholder-title sanitiser', () => {
+      const replyWithChapters = (chapters: Array<{ number: number; title: string; plotBeat: string }>) => {
+        const blueprint = { ...mockBlueprint, chapters: chapters.map((c) => ({ ...c, povCharacter: 'Hero', emotionalState: 'engaged', location: 'X', keyEvents: ['e'], hookType: 'continuation', targetWordCount: 2500 })) };
+        apiServiceSpy.chatCompletion.and.returnValue(of({
+          id: 'test',
+          choices: [{ message: { role: 'assistant', content: JSON.stringify(blueprint) }, finish_reason: 'stop', index: 0 }],
+          created: 123,
+          model: 'test/model',
+          object: 'chat.completion',
+          usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 }
+        }));
+      };
+
+      it('rewrites a bare "Chapter" title from the plotBeat', (done) => {
+        replyWithChapters([
+          { number: 1, title: 'Chapter', plotBeat: 'Mara arrives at the lighthouse and meets the keeper.' }
+        ]);
+        service.generateBlueprintWithUsage(mockConfig).subscribe({
+          next: (res) => {
+            const t = res.data.chapters[0].title;
+            expect(t).not.toBe('Chapter');
+            // Cap is 8 words; "Mara arrives at the lighthouse and meets the"
+            // (8 words) — "keeper" is dropped by the cap.
+            expect(t).toBe('Mara Arrives at the Lighthouse and Meets the');
+            done();
+          },
+          error: done.fail
+        });
+      });
+
+      it('rewrites "Chapter 3" (no descriptive content) using the plotBeat', (done) => {
+        replyWithChapters([
+          { number: 3, title: 'Chapter 3', plotBeat: 'A storm rolls in and the bridge collapses.' }
+        ]);
+        service.generateBlueprintWithUsage(mockConfig).subscribe({
+          next: (res) => {
+            expect(res.data.chapters[0].title).toBe('Storm Rolls in and the Bridge Collapses');
+            done();
+          },
+          error: done.fail
+        });
+      });
+
+      it('rewrites "Chapter Title" and "Untitled" placeholders', (done) => {
+        replyWithChapters([
+          { number: 1, title: 'Chapter Title', plotBeat: 'The crew mutinies against the captain.' },
+          { number: 2, title: 'Untitled', plotBeat: 'A second storm hits the next morning.' }
+        ]);
+        service.generateBlueprintWithUsage(mockConfig).subscribe({
+          next: (res) => {
+            expect(res.data.chapters[0].title).toBe('Crew Mutinies Against the Captain');
+            expect(res.data.chapters[1].title).toBe('Second Storm Hits the Next Morning');
+            done();
+          },
+          error: done.fail
+        });
+      });
+
+      it('preserves real titles that have descriptive content after the chapter number', (done) => {
+        replyWithChapters([
+          { number: 1, title: 'Chapter 1: The Beginning', plotBeat: 'irrelevant' },
+          { number: 2, title: 'The Last Train North', plotBeat: 'irrelevant' }
+        ]);
+        service.generateBlueprintWithUsage(mockConfig).subscribe({
+          next: (res) => {
+            expect(res.data.chapters[0].title).toBe('Chapter 1: The Beginning');
+            expect(res.data.chapters[1].title).toBe('The Last Train North');
+            done();
+          },
+          error: done.fail
+        });
+      });
+    });
   });
 });

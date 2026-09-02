@@ -213,22 +213,6 @@ describe('ApiService', () => {
     });
   });
 
-  describe('Generation preferences', () => {
-    it('defaults skipPostChecks to false', () => {
-      expect(providerService.skipPostChecks()).toBeFalse();
-    });
-
-    it('persists skipPostChanges to localStorage and round-trips', () => {
-      providerService.setSkipPostChecks(true);
-      expect(providerService.skipPostChecks()).toBeTrue();
-      // Re-read after a fresh service instance: the value must come
-      // back from localStorage so the orchestrator picks it up after
-      // a page reload.
-      const fresh = new ProviderService();
-      expect(fresh.skipPostChecks()).toBeTrue();
-    });
-  });
-
   describe('Provider routing', () => {
     it('should expose the registry', () => {
       const ids = service.listProviders().map(p => p.id);

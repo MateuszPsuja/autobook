@@ -128,43 +128,6 @@ export class ProviderService {
     return true;
   }
 
-  // === App-level generation preferences ===
-  //
-  // Kept here (rather than in a dedicated PreferencesService) because
-  // they live alongside the provider/credential state in the same
-  // user-facing Settings page. If a third preference shows up, split
-  // this out into its own service.
-
-  private static readonly PREFS_KEY = 'llm_app_prefs';
-  /** Per-chapter cost of the post-revision checks (character + continuity). */
-  private static readonly SKIP_POST_CHECKS_KEY = 'skipPostChecks';
-
-  private readonly skipPostChecksSignal = signal<boolean>(this.readSkipPostChecks());
-
-  /** Skip the character + continuity agents that fire after each chapter. */
-  readonly skipPostChecks = computed(() => this.skipPostChecksSignal());
-
-  setSkipPostChecks(skip: boolean): void {
-    this.skipPostChecksSignal.set(skip);
-    this.persistPrefs();
-  }
-
-  private readSkipPostChecks(): boolean {
-    try {
-      const raw = localStorage.getItem(ProviderService.PREFS_KEY);
-      if (!raw) return false;
-      const parsed = JSON.parse(raw) as Record<string, unknown>;
-      return parsed[ProviderService.SKIP_POST_CHECKS_KEY] === true;
-    } catch {
-      return false;
-    }
-  }
-
-  private persistPrefs(): void {
-    const payload = { [ProviderService.SKIP_POST_CHECKS_KEY]: this.skipPostChecksSignal() };
-    localStorage.setItem(ProviderService.PREFS_KEY, JSON.stringify(payload));
-  }
-
   // === Migration ===
 
   /**

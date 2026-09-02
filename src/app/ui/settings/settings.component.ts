@@ -25,12 +25,6 @@ export class SettingsComponent implements OnInit, OnDestroy {
   // Provider state
   providers = this.apiService.listProviders();
   activeProvider = this.providerService.getActiveProvider();
-  /** Live signal of the post-checks preference for the template binding. */
-  skipPostChecks = this.providerService.skipPostChecks;
-
-  onSkipPostChecksChange(checked: boolean): void {
-    this.providerService.setSkipPostChecks(checked);
-  }
 
   // API Key state
   apiKeyInput = '';

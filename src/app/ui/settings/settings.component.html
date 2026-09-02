@@ -238,33 +238,6 @@
     </div>
   }
 
-  <!-- Generation Preferences -->
-  <div class="p-6 bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-lg">
-    <div class="flex items-center gap-3 mb-6">
-      <div class="w-12 h-12 bg-amber-100 dark:bg-amber-900/30 rounded-xl flex items-center justify-center">
-        <svg class="w-6 h-6 text-amber-600 dark:text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
-        </svg>
-      </div>
-      <div>
-        <h2 class="text-xl font-semibold text-gray-900 dark:text-white">{{ t('settings.generationTitle') }}</h2>
-        <p class="text-sm text-gray-500 dark:text-gray-400">{{ t('settings.generationDescription') }}</p>
-      </div>
-    </div>
-
-    <label class="flex items-start gap-3 p-4 rounded-xl border border-gray-200 dark:border-gray-700 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-colors">
-      <input
-        type="checkbox"
-        [checked]="skipPostChecks()"
-        (change)="onSkipPostChecksChange($any($event.target).checked)"
-        class="mt-1 w-4 h-4 text-brand-500 rounded focus:ring-brand-500">
-      <div class="flex-1">
-        <div class="font-medium text-gray-900 dark:text-white">{{ t('settings.skipPostChecksTitle') }}</div>
-        <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">{{ t('settings.skipPostChecksDescription') }}</p>
-      </div>
-    </label>
-  </div>
-
   <!-- Model Selection Section -->
   <div class="p-6 bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-lg">
     <div class="flex items-center gap-3 mb-6">
@@ -397,7 +370,9 @@
                         {{ model.provider }}
                       </span>
                       <span class="shrink-0">•</span>
-                      <span class="shrink-0">{{ model.contextWindow }} ctx</span>
+                      @if (model.contextWindow && model.contextWindow !== 'Unknown') {
+                        <span class="shrink-0">{{ model.contextWindow }} ctx</span>
+                      }
                     </div>
                   </div>
                 </label>

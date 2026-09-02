@@ -339,18 +339,6 @@ export class OrchestratorService {
     return new Observable(subscriber => {
       const currentState = this.bookStateService.getState();
 
-      // The user can opt out of the character + continuity pass via
-      // Settings → "Skip post-checks". With strong models (e.g. M3)
-      // these checks add little — the author already maintains
-      // continuity — and they cost 3 LLM calls per chapter (character
-      // check, character state update, continuity check). Skipping
-      // them is the single biggest request-count win in the pipeline.
-      if (this.providerService.skipPostChecks?.()) {
-        subscriber.next('Post-revision checks skipped by user preference');
-        subscriber.complete();
-        return;
-      }
-
       // 4. Character consistency check
       this.bookStateService.setActiveAgent('character');
       
