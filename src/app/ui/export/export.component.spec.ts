@@ -166,7 +166,9 @@ describe('ExportComponent', () => {
         includeTitles: true,
         includeTOC: false,
         includeCritiques: true,
-        includeCharacters: false
+        includeCharacters: false,
+        includeIllustrations: false,
+        illustrationStyle: 'auto'
       };
       component.setFormat('markdown');
 
@@ -206,7 +208,9 @@ describe('ExportComponent', () => {
         includeTitles: true,
         includeTOC: false,
         includeCritiques: true,
-        includeCharacters: false
+        includeCharacters: false,
+        includeIllustrations: false,
+        illustrationStyle: 'auto'
       };
       component.setFormat('markdown');
 

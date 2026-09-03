@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { Observable, from, of, throwError, forkJoin } from 'rxjs';
 import { map, switchMap, catchError, shareReplay } from 'rxjs/operators';
+import { BookCoverArt, CharacterReference } from './providers/illustration.types';
 
 export interface BookMeta {
   id: string;
@@ -15,9 +16,15 @@ export interface BookMeta {
 })
 export class PersistenceService {
   private readonly DB_NAME = 'book-generator-db';
-  private readonly DB_VERSION = 1;
+  private readonly DB_VERSION = 2;
   private readonly BOOKS_STORE = 'books';
   private readonly CHECKPOINTS_STORE = 'checkpoints';
+  // v2: illustration caches. Reference images are keyed by
+  // `${bookId}::${characterName}::${style}` so a style change
+  // invalidates only that entry. Book covers are keyed by
+  // `${bookId}::${side}::${style}` for the same reason.
+  private readonly CHAR_REFS_STORE = 'character_references';
+  private readonly COVERS_STORE = 'book_covers';
 
   // Lazy-initialized IndexedDB as Observable
   private db$: Observable<IDBDatabase> | null = null;
@@ -62,6 +69,7 @@ export class PersistenceService {
 
       request.onupgradeneeded = (event) => {
         const db = (event.target as IDBOpenDBRequest).result;
+        const oldVersion = event.oldVersion;
 
         // Create books store
         if (!db.objectStoreNames.contains(this.BOOKS_STORE)) {
@@ -75,6 +83,19 @@ export class PersistenceService {
         if (!db.objectStoreNames.contains(this.CHECKPOINTS_STORE)) {
           const checkpointsStore = db.createObjectStore(this.CHECKPOINTS_STORE, { keyPath: 'bookId' });
           checkpointsStore.createIndex('lastModified', 'lastModified', { unique: false });
+        }
+
+        // v2: illustration caches (character reference portraits and
+        // book covers). Both stores are keyed by a string `key` field
+        // composed by the caller (e.g. `<bookId>::<character>::<style>`)
+        // so the same store can hold multiple entries per book / character.
+        if (oldVersion < 2) {
+          if (!db.objectStoreNames.contains(this.CHAR_REFS_STORE)) {
+            db.createObjectStore(this.CHAR_REFS_STORE, { keyPath: 'key' });
+          }
+          if (!db.objectStoreNames.contains(this.COVERS_STORE)) {
+            db.createObjectStore(this.COVERS_STORE, { keyPath: 'key' });
+          }
         }
       };
     });
@@ -110,6 +131,72 @@ export class PersistenceService {
           };
         });
       })
+    );
+  }
+
+  // ===== Character Reference Caching (v2) =====
+
+  /**
+   * Fetch a cached character reference portrait by its cache key.
+   * Returns `null` when no entry exists or the underlying IndexedDB
+   * call throws — callers treat both as "cache miss, regenerate".
+   */
+  getCharacterReference$(key: string): Observable<CharacterReference | null> {
+    return this.executeInTransaction<{ key: string; base64: string; mimeType: 'image/jpeg' | 'image/png'; characterName: string } | undefined>(
+      this.CHAR_REFS_STORE,
+      'readonly',
+      store => store.get(key)
+    ).pipe(
+      map(rec => rec ? {
+        base64: rec.base64,
+        mimeType: rec.mimeType,
+        characterName: rec.characterName,
+      } : null),
+      catchError(() => of(null))
+    );
+  }
+
+  /** Store a generated character reference portrait for reuse. */
+  saveCharacterReference$(key: string, ref: CharacterReference): Observable<void> {
+    const record = { key, base64: ref.base64, mimeType: ref.mimeType, characterName: ref.characterName };
+    return this.executeInTransaction<void>(
+      this.CHAR_REFS_STORE,
+      'readwrite',
+      store => store.put(record)
+    ).pipe(
+      map(() => void 0),
+      catchError(() => of(void 0))
+    );
+  }
+
+  // ===== Book Cover Caching (v2) =====
+
+  /** Fetch a cached book cover (front or back) by its cache key. */
+  getBookCover$(key: string): Observable<BookCoverArt | null> {
+    return this.executeInTransaction<{ key: string; base64: string; mimeType: 'image/jpeg' | 'image/png'; side: 'front' | 'back' } | undefined>(
+      this.COVERS_STORE,
+      'readonly',
+      store => store.get(key)
+    ).pipe(
+      map(rec => rec ? {
+        base64: rec.base64,
+        mimeType: rec.mimeType,
+        side: rec.side,
+      } : null),
+      catchError(() => of(null))
+    );
+  }
+
+  /** Store a generated book cover image for reuse. */
+  saveBookCover$(key: string, art: BookCoverArt): Observable<void> {
+    const record = { key, base64: art.base64, mimeType: art.mimeType, side: art.side };
+    return this.executeInTransaction<void>(
+      this.COVERS_STORE,
+      'readwrite',
+      store => store.put(record)
+    ).pipe(
+      map(() => void 0),
+      catchError(() => of(void 0))
     );
   }
 
@@ -227,9 +314,9 @@ export class PersistenceService {
   }
 
   /**
-   * Clear all data (for testing or reset). The two stores are
+   * Clear all data (for testing or reset). All four stores are
    * cleared in independent transactions in parallel so a slow
-   * or failing clear on one store doesn't block the other, and
+   * or failing clear on one store doesn't block the others, and
    * each transaction gets a well-formed lifetime (request added
    * synchronously with transaction creation, no risk of
    * auto-commit before use).
@@ -243,6 +330,16 @@ export class PersistenceService {
       ),
       books: this.executeInTransaction<void>(
         this.BOOKS_STORE,
+        'readwrite',
+        store => store.clear()
+      ),
+      characterReferences: this.executeInTransaction<void>(
+        this.CHAR_REFS_STORE,
+        'readwrite',
+        store => store.clear()
+      ),
+      bookCovers: this.executeInTransaction<void>(
+        this.COVERS_STORE,
         'readwrite',
         store => store.clear()
       )

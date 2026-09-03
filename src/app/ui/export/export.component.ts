@@ -8,6 +8,9 @@ import { Observable, Subject, firstValueFrom } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { TranslationService } from '../../i18n/translation.service';
 import { DialogService } from '../../core/dialog.service';
+import { ProviderService } from '../../core/providers/provider.service';
+import { IllustrationService } from '../../core/providers/illustration.service';
+import { BookCoverArt, ChapterIllustration } from '../../core/providers/illustration.types';
 import pdfMake from 'pdfmake/build/pdfmake';
 import pdfFonts from 'pdfmake/build/vfs_fonts';
 import { buildPdfDocument, PdfExportOptions } from './pdf-renderer';
@@ -24,15 +27,19 @@ import { stripRunningWordCount } from '../../shared/utils/chapter-cleanup';
 })
 export class ExportComponent implements OnInit {
   protected translationService = inject(TranslationService);
+  protected providerService = inject(ProviderService);
   private dialogService = inject(DialogService);
-  
+  private illustrationService = inject(IllustrationService);
+
   chapters$: Observable<Chapter[]>;
   selectedFormat: 'pdf' | 'epub' | 'docx' | 'markdown' = 'pdf';
   exportOptions: PdfExportOptions = {
     includeTitles: true,
     includeTOC: true,
     includeCritiques: false,
-    includeCharacters: false
+    includeCharacters: false,
+    includeIllustrations: false,
+    illustrationStyle: 'auto'
   };
   isExporting = false;
   isExportStopped = false;
@@ -184,6 +191,39 @@ export class ExportComponent implements OnInit {
         }
       }
 
+      // PDF illustration pass (minimax-only). Runs in the try block
+      // so any rejection falls into the existing `catch (error)`
+      // handler. Failure here is non-fatal: a `null` result or a
+      // missing illustration just means the chapter ships without
+      // art, but the export still completes.
+      let chapterIllustrations: Map<string, ChapterIllustration> | undefined;
+      let coverArt: BookCoverArt | undefined;
+      let backCoverArt: BookCoverArt | undefined;
+      if (this.selectedFormat === 'pdf' &&
+          this.exportOptions.includeIllustrations &&
+          this.providerService.getActiveProviderId() === 'minimax') {
+        this.ngZone.run(() => {
+          this.exportStatus = 'Generating illustrations...';
+        });
+        const result = await firstValueFrom(this.illustrationService.generateAll$({
+          chapters,
+          config: state.config,
+          characterStore: state.characterStore,
+          style: this.exportOptions.illustrationStyle,
+          onProgress: (done, total) => this.ngZone.run(() => {
+            this.exportStatus = total > 0
+              ? `Generating illustrations: ${done}/${total}`
+              : 'Generating illustrations...';
+            this.exportProgress = Math.min(85, 30 + Math.floor((done / Math.max(1, total)) * 55));
+          }),
+          signal: () => this.isExportStopped
+        }));
+        if (this.isExportStopped) return;
+        chapterIllustrations = result.chapterIllustrations;
+        coverArt = result.coverArt;
+        backCoverArt = result.backCoverArt;
+      }
+
       this.ngZone.run(() => {
         this.progressInterval = setInterval(() => {
           if (shouldTranslate && this.exportProgress < 85) {
@@ -201,7 +241,11 @@ export class ExportComponent implements OnInit {
 
       switch (this.selectedFormat) {
         case 'pdf':
-          content = await this.generatePDF(chapters);
+          content = await this.generatePDF(chapters, {
+            chapterIllustrations,
+            coverArt,
+            backCoverArt,
+          });
           filename = 'book-export.pdf';
           break;
         case 'epub':
@@ -247,13 +291,20 @@ export class ExportComponent implements OnInit {
     }
   }
 
-  private generatePDF(chapters: Chapter[]): Promise<Blob> {
+  private generatePDF(chapters: Chapter[], illustrationCtx?: {
+    chapterIllustrations?: Map<string, ChapterIllustration>;
+    coverArt?: BookCoverArt;
+    backCoverArt?: BookCoverArt;
+  }): Promise<Blob> {
     // Set pdfMake virtual file system with fonts
     (pdfMake as any).vfs = (pdfFonts as any).pdfMake?.vfs || (pdfFonts as any).vfs;
 
     const docDefinition = buildPdfDocument(chapters, this.exportOptions, {
       state: this.bookStateService.getState(),
       isPolish: this.translationService.isPolish(),
+      chapterIllustrations: illustrationCtx?.chapterIllustrations,
+      coverArt: illustrationCtx?.coverArt,
+      backCoverArt: illustrationCtx?.backCoverArt,
     });
 
     return new Promise((resolve, reject) => {

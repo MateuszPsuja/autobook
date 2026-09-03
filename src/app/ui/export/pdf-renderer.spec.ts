@@ -7,6 +7,8 @@ describe('buildPdfDocument', () => {
     includeTOC: true,
     includeCritiques: false,
     includeCharacters: false,
+    includeIllustrations: false,
+    illustrationStyle: 'auto',
   };
 
   const chapterA: Chapter = {

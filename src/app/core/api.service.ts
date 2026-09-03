@@ -231,8 +231,14 @@ export class ApiService {
    * Resolve the effective base URL for a provider. The proxy path is
    * preferred in dev (CORS) and falls back to the user-configured /
    * provider-default base URL. The returned string has no trailing slash.
+   *
+   * Public so sibling services (e.g. `MinimaxImageService`) can reuse the
+   * exact same URL-resolution rule instead of duplicating it and drifting
+   * over time. Callers should pass the provider object obtained from
+   * `getProvider()` so the result is identical to what chat completions
+   * would use.
    */
-  private resolveBaseUrl(provider: LLMProvider): string {
+  resolveBaseUrl(provider: LLMProvider): string {
     const override = this.providerService.getConfig(provider.id).baseUrl;
     if (provider.baseUrlEditable && override && override.trim().length > 0) {
       return override.replace(/\/+$/, '');

@@ -107,6 +107,34 @@
               class="w-4 h-4 text-brand-500 border-gray-300 rounded focus:ring-brand-500">
             <span class="text-sm text-gray-700 dark:text-gray-300">{{ t('export.includeCharacters') }}</span>
           </label>
+
+          <!-- Include Illustrations (minimax only) -->
+          @if (providerService.getActiveProviderId() === 'minimax') {
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                [(ngModel)]="exportOptions.includeIllustrations"
+                class="w-4 h-4 text-brand-500 border-gray-300 rounded focus:ring-brand-500">
+              <span class="text-sm text-gray-700 dark:text-gray-300">{{ t('export.includeIllustrations') }}</span>
+            </label>
+            @if (exportOptions.includeIllustrations) {
+              <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                <span>{{ t('export.illustrationStyle') }}:</span>
+                <select
+                  [(ngModel)]="exportOptions.illustrationStyle"
+                  class="px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800">
+                  <option value="auto">{{ t('export.illustrationStyleAuto') }}</option>
+                  <option value="photorealistic">Photorealistic</option>
+                  <option value="watercolor">Watercolor</option>
+                  <option value="oil-painting">Oil painting</option>
+                  <option value="digital-art">Digital art</option>
+                  <option value="pencil-sketch">Pencil sketch</option>
+                  <option value="anime">Anime</option>
+                  <option value="comic">Comic book</option>
+                </select>
+              </label>
+            }
+          }
         </div>
       </div>
 

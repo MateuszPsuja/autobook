@@ -1,6 +1,8 @@
 import { Chapter } from '../../models/chapter.model';
 import { BookStateService } from '../../book/state/book-state.service';
 import { stripRunningWordCount } from '../../shared/utils/chapter-cleanup';
+import { ChapterIllustration, BookCoverArt, IllustrationStyle } from '../../core/providers/illustration.types';
+import { buildCoverPage, buildBackCoverPage, buildBackCoverBlurb } from './pdf-cover';
 
 /**
  * Build a properly composed book PDF document definition.
@@ -37,11 +39,16 @@ export interface PdfExportOptions {
   includeTOC: boolean;
   includeCritiques: boolean;
   includeCharacters: boolean;
+  includeIllustrations: boolean;
+  illustrationStyle: IllustrationStyle;
 }
 
 export interface PdfExportContext {
   state: ReturnType<BookStateService['getState']>;
   isPolish: boolean;
+  chapterIllustrations?: Map<string, ChapterIllustration>;
+  coverArt?: BookCoverArt;
+  backCoverArt?: BookCoverArt;
 }
 
 type DocContent = any;
@@ -270,6 +277,7 @@ function buildChapter(args: {
     overallScoreLabel: string;
     feedbackLabel: string;
   };
+  chapterIllustrations?: Map<string, ChapterIllustration>;
 }): DocContent[] {
   const { chapter, index, total, isPolish, options, labels } = args;
   const blocks = parseContent(chapter.content);
@@ -310,6 +318,39 @@ function buildChapter(args: {
       id: `ch-${chapter.id}`,
       margin: [0, 0, 0, 0],
     });
+  }
+
+  // Chapter illustration (if present). Larger and more prominent than
+  // the previous design — closer to full content width so it acts as
+  // a real visual plate at the top of the chapter rather than a
+  // small inline image. Caption sits underneath in italic gray.
+  //
+  // When an illustration is present, the chapter "plate" (eyebrow,
+  // title, ornament, image, caption) is given its own page via
+  // `pageBreak: 'after'` on the caption. The body text starts on a
+  // fresh page, so the title and illustration are never split off
+  // from each other by an awkward page break mid-plate. Chapters
+  // without an illustration behave as before — title and body share
+  // the first page.
+  const illustration = args.chapterIllustrations?.get(chapter.id);
+  if (illustration) {
+    out.push({
+      image: `data:${illustration.mimeType};base64,${illustration.base64}`,
+      width: 360,
+      alignment: 'center',
+      margin: [0, 18, 0, 6],
+    });
+    if (illustration.caption) {
+      out.push({
+        text: illustration.caption,
+        style: 'illustrationCaption',
+        pageBreak: 'after',
+      });
+    } else {
+      // No caption — push the body to a new page anyway so the
+      // illustration stays on its own plate page.
+      out.push({ text: '', pageBreak: 'after' });
+    }
   }
 
   // Body — first paragraph with drop cap, rest with first-line indent.
@@ -461,15 +502,30 @@ export function buildPdfDocument(
 
   // ---- Content list -------------------------------------------------------
   const content: DocContent[] = [];
-  content.push(
-    ...buildTitlePage({
-      bookTitle,
-      bookSubtitle,
-      bookAuthor,
-      genre,
-      aBookLabel,
-    }),
-  );
+
+  // Front cover (when illustrations are enabled) — typographic layout
+  // with an optional inset image. Replaces the old full-bleed design,
+  // which pdfmake 0.2.7 was rendering as a solid black rectangle
+  // regardless of the actual base64 payload. The image is in the
+  // normal flow now, so it always renders correctly when the API
+  // returns one.
+  if (context.coverArt) {
+    content.push(
+      ...buildCoverPage(context.coverArt, { bookTitle, bookAuthor, genre, isPolish }),
+    );
+  } else {
+    // No cover image — fall back to the original title page (which is
+    // already a typographic layout that doesn't need an image).
+    content.push(
+      ...buildTitlePage({
+        bookTitle,
+        bookSubtitle,
+        bookAuthor,
+        genre,
+        aBookLabel,
+      }),
+    );
+  }
 
   if (options.includeTOC) {
     content.push(
@@ -486,9 +542,21 @@ export function buildPdfDocument(
         isPolish,
         options,
         labels: { chapterLabel, critiqueLabel, overallScoreLabel, feedbackLabel },
+        chapterIllustrations: context.chapterIllustrations,
       }),
     );
   });
+
+  // Back cover (when illustrations are enabled) — typographic layout
+  // with an optional small decorative image. The page break is on the
+  // first element of `buildBackCoverPage`'s output, which is the
+  // reliable pattern with pdfmake 0.2.7.
+  if (context.backCoverArt) {
+    const { blurb, authorBio } = buildBackCoverBlurb(config ?? {} as any, isPolish);
+    content.push(
+      ...buildBackCoverPage(context.backCoverArt, { blurb, authorBio, bookAuthor }),
+    );
+  }
 
   // ---- Styles -------------------------------------------------------------
   const styles = {
@@ -540,26 +608,26 @@ export function buildPdfDocument(
     },
     chapterEyebrow: {
       font: BODY_FONT,
-      fontSize: 10,
+      fontSize: 11,
       alignment: 'center',
-      characterSpacing: 6,
+      characterSpacing: 8,
       color: '#666',
-      margin: [0, 110, 0, 8],
+      margin: [0, 56, 0, 10],
     },
     chapterTitle: {
       font: DISPLAY_FONT,
-      fontSize: 22,
+      fontSize: 30,
       bold: true,
       alignment: 'center',
-      margin: [0, 0, 0, 8],
+      margin: [0, 0, 0, 6],
     },
     chapterOrnament: {
       font: BODY_FONT,
       fontSize: 12,
       alignment: 'center',
-      characterSpacing: 4,
+      characterSpacing: 6,
       color: '#888',
-      margin: [0, 4, 0, 28],
+      margin: [0, 2, 0, 22],
     },
     sceneBreak: {
       font: BODY_FONT,
@@ -642,12 +710,69 @@ export function buildPdfDocument(
       color: '#333',
       alignment: 'center',
     },
+    illustrationCaption: {
+      font: BODY_FONT,
+      fontSize: 9,
+      italics: true,
+      alignment: 'center',
+      color: '#666',
+      margin: [0, 0, 0, 18],
+    },
+    coverEyebrow: {
+      font: BODY_FONT,
+      fontSize: 10,
+      characterSpacing: 5,
+      color: '#666',
+      alignment: 'center',
+    },
+    coverTitle: {
+      font: DISPLAY_FONT,
+      fontSize: 32,
+      bold: true,
+      characterSpacing: 3,
+      color: '#111',
+      alignment: 'center',
+      lineHeight: 1.15,
+    },
+    coverAuthor: {
+      font: BODY_FONT,
+      fontSize: 11,
+      characterSpacing: 3,
+      color: '#333',
+      alignment: 'center',
+    },
+    coverBlurb: {
+      font: BODY_FONT,
+      fontSize: 11,
+      color: '#222',
+      lineHeight: 1.5,
+      alignment: 'center',
+      italics: true,
+    },
+    coverAuthorBio: {
+      font: BODY_FONT,
+      fontSize: 10,
+      color: '#444',
+      lineHeight: 1.4,
+      alignment: 'center',
+    },
+    coverIsbn: {
+      font: BODY_FONT,
+      fontSize: 8,
+      color: '#888',
+      alignment: 'center',
+      characterSpacing: 2,
+    },
   };
 
   // ---- Header / footer ----------------------------------------------------
+  // Page 1 is the front cover — no header/footer. Every other page
+  // (chapter plate, chapter body, back cover) shows the running header
+  // and page number. The cover and back cover are still labelled
+  // separately by the renderer, but the simpler "skip page 1 only"
+  // rule reads more naturally and matches the new one-page cover.
   const header = (currentPage: number, _pageCount: number): DocContent | null => {
-    if (currentPage <= 2) return null; // title + author page: no header
-    // Alternate verso/recto: even (verso, left page) on right; odd on left.
+    if (currentPage === 1) return null; // front cover
     const isVerso = currentPage % 2 === 0;
     return {
       columns: [
@@ -662,9 +787,9 @@ export function buildPdfDocument(
   };
 
   const footer = (currentPage: number, _pageCount: number): DocContent | null => {
-    if (currentPage <= 2) return null;
+    if (currentPage === 1) return null;
     return {
-      text: String(currentPage - 2),  // skip title + author pages in count
+      text: String(currentPage - 1), // page 1 is the cover, so body starts at "1"
       style: 'pageNumber',
       margin: [MARGIN_INNER, 0, MARGIN_OUTER, 24],
     };
