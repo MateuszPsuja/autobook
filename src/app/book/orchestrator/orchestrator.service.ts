@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { Observable, Subscription, throwError, firstValueFrom } from 'rxjs';
+import { Observable, Subscription, throwError } from 'rxjs';
 import { switchMap, catchError } from 'rxjs/operators';
 import { BookStateService } from '../state/book-state.service';
 import { ArchitectService } from '../agents/architect.service';
@@ -12,7 +12,6 @@ import { Blueprint, AgentType, GenerationStatus } from '../../models/book-state.
 import { ChapterBrief, CriticContext, AuthorStyleContext } from '../../models/book-state.model';
 import { ChapterDraft, Chapter } from '../../models/chapter.model';
 import { PersistenceService } from '../../core/persistence.service';
-import { TranslationService } from '../../i18n/translation.service';
 import { ProviderService } from '../../core/providers/provider.service';
 
 @Injectable({
@@ -51,7 +50,6 @@ export class OrchestratorService {
     private characterService: CharacterService,
     private continuityService: ContinuityService,
     private persistenceService: PersistenceService,
-    private translationService: TranslationService,
     private providerService: ProviderService
   ) {}
 
@@ -112,42 +110,11 @@ export class OrchestratorService {
           const totalWords = chapters.reduce((sum, ch) => sum + (ch.wordCount || 0), 0);
           this.bookStateService.updateTotalWords(totalWords);
 
-          // Post-generation translation pass. The LLM runs English
-          // prompts, so the chapters are in English on disk. If the
-          // user has Polish on, we translate every chapter (title +
-          // content + critique) and write the Polish version back
-          // into the state so the viewer reads Polish directly.
-          // Failures on individual fields fall back to the original
-          // English inside the service, so a partial Polish result
-          // is still better than aborting the whole book.
-          //
-          // Skipped when the user already hit Stop — translating a
-          // book they no longer want is wasted API spend.
-          if (this.translationService.isPolish() && chapters.length > 0 && !this.stopped) {
-            try {
-              this.bookStateService.setStatus('translating');
-              // Intentionally NOT calling `subscriber.next(...)` here.
-              // The generator's `next` callback treats every emission
-              // as "done" and flips `isGenerating = false` / status
-              // badges to "complete" — emitting mid-flight would make
-              // the UI briefly show the Generate button (else branch
-              // in the template) while the translation is still
-              // running. The user instead stays on the Stop button
-              // (because `isGenerating` is still true) and only sees
-              // the Regenerate/Next pair once `setStatus('completed')`
-              // fires below.
-              const translated = await this.translateChaptersToPolish(chapters);
-              if (!this.stopped) {
-                this.bookStateService.setChapters(translated);
-              }
-            } catch (err) {
-              // If even the wrapper around the per-chapter translates
-              // errors, log and keep the English chapters. The user
-              // can still read the book — they just won't get the
-              // automatic Polish.
-              console.error('Orchestrator: post-generation translation failed; keeping English chapters.', err);
-            }
-          }
+          // Translation is now an export-time concern, not an
+          // orchestrator concern. The user picks a target language
+          // in the export tab; the LLM translation pass runs there
+          // and ships a localized file. In-state chapters stay in
+          // the English the orchestrator produced.
 
           // If the user stopped mid-pipeline, don't flip the status
           // back to "completed" — they cancelled on purpose and the
@@ -176,35 +143,6 @@ export class OrchestratorService {
         }
       };
     });
-  }
-
-  /**
-   * Translate every chapter's user-visible text fields (title,
-   * content, critique) to Polish in parallel and return the new
-   * array. The translation service is responsible for per-field
-   * fallbacks on failure; this wrapper's job is just batching
-   * with a per-chapter safety net so a single bad response
-   * (e.g. a chapter whose LLM call exhausted all 15 retries)
-   * doesn't reject the whole book. A failing chapter stays in
-   * English so the user can still read it; the other chapters
-   * still get translated.
-   */
-  private async translateChaptersToPolish(chapters: Chapter[]): Promise<Chapter[]> {
-    return Promise.all(
-      chapters.map(async (chapter): Promise<Chapter> => {
-        try {
-          return await firstValueFrom(
-            this.translationService.translateGeneratedChapter$(chapter)
-          );
-        } catch (err) {
-          console.error(
-            `Orchestrator: post-translation gave up on chapter ${chapter.number} ("${chapter.title}"); keeping English copy.`,
-            err
-          );
-          return chapter;
-        }
-      })
-    );
   }
 
   /**

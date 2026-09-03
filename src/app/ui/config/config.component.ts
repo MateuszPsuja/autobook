@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, effect } from '@angular/core';
+import { Component, OnInit, inject } from '@angular/core';
 import { FormBuilder, FormGroup, Validators, ReactiveFormsModule } from '@angular/forms';
 import { Router, ActivatedRoute } from '@angular/router';
 import { BookConfig } from '../../models/book-config.model';
@@ -62,13 +62,9 @@ export class ConfigComponent implements OnInit {
     private router: Router,
     private route: ActivatedRoute
   ) {
-    // Effect to reload translations when language changes
-    effect(() => {
-      // Access the language signal to create a dependency
-      const _ = this.translationService.language();
-      // Reload translations when language changes
-      this.loadTranslations();
-    });
+    // The UI is English-only, so the dropdown labels and form values
+    // are static. No effect needed — `loadTranslations()` is called
+    // once from `ngOnInit` and that's it.
 
     this.configForm = this.fb.group({
       // Model selection
@@ -298,44 +294,13 @@ export class ConfigComponent implements OnInit {
   }
 
   /**
-   * Translate form values from Polish to English for AI processing
+   * The config form is now English-only (the UI is English-only too),
+   * so the form values are already in English when they reach this
+   * method. The function is kept as a no-op so the storage code can
+   * keep calling it without a special case.
    */
   private translateFormValuesToEnglish(formValue: any): any {
-    if (this.translationService.isEnglish()) {
-      return formValue;
-    }
-
-    // Translate dropdown values
-    const translatedValue = {
-      ...formValue,
-      genre: this.translationService.translateDropdownToEnglish('genres', formValue.genre),
-      style: this.translationService.translateDropdownToEnglish('writingStyles', formValue.style),
-      tone: this.translationService.translateDropdownToEnglish('tones', formValue.tone),
-      pov: this.translationService.translateDropdownToEnglish('povs', formValue.pov),
-      tense: this.translationService.translateDropdownToEnglish('tenses', formValue.tense),
-      audience: this.translationService.translateDropdownToEnglish('audiences', formValue.audience),
-      worldType: this.translationService.translateDropdownToEnglish('worldTypes', formValue.worldType),
-      targetLength: this.translationService.translateDropdownToEnglish('bookLengths', formValue.targetLength),
-      chapterLength: this.translationService.translateDropdownToEnglish('chapterLengths', formValue.chapterLength),
-      plotArchetype: this.translationService.translateDropdownToEnglish('plotArchetypes', formValue.plotArchetype),
-      actStructure: this.translationService.translateDropdownToEnglish('actStructures', formValue.actStructure),
-      protagonist: {
-        ...formValue.protagonist,
-        background: formValue.protagonist.background,
-        motivations: formValue.protagonist.motivations,
-        flaws: formValue.protagonist.flaws,
-        arc: formValue.protagonist.arc
-      },
-      antagonist: {
-        ...formValue.antagonist,
-        background: formValue.antagonist.background,
-        motivations: formValue.antagonist.motivations,
-        flaws: formValue.antagonist.flaws,
-        arc: formValue.antagonist.arc
-      }
-    };
-
-    return translatedValue;
+    return formValue;
   }
 
   /**
@@ -503,36 +468,21 @@ export class ConfigComponent implements OnInit {
       if (j >= i) j++;
       return [arr[i], arr[j]];
     };
-    
-    // Use English content for internal storage (AI needs English)
-    // But display the translated values from the dropdown arrays
-    const isPolish = this.translationService.isPolish();
-    
-    const randomTitlesEnglish = [
+
+    // The UI is English-only, so all the seed content is in English.
+    const randomTitles = [
       'The Shadow of Eternity', 'Whispers in the Void', 'The Last Horizon',
       'Echoes of Tomorrow', 'The Crystal Kingdom', 'Beyond the Stars',
       'The Forgotten Path', 'Rise of the Phoenix', 'The Silent Storm',
       'Legends of the Deep'
     ];
-    
-    const randomTitlesPolish = [
-      'Cień Wieczności', 'Szepty w Pustce', 'Ostatni Horyzont',
-      'Echo Jutra', 'Królestwo Kryształów', 'Poza Gwiazdami',
-      'Zapomniana Ścieżka', 'Wschód Feniksa', 'Cicha Burza',
-      'Legendy Głębi'
-    ];
-    
-    const randomNamesEnglish = [
+
+    const randomNames = [
       'Alex', 'Jordan', 'Morgan', 'Casey', 'Riley', 'Quinn', 'Avery', 'Sage',
       'Phoenix', 'River', 'Skyler', 'Dakota', 'Reese', 'Cameron', 'Taylor'
     ];
-    
-    const randomNamesPolish = [
-      'Aleksandra', 'Marek', 'Piotr', 'Katarzyna', 'Michał', 'Anna',
-      'Tomasz', 'Natalia', 'Jakub', 'Zofia', 'Hubert', 'Alicja', 'Igor', 'Maja'
-    ];
-    
-    const randomBackgroundsEnglish = [
+
+    const randomBackgrounds = [
       'A former soldier haunted by the past, seeking redemption in a world that has forgotten peace.',
       'Born into nobility but cast out, now walking the path of the common folk to understand true power.',
       'A scholar who discovered forbidden knowledge and must now live on the run.',
@@ -540,17 +490,8 @@ export class ConfigComponent implements OnInit {
       'A healer with a dark secret - they can absorb others\' pain but at a terrible cost.',
       'Once a leader of men, now a wanderer seeking answers to an ancient mystery.'
     ];
-    
-    const randomBackgroundsPolish = [
-      'Były żołnierz nękany przez przeszłość, szukający odkupienia w świecie, który zapomniał o pokoju.',
-      'Urodzony w szlachcie, ale wypędzony, teraz podąża ścieżką zwykłych ludzi, by zrozumieć prawdziwą moc.',
-      'Uczony, który odkrył zakazaną wiedzę i musi teraz żyć w ucieczce.',
-      'Wychowany w izolacji, wyrusza w świat, by odnaleźć swoją zaginioną rodzinę.',
-      'Uzdrowicielka z mroczną tajemnicą - może absorbować ból innych, ale za straszliwą cenę.',
-      'Dawny przywódca ludzi, teraz wędrowiec szukający odpowiedzi na starożytną tajemnicę.'
-    ];
-    
-    const randomMotivationsEnglish = [
+
+    const randomMotivations = [
       'To find lost loved ones and bring them home',
       'To uncover the truth about their mysterious past',
       'To protect the innocent from a growing darkness',
@@ -558,17 +499,8 @@ export class ConfigComponent implements OnInit {
       'To find peace after years of conflict',
       'To master a dangerous power before it consumes them'
     ];
-    
-    const randomMotivationsPolish = [
-      'Odnaleźć zaginionych bliskich i przyprowadzić ich do domu',
-      'Odkryć prawdę o swojej tajemniczej przeszłości',
-      'Chronić niewinnych przed rosnącym mrokiem',
-      'Udowodnić, że są godni swojego dziedzictwa',
-      'Znaleźć pokój po latach konfliktu',
-      'Opanować niebezpieczną moc, zanim ich pochłonie'
-    ];
-    
-    const randomFlawsEnglish = [
+
+    const randomFlaws = [
       'Cannot trust others easily, pushes away those who try to help',
       'Overly impulsive, acts before thinking through consequences',
       'Haunted by past failures, doubts their own abilities',
@@ -576,17 +508,8 @@ export class ConfigComponent implements OnInit {
       'Struggles with anger issues that cloud their judgment',
       'Fear of intimacy prevents forming deep connections'
     ];
-    
-    const randomFlawsPolish = [
-      'Nie może łatwo zaufać innym, odpycha tych, którzy próbują pomóc',
-      'Zbyt impulsywny, działa zanim przemyśli konsekwencje',
-      'Nękany przez przeszłe porażki, wątpi we własne zdolności',
-      'Zbyt skłonny do poświęcania się dla innych',
-      'Zmaga się z problemami z złością, które przyćmiewają jego osąd',
-      'Strach przed bliskością uniemożliwia nawiązywanie głębokich więzi'
-    ];
-    
-    const randomArcsEnglish = [
+
+    const randomArcs = [
       'From isolation to learning the power of connection and trust',
       'From self-doubt to embracing their true potential and leadership',
       'From revenge to understanding the true meaning of justice',
@@ -594,17 +517,8 @@ export class ConfigComponent implements OnInit {
       'From loss to finding hope and purpose in helping others',
       'From recklessness to wisdom, learning to think before acting'
     ];
-    
-    const randomArcsPolish = [
-      'Od izolacji do poznania mocy więzi i zaufania',
-      'Od wątpliwości do przyjęcia swojego prawdziwego potencjału i przywództwa',
-      'Od zemsty do zrozumienia prawdziwego znaczenia sprawiedliwości',
-      'Od strachu do odwagi, stawiania czoła ciemności w środku i na zewnątrz',
-      'Od straty do znalezienia nadziei i celu w pomaganiu innym',
-      'Od lekkomyślności do mądrości, uczenia się myślenia przed działaniem'
-    ];
-    
-    const randomThemesEnglish = [
+
+    const randomThemes = [
       'Redemption, Love, Power',
       'Identity, Sacrifice, Hope',
       'Fate, Choice, Courage',
@@ -612,35 +526,17 @@ export class ConfigComponent implements OnInit {
       'Darkness, Light, Balance',
       'Memory, Truth, Forgiveness'
     ];
-    
-    const randomThemesPolish = [
-      'Odkupienie, Miłość, Władza',
-      'Tożsamość, Ofiara, Nadzieja',
-      'Przeznaczenie, Wybór, Odwaga',
-      'Zdrada, Lojalność, Rozwój',
-      'Ciągłość, Światło, Równowaga',
-      'Pamięć, Prawda, Wybaczenie'
-    ];
-
-    // Select content based on language
-    const titles = isPolish ? randomTitlesPolish : randomTitlesEnglish;
-    const names = isPolish ? randomNamesPolish : randomNamesEnglish;
-    const backgrounds = isPolish ? randomBackgroundsPolish : randomBackgroundsEnglish;
-    const motivations = isPolish ? randomMotivationsPolish : randomMotivationsEnglish;
-    const flaws = isPolish ? randomFlawsPolish : randomFlawsEnglish;
-    const arcs = isPolish ? randomArcsPolish : randomArcsEnglish;
-    const themes = isPolish ? randomThemesPolish : randomThemesEnglish;
 
     // Step 0: Creative Settings - ALWAYS use shortest book options
     this.configForm.patchValue({
-      title: randomFromArray(titles),
+      title: randomFromArray(randomTitles),
       genre: randomFromArray(this.genres),
       style: randomFromArray(this.writingStyles),
       tone: randomFromArray(this.tones),
       pov: randomFromArray(this.povs),
       tense: randomFromArray(this.tenses),
       audience: randomFromArray(this.audiences),
-      themes: randomFromArray(themes),
+      themes: randomFromArray(randomThemes),
       worldType: randomFromArray(this.worldTypes),
       // ALWAYS use shortest options to minimize chapter count
       targetLength: this.bookLengths[0],
@@ -648,25 +544,25 @@ export class ConfigComponent implements OnInit {
     });
 
     // Step 1: Characters
-    const [protagonistName, antagonistName] = pickTwoDistinct(names);
+    const [protagonistName, antagonistName] = pickTwoDistinct(randomNames);
     this.configForm.patchValue({
       protagonist: {
         name: protagonistName,
         role: 'Protagonist',
         age: Math.floor(Math.random() * 40) + 20,
-        background: randomFromArray(backgrounds),
-        motivations: randomFromArray(motivations),
-        flaws: randomFromArray(flaws),
-        arc: randomFromArray(arcs)
+        background: randomFromArray(randomBackgrounds),
+        motivations: randomFromArray(randomMotivations),
+        flaws: randomFromArray(randomFlaws),
+        arc: randomFromArray(randomArcs)
       },
       antagonist: {
         name: antagonistName,
         role: 'Antagonist',
         age: Math.floor(Math.random() * 30) + 30,
-        background: randomFromArray(backgrounds),
-        motivations: randomFromArray(motivations),
-        flaws: randomFromArray(flaws),
-        arc: randomFromArray(arcs)
+        background: randomFromArray(randomBackgrounds),
+        motivations: randomFromArray(randomMotivations),
+        flaws: randomFromArray(randomFlaws),
+        arc: randomFromArray(randomArcs)
       }
     });
 

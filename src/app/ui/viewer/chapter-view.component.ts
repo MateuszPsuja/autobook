@@ -1,9 +1,9 @@
-import { Component, OnInit, OnDestroy, effect, inject, signal } from '@angular/core';
+import { Component, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { BookStateService } from '../../book/state/book-state.service';
 import { Chapter } from '../../models/chapter.model';
 import { AsyncPipe } from '@angular/common';
-import { Observable, Subscription } from 'rxjs';
+import { Observable } from 'rxjs';
 import { TranslationService } from '../../i18n/translation.service';
 import { stripRunningWordCount } from '../../shared/utils/chapter-cleanup';
 import { CritiqueReport } from '../../models/critique.model';
@@ -14,7 +14,7 @@ import { CritiqueReport } from '../../models/critique.model';
   styleUrls: ['./chapter-view.component.scss'],
   imports: [CommonModule, AsyncPipe]
 })
-export class ChapterViewComponent implements OnInit, OnDestroy {
+export class ChapterViewComponent implements OnInit {
   protected translationService = inject(TranslationService);
 
   chapters$: Observable<Chapter[]>;
@@ -22,39 +22,17 @@ export class ChapterViewComponent implements OnInit, OnDestroy {
   selectedChapterIndex = 0;
 
   /**
-   * Critique that the panel actually renders. The post-generation
-   * translation pass already writes Polish text into the state for
-   * new runs, but books that existed before that pass — or runs
-   * where the translation silently fell back to English — still
-   * have English critiques in the state. This signal keeps a
-   * (possibly) translated copy so the panel flips to Polish as
-   * soon as the translation lands, without the user having to
-   * re-generate. Mirrors the source critique in English.
+   * Critique that the panel renders. The UI is English-only and the
+   * orchestrator stores English critiques, so this signal mirrors
+   * the source critique as-is. Kept as a signal (rather than a
+   * direct reference to `selectedChapter.critique`) so the getters
+   * can be extended later — e.g. if we ever want a per-chapter
+   * on-demand translation in the viewer, the wiring stays the same.
    */
   displayCritique = signal<CritiqueReport | null>(null);
 
-  /**
-   * Active critique-translation subscription. Stored so the
-   * previous in-flight request can be cancelled when the user
-   * switches chapter or toggles language — otherwise a slow
-   * earlier response could overwrite a fresh one.
-   */
-  private critiqueSub: Subscription | null = null;
-
   constructor(private bookStateService: BookStateService) {
     this.chapters$ = this.bookStateService.getChapters$();
-
-    // The post-step already translated the state for new runs, so
-    // most of the time the effect is a no-op copy. The signal
-    // still exists so that (a) users on existing English data
-    // see Polish feedback without re-generating, and (b) toggling
-    // the language back to English returns the panel to the source
-    // text instantly.
-    effect(() => {
-      // Track the language signal so the effect re-runs on toggle.
-      this.translationService.language();
-      this.refreshDisplayCritique(this.selectedChapter?.critique ?? null);
-    });
   }
 
   ngOnInit(): void {
@@ -66,76 +44,12 @@ export class ChapterViewComponent implements OnInit, OnDestroy {
     });
   }
 
-  ngOnDestroy(): void {
-    this.critiqueSub?.unsubscribe();
-  }
-
-  /**
-   * Re-derive `displayCritique` for the given source critique under
-   * the current language. Cancels any in-flight translation first
-   * so a stale response can't overwrite a newer one. In English
-   * the source is mirrored directly; in Polish the service is
-   * called (or no-op if the field is empty) and the signal is
-   * updated when the translation lands.
-   *
-   * Important: the post-generation translation pass already writes
-   * Polish text into `chapter.critique` for new runs. We detect
-   * that with a diacritics check and skip the per-render API call,
-   * otherwise every chapter switch in the viewer would fire a new
-   * chat completion against the LLM just to translate text that is
-   * already Polish.
-   */
-  private refreshDisplayCritique(critique: CritiqueReport | null): void {
-    this.critiqueSub?.unsubscribe();
-    this.critiqueSub = null;
-
-    if (!critique) {
-      this.displayCritique.set(null);
-      return;
-    }
-
-    if (this.translationService.isEnglish()) {
-      this.displayCritique.set(critique);
-      return;
-    }
-
-    // Polish mode. If the source critique's feedback is in Polish
-    // the post-generation pass has done the work; render it
-    // directly. Falls through to the API only when the feedback
-    // is missing or genuinely English (e.g. a legacy book from
-    // before the translation pass existed, or a critique that the
-    // service fell back to English on).
-    //
-    // Why `feedback` and not "all fields Polish": see
-    // `translateCritiqueToPolish$` for the full reasoning. The
-    // short answer is that a strict "all fields Polish" check
-    // would still fire 6-8 LLM calls per chapter whenever a
-    // single mustFix / suggestions item is missing a diacritic,
-    // and the user-visible feedback is enough to make that
-    // judgement call.
-    if (critique.feedback && critique.feedback.trim() && this.translationService.looksPolish(critique.feedback)) {
-      this.displayCritique.set(critique);
-      return;
-    }
-
-    // Seed with the English so the panel renders immediately;
-    // swap to the Polish version the moment the API call lands.
-    this.displayCritique.set(critique);
-    this.critiqueSub = this.translationService
-      .translateCritiqueToPolish$(critique)
-      .subscribe({
-        next: translated => this.displayCritique.set(translated),
-        error: err => {
-          console.warn('Critique translation failed; keeping English copy.', err);
-          this.displayCritique.set(critique);
-        }
-      });
-  }
-
   selectChapter(chapter: Chapter, index: number): void {
     this.selectedChapter = chapter;
     this.selectedChapterIndex = index;
-    this.refreshDisplayCritique(chapter.critique ?? null);
+    // Source critique is already in the right language; mirror it
+    // straight into the display signal.
+    this.displayCritique.set(chapter.critique ?? null);
   }
 
   nextChapter(): void {

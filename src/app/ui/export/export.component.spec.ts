@@ -28,10 +28,16 @@ describe('ExportComponent', () => {
       };
       return map[key] ?? key;
     },
-    isPolish: () => false,
-    translateBookToPolish: async (chapters: any[]) => chapters,
-    translateCritiqueToPolish$: (critique: any) => of(critique)
-  } as Partial<TranslationService>;
+    // The real TranslationService exposes a `Signal<ExportLanguage>`
+    // here. Tests read it through component.exportLanguage directly
+    // (which the component seeds from the signal in ngOnInit), or
+    // they override the per-test mock field below.
+    exportLanguage: (() => 'en') as any,
+    setExportLanguage: () => {},
+    translateBookTo$: (chapters: any[]) => of(chapters),
+    translateBookMetadataTo$: (config: any) => of(config),
+    translateCritiqueTo$: (critique: any) => of(critique)
+  } as unknown as Partial<TranslationService>;
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
@@ -66,38 +72,51 @@ describe('ExportComponent', () => {
     expect(component.selectedFormat).toBe('epub');
   });
 
-  it('returns export button text containing translation and format', () => {
+  it('returns export button text containing the format', () => {
     component.selectedFormat = 'pdf';
     const text = component.getExportButtonText();
     expect(text).toContain('Export');
     expect(text).toContain('PDF');
   });
 
-  describe('Polish export with critiques', () => {
-    // The export must call the critique translator for every chapter
-    // that has a critique when language is Polish, and pass the
-    // translated feedback into the markdown / PDF / EPUB / DOCX
-    // builders. We assert that by capturing the markdown body the
-    // component ships to the download (it goes through
-    // generateMarkdown -> buildBookContent which inlines the
-    // critique feedback into the text).
+  describe('Export target language', () => {
+    it('defaults to English so a fresh client skips the LLM translation pass', () => {
+      expect(component.exportLanguage).toBe('en');
+      expect(component.willTranslate()).toBeFalse();
+    });
 
-    it('does not re-translate chapter title or content (orchestrator already did)', async () => {
-      // Regression: the orchestrator translates every chapter to
-      // Polish during post-generation, so the chapters in state are
-      // already in the target language. The export must ship them
-      // through untouched — re-translating would burn a full extra
-      // LLM pass and risk the model "improving" already-Polish
-      // prose. We assert the bulk translator is not invoked.
-      (mockTranslation as any).isPolish = () => true;
-      const translateBookSpy = spyOn(mockTranslation as any, 'translateBookToPolish')
-        .and.callFake(async (chapters: any[]) => chapters);
+    it('setExportLanguage updates the property and forwards to the translation service', () => {
+      const setSpy = spyOn(mockTranslation as any, 'setExportLanguage');
+      component.setExportLanguage('fr');
+      expect(component.exportLanguage).toBe('fr');
+      expect(setSpy).toHaveBeenCalledWith('fr');
+      expect(component.willTranslate()).toBeTrue();
+    });
+  });
+
+  describe('Multi-language export', () => {
+    // The export now translates the book into the target language
+    // before generating the file. We assert that:
+    //   - the export calls translateBookTo$ when target !== 'en'
+    //   - it skips the translation step when target === 'en'
+    //   - the per-chapter critique translator is still used (the
+    //     book-level helper delegates to it)
+    // by capturing the markdown body the component ships to the
+    // download (it goes through generateMarkdown ->
+    // buildBookContent which inlines the critique feedback into
+    // the text).
+
+    it('skips the LLM translation pass entirely when target is English', async () => {
+      (mockTranslation as any).exportLanguage = () => 'en';
+      component.exportLanguage = 'en';
+      const translateBookSpy = spyOn(mockTranslation as any, 'translateBookTo$')
+        .and.callFake((chapters: any[]) => of(chapters));
 
       chaptersSubject.next([
         {
           number: 1,
-          title: 'Już przetłumaczony tytuł',
-          content: 'Już przetłumaczona treść rozdziału.'
+          title: 'Chapter 1: The Beginning',
+          content: 'Original English body.'
         }
       ]);
       fixture.detectChanges();
@@ -111,91 +130,21 @@ describe('ExportComponent', () => {
       await component.exportBook();
 
       expect(translateBookSpy).not.toHaveBeenCalled();
-
-      (mockTranslation as any).isPolish = () => false;
-    });
-    it('translates critique feedback when isPolish is true and chapter has a critique', async () => {
-      // Override the isPolish flag and the translator spy for this test.
-      (mockTranslation as any).isPolish = () => true;
-      const plCritique = {
-        scores: { prose: 8, pacing: 7, showVsTell: 8, dialogue: 7, continuity: 8, hookStrength: 7, thematicResonance: 8 },
-        overallScore: 7.7,
-        feedback: 'PL: Solid chapter.',
-        mustFix: ['PL: tighten paragraph 2'],
-        suggestions: ['PL: vary sentence length'],
-        createdAt: new Date()
-      };
-      const translateCritiqueSpy = spyOn(mockTranslation as any, 'translateCritiqueToPolish$')
-        .and.callFake(() => of(plCritique));
-
-      chaptersSubject.next([
-        {
-          number: 1,
-          title: 'Chapter 1',
-          content: 'Original English body.',
-          critique: {
-            scores: { prose: 8, pacing: 7, showVsTell: 8, dialogue: 7, continuity: 8, hookStrength: 7, thematicResonance: 8 },
-            overallScore: 7.7,
-            feedback: 'Solid chapter.',
-            mustFix: ['tighten paragraph 2'],
-            suggestions: ['vary sentence length'],
-            createdAt: new Date()
-          }
-        }
-      ]);
-      fixture.detectChanges();
-
-      // exportBook opens a download — stub URL.createObjectURL so the
-      // jsdom environment doesn't blow up, and stub anchor.click.
-      spyOn(window.URL, 'createObjectURL').and.returnValue('blob:mock');
-      const appendChildSpy = spyOn(document.body, 'appendChild').and.stub();
-      spyOn(document.body, 'removeChild').and.stub();
-      spyOn(HTMLAnchorElement.prototype, 'click').and.stub();
-
-      // Capture the markdown body so we can assert the translated
-      // critique feedback was actually written into the export.
-      let capturedBody = '';
-      spyOn(component, 'generateMarkdown' as any).and.callFake((ch: any[]) => {
-        capturedBody = (component as any).buildBookContent(ch);
-        return new Blob([capturedBody], { type: 'text/markdown' });
-      });
-
-      // Make sure critiques are included in the export options so
-      // buildBookContent emits the critique block.
-      component.exportOptions = {
-        includeTitles: true,
-        includeTOC: false,
-        includeCritiques: true,
-        includeCharacters: false,
-        includeIllustrations: false,
-        illustrationStyle: 'auto'
-      };
-      component.setFormat('markdown');
-
-      await component.exportBook();
-
-      // Translator invoked for the single chapter that had a critique.
-      expect(translateCritiqueSpy).toHaveBeenCalledTimes(1);
-      // The exported markdown body should now contain the Polish
-      // feedback, prefixed with the localized "Informacja Zwrotna:"
-      // label. The raw English feedback should not appear in the
-      // rendered critique block.
-      expect(capturedBody).toContain('PL: Solid chapter.');
-      expect(capturedBody).toMatch(/\*\*Informacja Zwrotna:\*\*\s*PL: Solid chapter\./);
-
-      expect(appendChildSpy).toHaveBeenCalled();
-
-      // Restore isPolish for any later tests in the suite.
-      (mockTranslation as any).isPolish = () => false;
     });
 
-    it('skips critique translation when a chapter has no critique', async () => {
-      (mockTranslation as any).isPolish = () => true;
-      const translateCritiqueSpy = spyOn(mockTranslation as any, 'translateCritiqueToPolish$')
-        .and.callFake(() => of(null));
+    it('calls translateBookTo$ when target is non-English and pipes the translated chapters into the file', async () => {
+      (mockTranslation as any).exportLanguage = () => 'pl';
+      component.exportLanguage = 'pl';
+      const translated = [{
+        number: 1,
+        title: 'Rozdział 1: Początek',
+        content: 'Przetłumaczona treść.'
+      }];
+      const translateBookSpy = spyOn(mockTranslation as any, 'translateBookTo$')
+        .and.callFake(() => of(translated));
 
       chaptersSubject.next([
-        { number: 1, title: 'Chapter 1', content: 'Body without critique.' }
+        { number: 1, title: 'Chapter 1: The Beginning', content: 'Original English body.' }
       ]);
       fixture.detectChanges();
 
@@ -204,6 +153,70 @@ describe('ExportComponent', () => {
       spyOn(document.body, 'removeChild').and.stub();
       spyOn(HTMLAnchorElement.prototype, 'click').and.stub();
 
+      let capturedBody = '';
+      spyOn(component, 'generateMarkdown' as any).and.callFake((ch: any[]) => {
+        capturedBody = (component as any).buildBookContent(ch);
+        return new Blob([capturedBody], { type: 'text/markdown' });
+      });
+
+      component.setFormat('markdown');
+      await component.exportBook();
+
+      // The translation helper was invoked with the user's target
+      // language and the source chapters.
+      expect(translateBookSpy).toHaveBeenCalledTimes(1);
+      const [passedChapters, passedTarget, passedWord] = translateBookSpy.calls.mostRecent().args as [any[], string, string];
+      expect(passedChapters[0].number).toBe(1);
+      expect(passedTarget).toBe('pl');
+      // The localised "Chapter" word for the target language is
+      // passed so the title translator can rebuild the
+      // "Rozdział N: …" header.
+      expect(passedWord).toBe('Rozdział');
+      // The exported body contains the Polish title, not the
+      // English original.
+      expect(capturedBody).toContain('Rozdział 1: Początek');
+      expect(capturedBody).toContain('Przetłumaczona treść.');
+      expect(capturedBody).not.toContain('Chapter 1: The Beginning');
+    });
+  });
+
+  describe('Critique rendering (regression: still works after the Polish pass removal)', () => {
+    it('renders the critique in the exported file when includeCritiques is true', async () => {
+      // The orchestrator now never writes Polish to the critique
+      // (it stores English), so the export component should ship
+      // the source critique text directly into the markdown.
+      (mockTranslation as any).exportLanguage = () => 'en';
+      component.exportLanguage = 'en';
+      const translateBookSpy = spyOn(mockTranslation as any, 'translateBookTo$')
+        .and.callFake((chapters: any[]) => of(chapters));
+
+      const englishChapter = {
+        number: 1,
+        title: 'Chapter 1',
+        content: 'Body.',
+        critique: {
+          scores: { prose: 8, pacing: 7, showVsTell: 8, dialogue: 7, continuity: 8, hookStrength: 7, thematicResonance: 8 },
+          overallScore: 7.7,
+          feedback: 'Solid chapter.',
+          mustFix: ['tighten paragraph 2'],
+          suggestions: ['vary sentence length'],
+          createdAt: new Date()
+        }
+      };
+      chaptersSubject.next([englishChapter]);
+      fixture.detectChanges();
+
+      spyOn(window.URL, 'createObjectURL').and.returnValue('blob:mock');
+      spyOn(document.body, 'appendChild').and.stub();
+      spyOn(document.body, 'removeChild').and.stub();
+      spyOn(HTMLAnchorElement.prototype, 'click').and.stub();
+
+      let capturedBody = '';
+      spyOn(component, 'generateMarkdown' as any).and.callFake((ch: any[]) => {
+        capturedBody = (component as any).buildBookContent(ch);
+        return new Blob([capturedBody], { type: 'text/markdown' });
+      });
+
       component.exportOptions = {
         includeTitles: true,
         includeTOC: false,
@@ -216,10 +229,14 @@ describe('ExportComponent', () => {
 
       await component.exportBook();
 
-      // No critique → no call to the translator.
-      expect(translateCritiqueSpy).not.toHaveBeenCalled();
-
-      (mockTranslation as any).isPolish = () => false;
+      // English export — no book-level translation step.
+      expect(translateBookSpy).not.toHaveBeenCalled();
+      // The critique feedback made it into the file. The
+      // markdown builder only inlines the `feedback` field
+      // (mustFix / suggestions are not part of the exported
+      // markdown), so we assert on feedback only.
+      expect(capturedBody).toContain('Solid chapter.');
+      expect(capturedBody).toContain('## Critique Report');
     });
   });
 });

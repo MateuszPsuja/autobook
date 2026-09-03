@@ -1,5 +1,6 @@
 import { BookConfig } from '../../models/book-config.model';
 import { BookCoverArt } from '../../core/providers/illustration.types';
+import { ExportLanguage, ExportLabels } from '../../i18n/export-labels';
 
 type DocContent = any;
 type TDocumentDefinitions = any;
@@ -57,9 +58,9 @@ const BACK_COVER_FIT: [number, number] = [150, 200]; // max width × max height,
  */
 export function buildCoverPage(
   art: BookCoverArt,
-  ctx: { bookTitle: string; bookAuthor: string; genre: string; isPolish: boolean }
+  ctx: { bookTitle: string; bookAuthor: string; genre: string; labels: ExportLabels }
 ): TDocumentDefinitions['content'] {
-  const { bookTitle, bookAuthor, genre } = ctx;
+  const { bookTitle, bookAuthor, genre, labels } = ctx;
   const eyebrow = (genre || '').trim();
   const hasImage = !!(art.base64 && art.base64.length > 0);
 
@@ -111,9 +112,9 @@ export function buildCoverPage(
     });
   }
 
-  // "a novel" tag
+  // "a novel" tag — localised via the labels bundle.
   out.push({
-    text: ctx.isPolish ? 'powieść' : 'a novel',
+    text: labels.aBookLabel,
     style: 'aNovel',
     margin: [0, 16, 0, 0],
   });
@@ -156,9 +157,9 @@ export function buildCoverPage(
  */
 export function buildBackCoverPage(
   art: BookCoverArt,
-  ctx: { blurb: string; authorBio: string; bookAuthor: string }
+  ctx: { blurb: string; authorBio: string; bookAuthor: string; isbnPlaceholder: string }
 ): TDocumentDefinitions['content'] {
-  const { blurb, authorBio, bookAuthor } = ctx;
+  const { blurb, authorBio, bookAuthor, isbnPlaceholder } = ctx;
   const hasImage = !!(art.base64 && art.base64.length > 0);
 
   const out: DocContent[] = [];
@@ -215,7 +216,7 @@ export function buildBackCoverPage(
 
   // ISBN placeholder
   out.push({
-    text: 'ISBN 000-0-00-000000-0',
+    text: isbnPlaceholder,
     style: 'coverIsbn',
   });
 
@@ -225,23 +226,27 @@ export function buildBackCoverPage(
 /**
  * Derive a short back-cover blurb and a one-line author bio from the
  * book config. No LLM call — this is a deterministic summary so the
- * output is stable across re-exports. The text is hand-tuned to read
- * like back-cover copy in either Polish or English, with hard caps to
- * keep the cover page visually balanced.
+ * output is stable across re-exports. The blurb template and the
+ * author-bio text are pulled from the target language's `ExportLabels`,
+ * so the back cover reads naturally in every supported language.
  */
 export function buildBackCoverBlurb(
   config: BookConfig,
-  isPolish: boolean
+  _language: ExportLanguage,
+  labels: ExportLabels
 ): { blurb: string; authorBio: string } {
   const themes = (config.themes || []).slice(0, 3).filter(Boolean);
   const themePart = themes.length
-    ? themes.join(isPolish ? ', ' : ', ')
-    : (isPolish ? 'tajemnicą' : 'mystery');
+    ? themes.join(labels.themeSeparator)
+    : labels.backCoverUnknownTheme;
 
-  const protagonist = config.protagonist?.name || (isPolish ? 'Bohater' : 'A protagonist');
-  const blurbRaw = isPolish
-    ? `„${config.title || 'Ta książka'}" to opowieść o ${protagonist}, w której ${themePart} łączą się z niespodziewanymi zwrotami akcji. Pełna napięcia historia, która zostaje w pamięci.`
-    : `"${config.title || 'This book'}" is a story about ${protagonist}, where ${themePart} collide with unexpected turns. A page-turner that stays with you.`;
+  const protagonist = config.protagonist?.name || labels.backCoverUnknownProtagonist;
+  const title = (config.title || '').trim() || labels.backCoverUnknownTitle;
+
+  const blurbRaw = labels.backCoverBlurbTemplate
+    .replace('{title}', title)
+    .replace('{protagonist}', protagonist)
+    .replace('{themePart}', themePart);
 
   const blurb = blurbRaw.length > 280 ? blurbRaw.slice(0, 279).trimEnd() + '\u2026' : blurbRaw;
 
@@ -251,18 +256,11 @@ export function buildBackCoverBlurb(
   // author, so we don't use `config.protagonist` here. The themes
   // (if any) are still woven in so the bio reflects what the book is
   // actually about.
-  const head = isPolish ? 'O autorze' : 'About the author';
-  const subject = isPolish
-    ? 'AutoBook — asystent do opowiadania historii napędzany sztuczną inteligencją'
-    : 'AutoBook, an AI-powered storytelling assistant';
   let authorBio: string;
   if (themes.length) {
-    const verb = isPolish
-      ? ' eksplorujący tematy takie jak'
-      : ' exploring themes such as';
-    authorBio = `${head}: ${subject}${verb} ${themePart}.`;
+    authorBio = `${labels.backCoverHead}: ${labels.backCoverSubject}${labels.backCoverVerb} ${themePart}.`;
   } else {
-    authorBio = `${head}: ${subject}.`;
+    authorBio = `${labels.backCoverHead}: ${labels.backCoverSubject}.`;
   }
   if (authorBio.length > 200) {
     authorBio = authorBio.slice(0, 199).trimEnd() + '\u2026';

@@ -2,13 +2,10 @@ import { Component, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterModule } from '@angular/router';
-import { firstValueFrom } from 'rxjs';
 import { ThemeService } from '../../core/theme.service';
 import { ApiService } from '../../core/api.service';
 import { ProviderService } from '../../core/providers/provider.service';
 import { TranslationService } from '../../i18n/translation.service';
-import { PersistenceService } from '../../core/persistence.service';
-import { BookStateService } from '../../book/state/book-state.service';
 import { DialogHostComponent } from '../../core/dialog-host.component';
 
 @Component({
@@ -23,10 +20,7 @@ export class ShellComponent {
   protected providerService = inject(ProviderService);
   protected translationService = inject(TranslationService);
   protected router = inject(Router);
-  
-  private persistenceService = inject(PersistenceService);
-  private bookStateService = inject(BookStateService);
-  
+
   isDarkMode = false;
   selectedModel = '';
 
@@ -91,31 +85,6 @@ export class ShellComponent {
     if (url.includes('/viewer')) return this.t('pages.viewer.subtitle');
     if (url.includes('/export')) return this.t('pages.export.subtitle');
     return this.t('app.subtitle');
-  }
-
-  async toggleLanguage(): Promise<void> {
-    // Always reset the book to its default state when the UI language
-    // switches, not only when chapters exist. The book's content was
-    // generated in the previous language (chapters in Polish mode are
-    // post-translated to Polish by the orchestrator), so carrying the
-    // in-memory state — and the persisted IndexedDB checkpoint — into
-    // the new language would leave the viewer/export out of sync with
-    // the UI. Resetting unconditionally keeps the two views consistent.
-    //
-    // clearAll() returns an Observable, not a Promise. Awaiting an
-    // Observable resolves to the Observable itself on the next tick —
-    // the language would toggle before the IndexedDB clear finished.
-    // firstValueFrom converts the Observable to a real Promise that
-    // only resolves when the clear completes, so the reset is
-    // observable to the user before the language flips.
-    await firstValueFrom(this.persistenceService.clearAll());
-    this.bookStateService.reset();
-
-    this.translationService.toggleLanguage();
-  }
-
-  isEnglish(): boolean {
-    return this.translationService.isEnglish();
   }
 
   getModelName(): string {

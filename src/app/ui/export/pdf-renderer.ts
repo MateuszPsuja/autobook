@@ -3,6 +3,7 @@ import { BookStateService } from '../../book/state/book-state.service';
 import { stripRunningWordCount } from '../../shared/utils/chapter-cleanup';
 import { ChapterIllustration, BookCoverArt, IllustrationStyle } from '../../core/providers/illustration.types';
 import { buildCoverPage, buildBackCoverPage, buildBackCoverBlurb } from './pdf-cover';
+import { ExportLanguage, getExportLabels, ExportLabels } from '../../i18n/export-labels';
 
 /**
  * Build a properly composed book PDF document definition.
@@ -45,7 +46,14 @@ export interface PdfExportOptions {
 
 export interface PdfExportContext {
   state: ReturnType<BookStateService['getState']>;
-  isPolish: boolean;
+  /**
+   * Target language for the export. Drives the localised labels
+   * (TOC, "Chapter", "Critique Report", …) and the author byline.
+   * The chapter bodies themselves are translated upstream by the
+   * export component, so by the time the renderer sees them they
+   * are already in `language`.
+   */
+  language: ExportLanguage;
   chapterIllustrations?: Map<string, ChapterIllustration>;
   coverArt?: BookCoverArt;
   backCoverArt?: BookCoverArt;
@@ -269,7 +277,6 @@ function buildChapter(args: {
   chapter: Chapter;
   index: number;
   total: number;
-  isPolish: boolean;
   options: PdfExportOptions;
   labels: {
     chapterLabel: string;
@@ -279,7 +286,7 @@ function buildChapter(args: {
   };
   chapterIllustrations?: Map<string, ChapterIllustration>;
 }): DocContent[] {
-  const { chapter, index, total, isPolish, options, labels } = args;
+  const { chapter, index, total, options, labels } = args;
   const blocks = parseContent(chapter.content);
   const out: DocContent[] = [];
 
@@ -311,9 +318,11 @@ function buildChapter(args: {
     });
   } else {
     // includeTitles is off — anchor the id on a marker line at the start
-    // of the chapter so the TOC still resolves.
+    // of the chapter so the TOC still resolves. The marker uses the
+    // localised "Chapter" word so the anchor text matches the
+    // language of the rest of the export.
     out.push({
-      text: `Chapter ${chapter.number}`,
+      text: `${labels.chapterLabel} ${chapter.number}`,
       style: 'bodyNoIndent',
       id: `ch-${chapter.id}`,
       margin: [0, 0, 0, 0],
@@ -481,31 +490,20 @@ export function buildPdfDocument(
   options: PdfExportOptions,
   context: PdfExportContext,
 ): TDocumentDefinitions {
-  const isPolish = context.isPolish;
+  const labels = getExportLabels(context.language);
   const config = context.state.config;
-  const bookTitle = (config?.title || '').trim() ||
-    (isPolish ? 'Bez tytułu' : 'Untitled');
+  const bookTitle = (config?.title || '').trim() || labels.untitledFallback;
   // The on-page byline (cover, back cover, title page) is the same
   // string used for the PDF `info.author` metadata — every book
   // shipped from AutoBook is an AI-generated work, so the visible
   // byline and the file metadata stay in sync. The protagonist name
   // is the story's main character, not the author, and is no longer
   // used as the byline.
-  const bookAuthor = isPolish
-    ? 'Napisała sztuczna inteligencja'
-    : 'Written by artificial intelligence';
+  const bookAuthor = labels.bookAuthor;
   const bookSubtitle = (config?.themes && config.themes.length)
     ? config.themes.slice(0, 3).join('  \u00B7  ')
     : null;
   const genre = (config?.genre || '').trim();
-
-  // Labels
-  const tocLabel = isPolish ? 'Spis Treści' : 'Table of Contents';
-  const chapterLabel = isPolish ? 'Rozdział' : 'Chapter';
-  const critiqueLabel = isPolish ? 'Raport krytyka' : 'Critique Report';
-  const overallScoreLabel = isPolish ? 'Ocena ogólna' : 'Overall score';
-  const feedbackLabel = isPolish ? 'Uwagi' : 'Feedback';
-  const aBookLabel = isPolish ? 'powieść' : 'a novel';
 
   // ---- Content list -------------------------------------------------------
   const content: DocContent[] = [];
@@ -518,7 +516,7 @@ export function buildPdfDocument(
   // returns one.
   if (context.coverArt) {
     content.push(
-      ...buildCoverPage(context.coverArt, { bookTitle, bookAuthor, genre, isPolish }),
+      ...buildCoverPage(context.coverArt, { bookTitle, bookAuthor, genre, labels }),
     );
   } else {
     // No cover image — fall back to the original title page (which is
@@ -529,14 +527,14 @@ export function buildPdfDocument(
         bookSubtitle,
         bookAuthor,
         genre,
-        aBookLabel,
+        aBookLabel: labels.aBookLabel,
       }),
     );
   }
 
   if (options.includeTOC) {
     content.push(
-      ...buildToc({ chapters, tocLabel, chapterLabel }),
+      ...buildToc({ chapters, tocLabel: labels.tocLabel, chapterLabel: labels.chapterLabel }),
     );
   }
 
@@ -546,9 +544,13 @@ export function buildPdfDocument(
         chapter,
         index,
         total: chapters.length,
-        isPolish,
         options,
-        labels: { chapterLabel, critiqueLabel, overallScoreLabel, feedbackLabel },
+        labels: {
+          chapterLabel: labels.chapterLabel,
+          critiqueLabel: labels.critiqueLabel,
+          overallScoreLabel: labels.overallScoreLabel,
+          feedbackLabel: labels.feedbackLabel
+        },
         chapterIllustrations: context.chapterIllustrations,
       }),
     );
@@ -559,9 +561,14 @@ export function buildPdfDocument(
   // first element of `buildBackCoverPage`'s output, which is the
   // reliable pattern with pdfmake 0.2.7.
   if (context.backCoverArt) {
-    const { blurb, authorBio } = buildBackCoverBlurb(config ?? {} as any, isPolish);
+    const { blurb, authorBio } = buildBackCoverBlurb(config ?? {} as any, context.language, labels);
     content.push(
-      ...buildBackCoverPage(context.backCoverArt, { blurb, authorBio, bookAuthor }),
+      ...buildBackCoverPage(context.backCoverArt, {
+        blurb,
+        authorBio,
+        bookAuthor,
+        isbnPlaceholder: labels.isbnPlaceholder
+      }),
     );
   }
 

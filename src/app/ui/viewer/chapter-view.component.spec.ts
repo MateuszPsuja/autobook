@@ -2,7 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { ChapterViewComponent } from './chapter-view.component';
 import { BookStateService } from '../../book/state/book-state.service';
 import { TranslationService } from '../../i18n/translation.service';
-import { of, throwError } from 'rxjs';
+import { of } from 'rxjs';
 import { Chapter } from '../../models/chapter.model';
 
 describe('ChapterViewComponent', () => {
@@ -70,23 +70,9 @@ describe('ChapterViewComponent', () => {
     });
 
     const translationSpy = jasmine.createSpyObj('TranslationService', [
-      'get',
-      'isEnglish',
-      'language',
-      'looksPolish',
-      'translateCritiqueToPolish$'
+      'get'
     ]);
     translationSpy.get.and.callFake((key: string) => key);
-    translationSpy.isEnglish.and.returnValue(true);
-    translationSpy.language.and.returnValue('en');
-    // Default: source is English, so the viewer proceeds to translate.
-    // Individual tests override this to simulate the post-translation
-    // pass already having run.
-    translationSpy.looksPolish.and.returnValue(false);
-    // Pass-through so tests that select a chapter don't kick off
-    // real translation work; the component mirrors the source
-    // critique into displayCritique when language is English.
-    translationSpy.translateCritiqueToPolish$.and.callFake((critique: any) => of(critique));
 
     TestBed.configureTestingModule({
       providers: [
@@ -129,6 +115,16 @@ describe('ChapterViewComponent', () => {
       component.selectChapter(mockChapters[1], 1);
       expect(component.selectedChapterIndex).toBe(1);
     });
+
+    it('mirrors the source critique into the displayCritique signal', () => {
+      // English-only UI: the critique in state is always English, so
+      // selecting a chapter just copies the source critique into the
+      // display signal — no LLM call.
+      component.selectChapter(mockChapters[0], 0);
+      expect(component.getFeedback()).toBe('Good chapter overall.');
+      expect(component.getMustFix()).toEqual(['Fix grammar in paragraph 2']);
+      expect(component.getSuggestions()).toEqual(['Consider adding more dialogue']);
+    });
   });
 
   describe('nextChapter', () => {
@@ -137,7 +133,7 @@ describe('ChapterViewComponent', () => {
       component.selectedChapterIndex = 0;
 
       component.nextChapter();
-      
+
       // Subscribe to the observable to complete the test
       setTimeout(() => {
         expect(component.selectedChapterIndex).toBe(1);
@@ -150,7 +146,7 @@ describe('ChapterViewComponent', () => {
       component.selectedChapterIndex = 1;
 
       component.nextChapter();
-      
+
       setTimeout(() => {
         expect(component.selectedChapterIndex).toBe(1);
         done();
@@ -225,7 +221,7 @@ describe('ChapterViewComponent', () => {
 
   describe('Critique Helpers', () => {
     beforeEach(() => {
-      component.selectedChapter = mockChapters[0];
+      component.selectChapter(mockChapters[0], 0);
     });
 
     describe('getProseScore', () => {
@@ -234,7 +230,7 @@ describe('ChapterViewComponent', () => {
       });
 
       it('should return 0 when no critique', () => {
-        component.selectedChapter = mockChapters[1];
+        component.selectChapter(mockChapters[1], 1);
         expect(component.getProseScore()).toBe(0);
       });
     });
@@ -245,7 +241,7 @@ describe('ChapterViewComponent', () => {
       });
 
       it('should return 0 when no critique', () => {
-        component.selectedChapter = mockChapters[1];
+        component.selectChapter(mockChapters[1], 1);
         expect(component.getPacingScore()).toBe(0);
       });
     });
@@ -256,7 +252,7 @@ describe('ChapterViewComponent', () => {
       });
 
       it('should return 0 when no critique', () => {
-        component.selectedChapter = mockChapters[1];
+        component.selectChapter(mockChapters[1], 1);
         expect(component.getDialogueScore()).toBe(0);
       });
     });
@@ -267,7 +263,7 @@ describe('ChapterViewComponent', () => {
       });
 
       it('should return empty string when no critique', () => {
-        component.selectedChapter = mockChapters[1];
+        component.selectChapter(mockChapters[1], 1);
         expect(component.getFeedback()).toBe('');
       });
     });
@@ -280,7 +276,7 @@ describe('ChapterViewComponent', () => {
       });
 
       it('should return empty array when no critique', () => {
-        component.selectedChapter = mockChapters[1];
+        component.selectChapter(mockChapters[1], 1);
         expect(component.getMustFix().length).toBe(0);
       });
     });
@@ -293,7 +289,7 @@ describe('ChapterViewComponent', () => {
       });
 
       it('should return empty array when no critique', () => {
-        component.selectedChapter = mockChapters[1];
+        component.selectChapter(mockChapters[1], 1);
         expect(component.getSuggestions().length).toBe(0);
       });
     });
@@ -304,7 +300,7 @@ describe('ChapterViewComponent', () => {
       });
 
       it('should return false when chapter has no critique', () => {
-        component.selectedChapter = mockChapters[1];
+        component.selectChapter(mockChapters[1], 1);
         expect(component.hasCritique()).toBe(false);
       });
     });
@@ -314,110 +310,6 @@ describe('ChapterViewComponent', () => {
     it('should call translationService.get', () => {
       component.t('test.key');
       expect(translationServiceSpy.get).toHaveBeenCalledWith('test.key');
-    });
-  });
-
-  describe('Critique on-the-fly translation', () => {
-    // The post-translation step at generation time already writes
-    // Polish text into the state for new runs, but books that
-    // existed before that pass (or runs where the translation
-    // silently fell back to English) still hold English
-    // critiques. The viewer keeps a `displayCritique` signal so
-    // the panel flips to Polish without requiring a re-generate.
-    const plCritique = {
-      scores: {
-        prose: 8,
-        pacing: 7,
-        showVsTell: 8,
-        dialogue: 7,
-        continuity: 8,
-        hookStrength: 7,
-        thematicResonance: 8
-      },
-      overallScore: 7.7,
-      feedback: 'Świetny rozdział.',
-      mustFix: ['Popraw drugi akapit.'],
-      suggestions: ['Dodaj więcej dialogu.'],
-      createdAt: new Date()
-    };
-
-    it('mirrors the source critique in English without invoking the translator', () => {
-      translationServiceSpy.isEnglish.and.returnValue(true);
-      translationServiceSpy.language.and.returnValue('en');
-      component.selectChapter(mockChapters[0], 0);
-      return Promise.resolve().then(() => {
-        expect(component.getFeedback()).toBe('Good chapter overall.');
-        expect(component.getMustFix()).toEqual(['Fix grammar in paragraph 2']);
-        expect(component.getSuggestions()).toEqual(['Consider adding more dialogue']);
-        expect(translationServiceSpy.translateCritiqueToPolish$).not.toHaveBeenCalled();
-      });
-    });
-
-    it('requests a Polish translation when language is Polish and surfaces it', () => {
-      translationServiceSpy.isEnglish.and.returnValue(false);
-      translationServiceSpy.language.and.returnValue('pl');
-      translationServiceSpy.translateCritiqueToPolish$.and.callFake(() => of(plCritique));
-
-      component.selectChapter(mockChapters[0], 0);
-      return Promise.resolve().then(() => {
-        expect(translationServiceSpy.translateCritiqueToPolish$).toHaveBeenCalledTimes(1);
-        expect(component.getFeedback()).toBe('Świetny rozdział.');
-        expect(component.getMustFix()).toEqual(['Popraw drugi akapit.']);
-        expect(component.getSuggestions()).toEqual(['Dodaj więcej dialogu.']);
-      });
-    });
-
-    it('skips the API call entirely when the source critique is already Polish', () => {
-      // Simulate the post-generation translation pass: the critique
-      // in the state is already Polish (feedback contains diacritics),
-      // so the diacritics check fires and no LLM call should go out
-      // on every chapter switch.
-      translationServiceSpy.isEnglish.and.returnValue(false);
-      translationServiceSpy.language.and.returnValue('pl');
-      translationServiceSpy.looksPolish.and.returnValue(true);
-
-      component.selectChapter(mockChapters[0], 0);
-      return Promise.resolve().then(() => {
-        expect(translationServiceSpy.translateCritiqueToPolish$).not.toHaveBeenCalled();
-        // Source critique (English) is still mirrored so the panel
-        // shows the original English text — that's the right fallback
-        // when we deliberately skip translation.
-        expect(component.getFeedback()).toBe('Good chapter overall.');
-      });
-    });
-
-    it('still requests translation when feedback is empty or English', () => {
-      // The new "feedback is Polish" heuristic only short-circuits
-      // when feedback itself contains diacritics. An empty feedback
-      // (critique was a sentinel like `unavailableReason`) or an
-      // English feedback (legacy book) must fall through to the
-      // translator so the rest of the fields get translated.
-      translationServiceSpy.isEnglish.and.returnValue(false);
-      translationServiceSpy.language.and.returnValue('pl');
-      translationServiceSpy.looksPolish.and.returnValue(false);
-      translationServiceSpy.translateCritiqueToPolish$.and.callFake(() => of(mockChapters[0].critique!));
-
-      component.selectChapter(mockChapters[0], 0);
-      return Promise.resolve().then(() => {
-        expect(translationServiceSpy.translateCritiqueToPolish$).toHaveBeenCalledTimes(1);
-      });
-    });
-
-    it('keeps the English copy visible if the Polish translation errors', () => {
-      translationServiceSpy.isEnglish.and.returnValue(false);
-      translationServiceSpy.language.and.returnValue('pl');
-      translationServiceSpy.translateCritiqueToPolish$.and.callFake(() =>
-        throwError(() => new Error('boom'))
-      );
-
-      component.selectChapter(mockChapters[0], 0);
-      return Promise.resolve().then(() => {
-        // The component seeds with the English first, then keeps
-        // it on error — so the getters still return the English
-        // strings instead of going blank.
-        expect(component.getFeedback()).toBe('Good chapter overall.');
-        expect(component.getMustFix()).toEqual(['Fix grammar in paragraph 2']);
-      });
     });
   });
 });

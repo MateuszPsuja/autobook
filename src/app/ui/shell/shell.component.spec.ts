@@ -3,51 +3,15 @@ import { ShellComponent } from './shell.component';
 import { ThemeService } from '../../core/theme.service';
 import { ApiService } from '../../core/api.service';
 import { TranslationService } from '../../i18n/translation.service';
-import { PersistenceService } from '../../core/persistence.service';
-import { BookStateService } from '../../book/state/book-state.service';
 import { Router, RouterModule } from '@angular/router';
-import { of, Subject } from 'rxjs';
+import { Subject } from 'rxjs';
 
 describe('ShellComponent', () => {
   let component: ShellComponent;
   let themeServiceSpy: jasmine.SpyObj<ThemeService>;
   let apiServiceSpy: jasmine.SpyObj<ApiService>;
   let translationServiceSpy: jasmine.SpyObj<TranslationService>;
-  let persistenceServiceSpy: jasmine.SpyObj<PersistenceService>;
-  let bookStateServiceSpy: jasmine.SpyObj<BookStateService>;
   let routerSpy: jasmine.SpyObj<Router>;
-
-  const mockBookState = {
-    chapters: [],
-    characterStore: {},
-    worldStateDoc: '',
-    status: 'idle' as const,
-    activeAgent: null,
-    blueprint: null,
-    currentDraft: null,
-    critique: null,
-    revisionCount: 0,
-    config: {} as any,
-    error: null,
-    continuityFlags: [],
-    skippedChapters: [],
-    stats: {
-      startTime: null,
-      endTime: null,
-      totalTokens: 0,
-      promptTokens: 0,
-      completionTokens: 0,
-      totalWords: 0,
-      agentStats: {
-        architect: { calls: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0 },
-        author: { calls: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0 },
-        critic: { calls: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0 },
-        reviser: { calls: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0 },
-        character: { calls: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0 },
-        continuity: { calls: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0 }
-      }
-    }
-  };
 
   beforeEach(async () => {
     const themeSpy = jasmine.createSpyObj('ThemeService', ['isDarkMode', 'toggleTheme']);
@@ -59,20 +23,9 @@ describe('ShellComponent', () => {
     apiSpy.getModelById.and.returnValue({ id: 'test/model', name: 'Test Model', contextWindow: '128k', contextWindowNum: 128000 });
 
     const translationSpy = jasmine.createSpyObj('TranslationService', [
-      'get', 'isEnglish', 'isPolish', 'toggleLanguage'
+      'get'
     ]);
     translationSpy.get.and.callFake((key: string) => key);
-    translationSpy.isEnglish.and.returnValue(true);
-    translationSpy.isPolish.and.returnValue(false);
-
-    const persistenceSpy = jasmine.createSpyObj('PersistenceService', ['clearAll']);
-    // The real PersistenceService.clearAll() returns Observable<void>;
-    // the production code wraps it with firstValueFrom. Match the
-    // real shape here so toggleLanguage's await actually resolves.
-    persistenceSpy.clearAll.and.returnValue(of(undefined));
-
-    const bookStateSpy = jasmine.createSpyObj('BookStateService', ['getState', 'reset']);
-    bookStateSpy.getState.and.returnValue(mockBookState);
 
     // Create router spy with url as a mockable property
     const routerEvents = new Subject<any>();
@@ -86,8 +39,6 @@ describe('ShellComponent', () => {
         { provide: ThemeService, useValue: themeSpy },
         { provide: ApiService, useValue: apiSpy },
         { provide: TranslationService, useValue: translationSpy },
-        { provide: PersistenceService, useValue: persistenceSpy },
-        { provide: BookStateService, useValue: bookStateSpy },
         { provide: Router, useValue: router }
       ]
     });
@@ -96,8 +47,6 @@ describe('ShellComponent', () => {
     themeServiceSpy = TestBed.inject(ThemeService) as jasmine.SpyObj<ThemeService>;
     apiServiceSpy = TestBed.inject(ApiService) as jasmine.SpyObj<ApiService>;
     translationServiceSpy = TestBed.inject(TranslationService) as jasmine.SpyObj<TranslationService>;
-    persistenceServiceSpy = TestBed.inject(PersistenceService) as jasmine.SpyObj<PersistenceService>;
-    bookStateServiceSpy = TestBed.inject(BookStateService) as jasmine.SpyObj<BookStateService>;
     routerSpy = TestBed.inject(Router) as jasmine.SpyObj<Router>;
   });
 
@@ -178,69 +127,6 @@ describe('ShellComponent', () => {
     it('should return correct subtitles for routes', () => {
       expect(component.getActivePageSubtitle()).toBeDefined();
       expect(typeof component.getActivePageSubtitle()).toBe('string');
-    });
-  });
-
-  describe('toggleLanguage', () => {
-    it('always resets the book to its default state and toggles the language', async () => {
-      // The book is reset unconditionally — the chapter content was
-      // generated in the previous UI language, so carrying it across
-      // a language switch would leave the viewer/export out of sync.
-      await component.toggleLanguage();
-
-      expect(persistenceServiceSpy.clearAll).toHaveBeenCalled();
-      expect(bookStateServiceSpy.reset).toHaveBeenCalled();
-      expect(translationServiceSpy.toggleLanguage).toHaveBeenCalled();
-    });
-
-    it('resets the book even when it has no chapters', async () => {
-      // Defensive: previously the reset was gated on `hasData`, so a
-      // language switch on a fresh project (no chapters yet) would skip
-      // clearAll/reset and leave any persisted config sitting around.
-      bookStateServiceSpy.getState.and.returnValue({ ...mockBookState });
-
-      await component.toggleLanguage();
-
-      expect(persistenceServiceSpy.clearAll).toHaveBeenCalled();
-      expect(bookStateServiceSpy.reset).toHaveBeenCalled();
-      expect(translationServiceSpy.toggleLanguage).toHaveBeenCalled();
-    });
-
-    it('resets the book when chapters exist', async () => {
-      const chapterWithData = {
-        id: 'chapter-1',
-        number: 1,
-        title: 'Chapter 1',
-        content: 'Test content',
-        wordCount: 2,
-        status: 'draft' as const,
-        createdAt: new Date(),
-        revisions: []
-      };
-      const stateWithData = {
-        ...mockBookState,
-        chapters: [chapterWithData]
-      };
-      bookStateServiceSpy.getState.and.returnValue(stateWithData);
-
-      await component.toggleLanguage();
-
-      expect(persistenceServiceSpy.clearAll).toHaveBeenCalled();
-      expect(bookStateServiceSpy.reset).toHaveBeenCalled();
-      expect(translationServiceSpy.toggleLanguage).toHaveBeenCalled();
-    });
-
-  });
-
-  describe('isEnglish', () => {
-    it('should return true when language is English', () => {
-      translationServiceSpy.isEnglish.and.returnValue(true);
-      expect(component.isEnglish()).toBe(true);
-    });
-
-    it('should return false when language is not English', () => {
-      translationServiceSpy.isEnglish.and.returnValue(false);
-      expect(component.isEnglish()).toBe(false);
     });
   });
 

@@ -15,6 +15,7 @@ import pdfMake from 'pdfmake/build/pdfmake';
 import pdfFonts from 'pdfmake/build/vfs_fonts';
 import { buildPdfDocument, PdfExportOptions } from './pdf-renderer';
 import { stripRunningWordCount } from '../../shared/utils/chapter-cleanup';
+import { ExportLanguage, EXPORT_LANGUAGES, getExportLabels, ExportLabels } from '../../i18n/export-labels';
 
 // Initialize pdfMake with virtual file system
 (pdfMake as any).vfs = (pdfFonts as any).pdfMake?.vfs || (pdfFonts as any).vfs;
@@ -33,6 +34,16 @@ export class ExportComponent implements OnInit {
 
   chapters$: Observable<Chapter[]>;
   selectedFormat: 'pdf' | 'epub' | 'docx' | 'markdown' = 'pdf';
+
+  /**
+   * Target language for the export. The book is always stored in
+   * English; this dropdown picks whether the export should ship a
+   * translated copy. 'en' (the default) skips the LLM translation
+   * pass entirely.
+   */
+  exportLanguage: ExportLanguage = 'en';
+  readonly availableExportLanguages = EXPORT_LANGUAGES;
+
   exportOptions: PdfExportOptions = {
     includeTitles: true,
     includeTOC: true,
@@ -69,7 +80,12 @@ export class ExportComponent implements OnInit {
     });
   }
 
-  ngOnInit(): void {}
+  ngOnInit(): void {
+    // Hydrate the export dropdown from the persisted value the
+    // translation service stores. Default ('en') is a no-op, so
+    // a fresh client still gets the fast no-translation path.
+    this.exportLanguage = this.translationService.exportLanguage();
+  }
 
   setFormat(format: string): void {
     this.selectedFormat = format as 'pdf' | 'epub' | 'docx' | 'markdown';
@@ -79,10 +95,29 @@ export class ExportComponent implements OnInit {
     return this.translationService.get(key);
   }
 
+  setExportLanguage(language: ExportLanguage): void {
+    this.exportLanguage = language;
+    this.translationService.setExportLanguage(language);
+  }
+
+  /**
+   * True when a non-English target is selected — the export will
+   * run the LLM translation pass for the whole book. Used by the
+   * template to show a "will translate to <language>" hint next
+   * to the export button.
+   */
+  willTranslate(): boolean {
+    return this.exportLanguage !== 'en';
+  }
+
   stopExport(): void {
     this.isExportStopped = true;
     this.ngZone.run(() => {
-      this.exportStatus = this.translationService.isPolish() ? 'Zatrzymywanie...' : 'Stopping...';
+      // UI status text stays in English regardless of target
+      // language — the localised "Stopping..." / "Arrêt..." /
+      // "Zatrzymywanie..." strings belong in the exported file,
+      // not in the progress line.
+      this.exportStatus = 'Stopping...';
     });
   }
 
@@ -96,6 +131,13 @@ export class ExportComponent implements OnInit {
     try {
       const state = this.bookStateService.getState();
       let chapters = [...state.chapters];
+      // `config` is the user-typed book metadata. When the user
+      // picked a non-English target, we translate the user-visible
+      // fields (title, genre, themes, character profiles) below and
+      // overwrite `config` with the translated copy so the cover,
+      // back cover, title page, and markdown heading all read in
+      // the target language. English / no target leaves it alone.
+      let config = state.config;
 
       if (!chapters || chapters.length === 0) {
         await this.dialogService.alert({
@@ -144,51 +186,50 @@ export class ExportComponent implements OnInit {
         return;
       }
 
-      // The orchestrator already translates chapter title + content
-      // to Polish after generation (when the user is in Polish mode),
-      // so the chapters in the state are already in the target
-      // language. Re-translating them here would burn an extra full
-      // LLM pass for the entire book and risk the model "improving"
-      // already-Polish prose, so we just ship the chapters as-is.
-      //
-      // Critiques are a narrow exception: if the user generated the
-      // book in English mode and then flipped the UI to Polish
-      // without resetting (pre-existing language-toggle behaviour
-      // preserved a no-data book, so any stale critique would slip
-      // through), the critique text is still English. Translating
-      // critiques here keeps the exported file consistent with the
-      // chosen UI language without re-touching the chapter bodies.
-      const shouldTranslate = this.translationService.isPolish();
-      if (shouldTranslate) {
+      // Translation: when the user picked a non-English export target,
+      // translate the whole book (metadata + chapters) into that
+      // language. English is the source — the orchestrator always
+      // writes English — so 'en' is a no-op.
+      const target = this.exportLanguage;
+      if (target !== 'en' && chapters.length > 0) {
+        const labels = getExportLabels(target);
         this.ngZone.run(() => {
           this.exportProgress = 30;
-          this.exportStatus = `Tlumaczenie raportow krytyki...`;
+          // Keep the in-progress status in English so it stays
+          // short and scannable — the localised "Übersetzung…" /
+          // "Tłumaczenie…" / "Перевод…" labels live in the
+          // exported file itself, not in the UI status line.
+          this.exportStatus = 'Translating...';
         });
 
-        // Translate the critique (feedback / mustFix / suggestions /
-        // unavailableReason) for each chapter in parallel, then write
-        // the translated critique back onto the in-memory chapter so
-        // the markdown / PDF / EPUB / DOCX builders pick it up.
-        const translatedCritiques = await Promise.all(
-          chapters.map(chapter =>
-            chapter.critique
-              ? firstValueFrom(this.translationService.translateCritiqueToPolish$(chapter.critique))
-              : Promise.resolve(undefined)
-          )
-        );
+        try {
+          // Translate the user-typed book metadata (title, genre,
+          // themes, plot, character names / backgrounds / etc.) so the
+          // cover, back-cover blurb, title page, and markdown top
+          // heading all read in the target language.
+          if (state.config) {
+            config = await firstValueFrom(
+              this.translationService.translateBookMetadataTo$(state.config, target)
+            );
+            if (this.isExportStopped) return;
+          }
+
+          // Translate every chapter's user-visible text fields.
+          chapters = await firstValueFrom(
+            this.translationService.translateBookTo$(chapters, target, labels.chapterLabel)
+          );
+          if (this.isExportStopped) return;
+        } catch (err) {
+          // A whole-book translation failure is rare (per-field
+          // helpers swallow errors) but if the outer observable
+          // errors anyway, ship the English chapters with a warning
+          // rather than failing the export.
+          console.error(`Export: translation to ${target} failed; shipping English copy.`, err);
+        }
 
         this.ngZone.run(() => {
-          this.exportProgress = 60;
+          this.exportProgress = 70;
         });
-
-        for (let i = 0; i < chapters.length; i++) {
-          if (translatedCritiques[i]) {
-            chapters[i] = {
-              ...chapters[i],
-              critique: translatedCritiques[i]
-            };
-          }
-        }
       }
 
       // PDF illustration pass (minimax-only). Runs in the try block
@@ -233,9 +274,13 @@ export class ExportComponent implements OnInit {
 
       this.ngZone.run(() => {
         this.progressInterval = setInterval(() => {
-          if (shouldTranslate && this.exportProgress < 85) {
+          // Translation (when applicable) pushed progress to 70
+          // before this interval starts, so its ceiling is 85.
+          // Without translation, the interval runs the bar from
+          // 0 to 90 in 10-point ticks.
+          if (target !== 'en' && this.exportProgress < 85) {
             this.exportProgress += 5;
-          } else if (!shouldTranslate && this.exportProgress < 90) {
+          } else if (target === 'en' && this.exportProgress < 90) {
             this.exportProgress += 10;
           }
         }, 150);
@@ -252,20 +297,20 @@ export class ExportComponent implements OnInit {
             chapterIllustrations,
             coverArt,
             backCoverArt,
-          });
+          }, config);
           filename = 'book-export.pdf';
           break;
         case 'epub':
-          content = this.generateEPUB(chapters);
+          content = this.generateEPUB(chapters, config);
           filename = 'book-export.epub';
           break;
         case 'docx':
-          content = this.generateDOCX(chapters);
+          content = this.generateDOCX(chapters, config);
           filename = 'book-export.docx';
           break;
         case 'markdown':
         default:
-          content = this.generateMarkdown(chapters);
+          content = this.generateMarkdown(chapters, config);
           filename = 'book-export.md';
           break;
       }
@@ -302,13 +347,23 @@ export class ExportComponent implements OnInit {
     chapterIllustrations?: Map<string, ChapterIllustration>;
     coverArt?: BookCoverArt;
     backCoverArt?: BookCoverArt;
-  }): Promise<Blob> {
+  }, translatedConfig?: any): Promise<Blob> {
     // Set pdfMake virtual file system with fonts
     (pdfMake as any).vfs = (pdfFonts as any).pdfMake?.vfs || (pdfFonts as any).vfs;
 
+    // If a translated config was provided, swap it into a copy of
+    // the state so the renderer reads the localised title / genre /
+    // themes / protagonist name from the cover, back cover, and
+    // title page. Otherwise the renderer falls through to the
+    // English state.config (the default for 'en' exports).
+    const baseState = this.bookStateService.getState();
+    const viewState = translatedConfig
+      ? { ...baseState, config: translatedConfig }
+      : baseState;
+
     const docDefinition = buildPdfDocument(chapters, this.exportOptions, {
-      state: this.bookStateService.getState(),
-      isPolish: this.translationService.isPolish(),
+      state: viewState,
+      language: this.exportLanguage,
       chapterIllustrations: illustrationCtx?.chapterIllustrations,
       coverArt: illustrationCtx?.coverArt,
       backCoverArt: illustrationCtx?.backCoverArt,
@@ -326,53 +381,51 @@ export class ExportComponent implements OnInit {
     });
   }
 
-  private generateEPUB(chapters: Chapter[]): Blob {
-    const content = this.buildBookContent(chapters);
+  private generateEPUB(chapters: Chapter[], translatedConfig?: any): Blob {
+    const content = this.buildBookContent(chapters, translatedConfig);
     return new Blob([content], { type: 'application/epub+zip' });
   }
 
-  private generateDOCX(chapters: Chapter[]): Blob {
-    const content = this.buildBookContent(chapters);
+  private generateDOCX(chapters: Chapter[], translatedConfig?: any): Blob {
+    const content = this.buildBookContent(chapters, translatedConfig);
     return new Blob([content], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
   }
 
-  private generateMarkdown(chapters: Chapter[]): Blob {
-    const content = this.buildBookContent(chapters);
+  private generateMarkdown(chapters: Chapter[], translatedConfig?: any): Blob {
+    const content = this.buildBookContent(chapters, translatedConfig);
     return new Blob([content], { type: 'text/markdown' });
   }
 
-  private buildBookContent(chapters: Chapter[]): string {
-    const state = this.bookStateService.getState();
-    const isPolish = this.translationService.isPolish();
-    const bookTitle = state.config?.title || (isPolish ? 'Bez tytułu' : 'Untitled');
-    const tocLabel = isPolish ? 'Spis Treści' : 'Table of Contents';
-    const chapterLabel = isPolish ? 'Rozdział' : 'Chapter';
-    const critiqueLabel = isPolish ? 'Raport Krytyki' : 'Critique Report';
-    const overallScoreLabel = isPolish ? 'Ocena Ogólna' : 'Overall Score';
-    const feedbackLabel = isPolish ? 'Informacja Zwrotna' : 'Feedback';
+  private buildBookContent(chapters: Chapter[], translatedConfig?: any): string {
+    const labels = getExportLabels(this.exportLanguage);
+    // Prefer the translated title; fall through to the live state's
+    // title for the default (English) export.
+    const baseState = this.bookStateService.getState();
+    const config = translatedConfig ?? baseState.config;
+    const bookTitle = config?.title || labels.untitledFallback;
 
     let content = `# ${bookTitle}\n\n`;
-    
+
     if (this.exportOptions.includeTOC) {
-      content += `## ${tocLabel}\n\n`;
+      content += `## ${labels.tocLabel}\n\n`;
       chapters.forEach(chapter => {
-        content += `- [${chapterLabel} ${chapter.number}: ${chapter.title}](#chapter-${chapter.number})\n`;
+        content += `- [${labels.chapterLabel} ${chapter.number}: ${chapter.title}](#chapter-${chapter.number})\n`;
       });
       content += '\n';
     }
 
     chapters.forEach(chapter => {
       if (this.exportOptions.includeTitles) {
-        content += `# ${chapterLabel} ${chapter.number}: ${chapter.title}\n\n`;
+        content += `# ${labels.chapterLabel} ${chapter.number}: ${chapter.title}\n\n`;
       }
       content += `${stripRunningWordCount(chapter.content)}\n\n`;
-      
+
       if (this.exportOptions.includeCritiques && chapter.critique) {
-        content += `## ${critiqueLabel}\n\n`;
-        content += `**${overallScoreLabel}:** ${chapter.critique.overallScore}/10\n\n`;
-        content += `**${feedbackLabel}:** ${chapter.critique.feedback}\n\n`;
+        content += `## ${labels.critiqueLabel}\n\n`;
+        content += `**${labels.overallScoreLabel}:** ${chapter.critique.overallScore}/10\n\n`;
+        content += `**${labels.feedbackLabel}:** ${chapter.critique.feedback}\n\n`;
       }
-      
+
       content += '---\n\n';
     });
 

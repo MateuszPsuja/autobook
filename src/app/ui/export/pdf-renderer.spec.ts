@@ -1,6 +1,7 @@
 import { buildPdfDocument, PdfExportOptions } from './pdf-renderer';
 import { buildCoverPage, buildBackCoverPage, buildBackCoverBlurb } from './pdf-cover';
 import { Chapter } from '../../models/chapter.model';
+import { getExportLabels } from '../../i18n/export-labels';
 
 describe('buildPdfDocument', () => {
   const baseOptions: PdfExportOptions = {
@@ -62,7 +63,7 @@ describe('buildPdfDocument', () => {
   it('builds a doc with title page, TOC, and chapters', () => {
     const doc = buildPdfDocument([chapterA, chapterB], baseOptions, {
       state: baseState,
-      isPolish: false,
+      language: 'en',
     });
 
     expect(doc.pageSize).toEqual({ width: 432, height: 648 });
@@ -74,20 +75,30 @@ describe('buildPdfDocument', () => {
     expect(doc.styles.bodyParagraph).toBeTruthy();
   });
 
-  it('uses Polish labels when isPolish is true', () => {
+  it('uses Polish labels when language is Polish', () => {
     const doc = buildPdfDocument([chapterA], baseOptions, {
       state: baseState,
-      isPolish: true,
+      language: 'pl',
     });
     const flat = JSON.stringify(doc);
     expect(flat).toContain('SPIS TREŚCI');
     expect(flat).toContain('ROZDZIAŁ');
   });
 
+  it('uses German labels when language is German', () => {
+    const doc = buildPdfDocument([chapterA], baseOptions, {
+      state: baseState,
+      language: 'de',
+    });
+    const flat = JSON.stringify(doc);
+    expect(flat).toContain('INHALTSVERZEICHNIS');
+    expect(flat).toContain('KAPITEL');
+  });
+
   it('marks each chapter with an id for the TOC pageReference to resolve', () => {
     const doc = buildPdfDocument([chapterA, chapterB], baseOptions, {
       state: baseState,
-      isPolish: false,
+      language: 'en',
     });
     const flat = JSON.stringify(doc);
     // The chapter id is on a real text node (the eyebrow), not an empty
@@ -123,7 +134,7 @@ describe('buildPdfDocument', () => {
       ];
       const doc = buildPdfDocument(chapters, baseOptions, {
         state: baseState,
-        isPolish: false,
+        language: 'en',
       });
       const flat = JSON.stringify(doc);
       for (const ch of chapters) {
@@ -140,7 +151,7 @@ describe('buildPdfDocument', () => {
       ];
       const doc = buildPdfDocument(chapters, baseOptions, {
         state: baseState,
-        isPolish: false,
+        language: 'en',
       });
       const flat = JSON.stringify(doc);
       for (const ch of chapters) {
@@ -162,7 +173,7 @@ describe('buildPdfDocument', () => {
       const chapters = [makeChapter('1', 1, 'First', 'Body.')];
       const doc = buildPdfDocument(chapters, baseOptions, {
         state: baseState,
-        isPolish: false,
+        language: 'en',
       });
       const flat = JSON.stringify(doc);
       // Three middle dots (with spaces) for the chapter ornament
@@ -180,7 +191,7 @@ describe('buildPdfDocument', () => {
       ];
       const doc = buildPdfDocument(chapters, baseOptions, {
         state: baseState,
-        isPolish: false,
+        language: 'en',
       });
       const flat = JSON.stringify(doc);
       const tocPageRefCount = (flat.match(/"pageReference":"ch-/g) || []).length;
@@ -203,7 +214,7 @@ describe('buildPdfDocument', () => {
       ];
       const doc = buildPdfDocument(chapters, baseOptions, {
         state: baseState,
-        isPolish: true,
+        language: 'pl',
       });
       const flat = JSON.stringify(doc);
       // The TOC entry block is the one with `pageReference` set
@@ -229,7 +240,7 @@ describe('buildPdfDocument', () => {
       ];
       const doc = buildPdfDocument(chapters, baseOptions, {
         state: baseState,
-        isPolish: false,
+        language: 'en',
       });
       const flat = JSON.stringify(doc);
       // Find the position of each title in the flattened content; they
@@ -247,7 +258,7 @@ describe('buildPdfDocument', () => {
   it('still anchors the chapter id when includeTitles is false', () => {
     const doc = buildPdfDocument([chapterA], { ...baseOptions, includeTitles: false }, {
       state: baseState,
-      isPolish: false,
+      language: 'en',
     });
     const flat = JSON.stringify(doc);
     expect(flat).toContain('"id":"ch-a"');
@@ -257,7 +268,7 @@ describe('buildPdfDocument', () => {
   it('uses roman numerals for chapter eyebrows', () => {
     const doc = buildPdfDocument([chapterA, chapterB], baseOptions, {
       state: baseState,
-      isPolish: false,
+      language: 'en',
     });
     const flat = JSON.stringify(doc);
     expect(flat).toContain('CHAPTER  I');
@@ -267,7 +278,7 @@ describe('buildPdfDocument', () => {
   it('omits the header and footer on the first two pages (title + author)', () => {
     const doc = buildPdfDocument([chapterA], baseOptions, {
       state: baseState,
-      isPolish: false,
+      language: 'en',
     });
     expect(doc.header!(1, 1)).toBeNull();
     expect(doc.header!(2, 1)).toBeNull();
@@ -283,7 +294,7 @@ describe('buildPdfDocument', () => {
   it('alternates header alignment by page parity', () => {
     const doc = buildPdfDocument([chapterA], baseOptions, {
       state: baseState,
-      isPolish: false,
+      language: 'en',
     });
     // page 3 is odd → left
     const h3 = doc.header!(3, 1) as any;
@@ -296,7 +307,7 @@ describe('buildPdfDocument', () => {
   it('detects scene-break lines and renders them as ornaments', () => {
     const doc = buildPdfDocument([chapterB], baseOptions, {
       state: baseState,
-      isPolish: false,
+      language: 'en',
     });
     const flat = JSON.stringify(doc);
     expect(flat).toContain('"sceneBreak"');
@@ -305,7 +316,7 @@ describe('buildPdfDocument', () => {
   it('builds a drop-cap column for the first paragraph of a chapter', () => {
     const doc = buildPdfDocument([chapterA], baseOptions, {
       state: baseState,
-      isPolish: false,
+      language: 'en',
     });
     const flat = JSON.stringify(doc);
     // The first letter of "First paragraph..." is "F"
@@ -315,7 +326,7 @@ describe('buildPdfDocument', () => {
   it('skips the TOC when includeTOC is false', () => {
     const doc = buildPdfDocument([chapterA], { ...baseOptions, includeTOC: false }, {
       state: baseState,
-      isPolish: false,
+      language: 'en',
     });
     const flat = JSON.stringify(doc);
     expect(flat).not.toContain('TABLE OF CONTENTS');
@@ -324,7 +335,7 @@ describe('buildPdfDocument', () => {
   it('appends a critique section when includeCritiques is true', () => {
     const doc = buildPdfDocument([chapterWithCritique], { ...baseOptions, includeCritiques: true }, {
       state: baseState,
-      isPolish: false,
+      language: 'en',
     });
     const flat = JSON.stringify(doc);
     expect(flat).toContain('CRITIQUE REPORT');
@@ -334,7 +345,7 @@ describe('buildPdfDocument', () => {
   it('falls back to sensible defaults when config is missing', () => {
     const doc = buildPdfDocument([chapterA], baseOptions, {
       state: { config: { title: '', themes: [], protagonist: { name: '' } } } as any,
-      isPolish: false,
+      language: 'en',
     });
     const flat = JSON.stringify(doc);
     expect(flat).toContain('UNTITLED');
@@ -358,7 +369,7 @@ describe('buildPdfDocument', () => {
     it('sets info.author to "Written by artificial intelligence"', () => {
       const doc = buildPdfDocument([chapterA], baseOptions, {
         state: baseState,
-        isPolish: false,
+        language: 'en',
       });
       expect((doc as any).info).toBeTruthy();
       expect((doc as any).info.author).toBe('Written by artificial intelligence');
@@ -367,7 +378,7 @@ describe('buildPdfDocument', () => {
     it('sets info.title to the book title', () => {
       const doc = buildPdfDocument([chapterA], baseOptions, {
         state: baseState,
-        isPolish: false,
+        language: 'en',
       });
       expect((doc as any).info.title).toBe('A Test Book');
     });
@@ -375,7 +386,7 @@ describe('buildPdfDocument', () => {
     it('falls back to the localised "Untitled" when config title is missing', () => {
       const doc = buildPdfDocument([chapterA], baseOptions, {
         state: { config: { title: '', themes: [], protagonist: { name: '' } } } as any,
-        isPolish: false,
+        language: 'en',
       });
       expect((doc as any).info.title).toBe('Untitled');
     });
@@ -419,7 +430,7 @@ describe('buildPdfDocument', () => {
         bookTitle: 'A Test Book',
         bookAuthor: 'Hero',
         genre: 'Fantasy',
-        isPolish: false,
+        labels: getExportLabels('en')
       });
       const flat = JSON.stringify(cover);
       expect(flat).not.toMatch(/"pageBreak"\s*:/);
@@ -436,6 +447,7 @@ describe('buildPdfDocument', () => {
         blurb: 'A gripping tale.',
         authorBio: 'About the author: a storyteller.',
         bookAuthor: 'Hero',
+        isbnPlaceholder: 'ISBN 000-0-00-000000-0'
       });
       const flat = JSON.stringify(backCover);
       // Back cover starts with pageBreak: 'before' on the blurb
@@ -453,7 +465,7 @@ describe('buildPdfDocument', () => {
         bookTitle: 'A Test Book',
         bookAuthor: 'Hero',
         genre: 'Fantasy',
-        isPolish: false,
+        labels: getExportLabels('en')
       });
       const totalMargin = cover.reduce((sum: number, el: any) => {
         const m = el.margin || [0, 0, 0, 0];
@@ -480,12 +492,14 @@ describe('buildPdfDocument', () => {
           themes: ['Courage', 'Loss'],
           protagonist: { name: 'Hero', background: 'a wandering scholar' },
         } as any,
-        false
+        'en',
+        getExportLabels('en')
       );
       const backCover = buildBackCoverPage(backCoverArt, {
         blurb,
         authorBio,
         bookAuthor: 'Hero',
+        isbnPlaceholder: 'ISBN 000-0-00-000000-0'
       });
       const totalMargin = backCover.reduce((sum: number, el: any) => {
         const m = el.margin || [0, 0, 0, 0];
@@ -513,7 +527,7 @@ describe('buildPdfDocument', () => {
     it('strips the "Count:" prefix', () => {
       const doc = buildPdfDocument([corrupted], { ...baseOptions, includeTOC: false }, {
         state: baseState,
-        isPolish: false,
+        language: 'en',
       });
       const flat = JSON.stringify(doc);
       // The text should not contain "Count:" as a leading prefix
@@ -523,7 +537,7 @@ describe('buildPdfDocument', () => {
     it('strips per-word digit counters', () => {
       const doc = buildPdfDocument([corrupted], { ...baseOptions, includeTOC: false }, {
         state: baseState,
-        isPolish: false,
+        language: 'en',
       });
       const flat = JSON.stringify(doc);
       // No leftover "banner2" or "fluttered3" etc.
@@ -538,7 +552,7 @@ describe('buildPdfDocument', () => {
     it('strips the trailing "N words." summary', () => {
       const doc = buildPdfDocument([corrupted], { ...baseOptions, includeTOC: false }, {
         state: baseState,
-        isPolish: false,
+        language: 'en',
       });
       const flat = JSON.stringify(doc);
       expect(flat).not.toMatch(/\b91\s*words?\b/);
@@ -547,7 +561,7 @@ describe('buildPdfDocument', () => {
     it('strips the trailing book title + chapter number', () => {
       const doc = buildPdfDocument([corrupted], { ...baseOptions, includeTOC: false }, {
         state: baseState,
-        isPolish: false,
+        language: 'en',
       });
       const flat = JSON.stringify(doc);
       // "ECHOES OF TOMORROW 10" should not appear at the end of the body
@@ -562,7 +576,7 @@ describe('buildPdfDocument', () => {
       };
       const doc = buildPdfDocument([cleanChapter], { ...baseOptions, includeTOC: false }, {
         state: baseState,
-        isPolish: false,
+        language: 'en',
       });
       const flat = JSON.stringify(doc);
       // The legitimate numbers stay.
