@@ -30,7 +30,16 @@ const STYLE_PROMPTS: Record<IllustrationStyle, string> = {
   'digital-art': 'digital art, vibrant colors, sharp details',
   'pencil-sketch': 'pencil sketch, crosshatching, monochrome',
   'anime': 'anime style, cel-shaded, expressive',
-  'comic': 'comic book panel, bold inks, halftone shading',
+  // "comic" is ambiguous by itself: the model often defaults to B&W
+  // ink art (Sin City / manga) when it sees "comic book panel, bold
+  // inks, halftone shading" — especially for portraits with a plain
+  // background (the character-reference step). When the same book
+  // also gets a cover with no character reference, the model uses
+  // scene colours instead and the two come out in different
+  // palettes. The "full color, vibrant" suffix forces the model
+  // toward coloured comic art for the cover, the chapter plates,
+  // and the character reference alike.
+  'comic': 'comic book panel, bold inks, halftone shading, full color, vibrant colors, vivid color palette',
 };
 
 /**
