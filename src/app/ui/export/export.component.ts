@@ -208,6 +208,13 @@ export class ExportComponent implements OnInit {
         const result = await firstValueFrom(this.illustrationService.generateAll$({
           chapters,
           config: state.config,
+          // Pass the architect's blueprint so the cover and chapter
+          // scene LLM calls have actual story content (titles, plot
+          // beats, key events, character arcs) to ground the visual
+          // descriptions in. The illustration service falls back to
+          // title/themes + a 600-char opening excerpt when the
+          // blueprint is null, so hand-imported books still work.
+          blueprint: state.blueprint,
           characterStore: state.characterStore,
           style: this.exportOptions.illustrationStyle,
           onProgress: (done, total) => this.ngZone.run(() => {

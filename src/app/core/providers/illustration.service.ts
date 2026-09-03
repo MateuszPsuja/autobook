@@ -67,6 +67,65 @@ function styleSuffixFor(style: IllustrationStyle, genre: string, tone: string): 
   return STYLE_PROMPTS[resolved];
 }
 
+// === Brief/context formatting ==============================================
+
+/**
+ * Render a `ChapterBrief` as a short, LLM-friendly paragraph. The
+ * architect already pre-digests the chapter into structured fields
+ * (title, plotBeat, location, keyEvents, emotionalState, hookType),
+ * so the LLM only needs to translate that into a one-sentence
+ * visual scene — much more relevant than a 600-char opening
+ * excerpt of the prose, which is usually just setup.
+ *
+ * Returns null when the brief has nothing useful in it (no
+ * plotBeat, no keyEvents, no title) — the caller falls back to
+ * the prose excerpt in that case.
+ */
+function briefToContext(brief: { number: number; title?: string; plotBeat?: string; povCharacter?: string; location?: string; emotionalState?: string; keyEvents?: string[]; hookType?: string } | null | undefined): string | null {
+  if (!brief) return null;
+  const parts: string[] = [];
+  const label = brief.title?.trim()
+    ? `Chapter ${brief.number}, "${brief.title.trim()}"`
+    : `Chapter ${brief.number}`;
+  parts.push(label);
+  if (brief.povCharacter?.trim()) parts.push(`POV: ${brief.povCharacter.trim()}`);
+  if (brief.location?.trim()) parts.push(`Location: ${brief.location.trim()}`);
+  if (brief.plotBeat?.trim()) parts.push(`Plot beat: ${brief.plotBeat.trim()}`);
+  if (brief.emotionalState?.trim()) parts.push(`Mood: ${brief.emotionalState.trim()}`);
+  if (brief.keyEvents?.length) {
+    parts.push(`Key events: ${brief.keyEvents.slice(0, 5).join(', ')}`);
+  }
+  if (brief.hookType?.trim()) parts.push(`Ends on: ${brief.hookType.trim()}`);
+  // Sanity check: if we only have the chapter number and nothing
+  // else, the brief is effectively empty. Bail so the caller falls
+  // back to the prose excerpt.
+  if (parts.length <= 1) return null;
+  return parts.join('. ') + '.';
+}
+
+/**
+ * Render the top-level blueprint (themes, keyPlotPoints,
+ * characterArcs) as a short context paragraph for the cover scene
+ * LLM. Lets the cover reflect actual story content — the icon /
+ * front-of-book moment — instead of being invented from the title
+ * alone. Returns null when the blueprint is empty / missing.
+ */
+function blueprintToCoverContext(blueprint: any | null | undefined, themes: string): string | null {
+  if (!blueprint) return null;
+  const parts: string[] = [];
+  const kpp = (blueprint.keyPlotPoints || []).filter(Boolean).slice(0, 5);
+  if (kpp.length) parts.push(`Key plot points: ${kpp.join('; ')}`);
+  const arcs = (blueprint.characterArcs || []).filter(Boolean).slice(0, 4);
+  if (arcs.length) {
+    const arcStr = arcs
+      .map((a: any) => `${a.name || '?'} (${a.arcType || '?'} arc, ${a.startingState || '?'} \u2192 ${a.endingState || '?'})`)
+      .join('; ');
+    parts.push(`Character arcs: ${arcStr}`);
+  }
+  if (parts.length === 0) return null;
+  return parts.join('. ') + '.';
+}
+
 // === Small utilities =======================================================
 
 /**
@@ -346,7 +405,17 @@ export class IllustrationService {
       ? 'one iconic, striking visual moment for the front cover, with a strong central composition'
       : 'one atmospheric, quieter visual for the back cover, more abstract and complementary to the front cover';
 
-    const prompt = `Describe ${frontOrBack} of a ${genre || 'novel'} titled "${title}" (themes: ${themes}). ` +
+    // The blueprint's `keyPlotPoints` + `characterArcs` give the
+    // cover scene LLM real story content to work with — without
+    // it, the cover scene is invented from the title alone, which
+    // tends to land on a generic "iconic moment" that doesn't
+    // reflect the actual book. The blueprint-derived context is
+    // prepended as optional context so the title/themes path
+    // still works for hand-imported books.
+    const storyContext = blueprintToCoverContext(req.blueprint, themes);
+    const contextLine = storyContext ? `Story context: ${storyContext}\n` : '';
+    const prompt = `${contextLine}` +
+      `Describe ${frontOrBack} of a ${genre || 'novel'} titled "${title}" (themes: ${themes}). ` +
       `Output ONE sentence (30 words or fewer) with only visual elements: setting, lighting, composition, mood. ` +
       `No abstract concepts, no character names, no text. Output only the sentence.`;
 
@@ -458,19 +527,39 @@ export class IllustrationService {
     charRefs: Map<string, CharacterReference>,
   ): Observable<ChapterIllustration | null> {
     const cleanContent = stripRunningWordCount(chapter.content || '');
-    const excerpt = cleanContent.slice(0, 600);
-    // Defensive: the brief is not on the chapter type but the spec
-    // assumed it would be. If a future change copies the brief onto
-    // the chapter we can pick it up here.
+    // Resolve the brief for this chapter. The architect stores the
+    // briefs on `state.blueprint.chapters` (matched by number); the
+    // brief is the primary source of context now, with the prose
+    // excerpt kept as a fallback for hand-imported books that have
+    // no blueprint.
+    const blueprintBriefs = req.blueprint?.chapters || [];
+    const brief = blueprintBriefs.find(b => b.number === chapter.number) || null;
+    // Defensive: an older runtime may copy the brief onto the
+    // chapter object too. Pick it up if so, but the blueprint path
+    // is the supported one.
     const briefOnChapter = (chapter as any).brief as { povCharacter?: string; location?: string } | undefined;
-    const pov = briefOnChapter?.povCharacter;
-    const location = briefOnChapter?.location || '';
+    const pov = brief?.povCharacter?.trim() || briefOnChapter?.povCharacter;
+    const location = brief?.location?.trim() || briefOnChapter?.location || '';
     const ref = pov ? charRefs.get(pov) : undefined;
+
+    const briefContext = briefToContext(brief);
+    // When the brief has nothing useful (hand-imported book, or the
+    // blueprint predates a chapter being added) fall back to the
+    // 600-char opening excerpt. The brief path is preferred because
+    // the LLM gets the chapter's actual main beat instead of being
+    // stuck on the setup paragraph.
+    const excerpt = cleanContent.slice(0, 600);
+    const scenePrompt = briefContext
+      ? `Chapter context: ${briefContext}\n\n` +
+        `Output ONE sentence (40 words or fewer) describing the single most visually striking moment of this chapter, grounded in the plot beat above. ` +
+        `Use only visual elements (setting, lighting, composition, mood, character pose). ` +
+        `No abstract concepts, no text. Output only the sentence.`
+      : `Chapter excerpt: ${excerpt}\n\nOutput ONE sentence (40 words or fewer) describing the single most visually striking moment. Output only the sentence.`;
 
     return this.apiService.chatCompletion({
       model: this.resolveTextModel(),
       messages: [
-        { role: 'user', content: `Chapter excerpt: ${excerpt}\n\nOutput ONE sentence (40 words or fewer) describing the single most visually striking moment. Output only the sentence.` },
+        { role: 'user', content: scenePrompt },
       ],
     }).pipe(
       map(resp => {
@@ -489,7 +578,14 @@ export class IllustrationService {
         }).pipe(
           map(r => {
             if (!r) return null;
-            const caption = `Chapter ${chapter.number} \u00B7 ${truncate(scene.replace(/\.$/, ''), 60)}`;
+            // Caption prefers the brief title (cleaner, what the
+            // reader actually sees in the TOC) and falls back to
+            // the LLM-generated scene sentence when the brief
+            // isn't available.
+            const captionText = brief?.title?.trim()
+              ? brief.title.trim()
+              : truncate(scene.replace(/\.$/, ''), 60);
+            const caption = `Chapter ${chapter.number} \u00B7 ${captionText}`;
             return {
               base64: r.base64,
               mimeType: r.mimeType,
