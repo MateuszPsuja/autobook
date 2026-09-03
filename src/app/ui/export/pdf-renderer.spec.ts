@@ -338,7 +338,12 @@ describe('buildPdfDocument', () => {
     });
     const flat = JSON.stringify(doc);
     expect(flat).toContain('UNTITLED');
-    expect(flat).toContain('AUTOBOOK');
+    // The on-page byline is hard-coded — it does not depend on the
+    // protagonist name. The empty `protagonist.name` from the missing
+    // config no longer falls back to 'AutoBook'; the byline is always
+    // the AI author string. Cover, back cover, and title page all
+    // render it in uppercase.
+    expect(flat).toContain('WRITTEN BY ARTIFICIAL INTELLIGENCE');
   });
 
   describe('PDF metadata (info field)', () => {
@@ -347,9 +352,9 @@ describe('buildPdfDocument', () => {
     // title show up in the file's Properties dialog and in
     // downstream tools (Calibre, Adobe Reader, etc.). We hard-code
     // the author to "Written by artificial intelligence" because
-    // every book shipped from AutoBook is an AI-generated work;
-    // the in-cover byline is a separate concept and is rendered as
-    // page content.
+    // every book shipped from AutoBook is an AI-generated work.
+    // The visible on-page byline uses the same string and is
+    // rendered as page content.
     it('sets info.author to "Written by artificial intelligence"', () => {
       const doc = buildPdfDocument([chapterA], baseOptions, {
         state: baseState,

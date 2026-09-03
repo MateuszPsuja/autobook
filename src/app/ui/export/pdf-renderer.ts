@@ -485,8 +485,15 @@ export function buildPdfDocument(
   const config = context.state.config;
   const bookTitle = (config?.title || '').trim() ||
     (isPolish ? 'Bez tytułu' : 'Untitled');
-  const bookAuthor = (config?.protagonist?.name || '').trim() ||
-    'AutoBook';
+  // The on-page byline (cover, back cover, title page) is the same
+  // string used for the PDF `info.author` metadata — every book
+  // shipped from AutoBook is an AI-generated work, so the visible
+  // byline and the file metadata stay in sync. The protagonist name
+  // is the story's main character, not the author, and is no longer
+  // used as the byline.
+  const bookAuthor = isPolish
+    ? 'Napisała sztuczna inteligencja'
+    : 'Written by artificial intelligence';
   const bookSubtitle = (config?.themes && config.themes.length)
     ? config.themes.slice(0, 3).join('  \u00B7  ')
     : null;
@@ -822,9 +829,9 @@ export function buildPdfDocument(
     // and in downstream tools (Calibre, Adobe Reader, etc.). The
     // author is hard-coded to "Written by artificial intelligence"
     // because every book shipped from AutoBook is an AI-generated
-    // work; the in-cover "byline" is a separate concept (it can be
-    // any string the user typed in the protagonist field) and is
-    // rendered as page content, not as PDF metadata.
+    // work. The visible on-page byline (cover, back cover, title
+    // page) uses the same string so the file metadata and the
+    // rendered content stay in sync.
     info: {
       title: bookTitle,
       author: 'Written by artificial intelligence',
