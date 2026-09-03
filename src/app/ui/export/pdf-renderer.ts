@@ -727,7 +727,11 @@ export function buildPdfDocument(
     },
     coverTitle: {
       font: DISPLAY_FONT,
-      fontSize: 32,
+      // 30pt (down from 32) so a 2-line title still fits inside the
+      // 480pt cover-page content area alongside the image, "a novel"
+      // tag, author byline, and the top/bottom rules. See
+      // buildCoverPage's CONTENT_AREA_HEIGHT budget.
+      fontSize: 30,
       bold: true,
       characterSpacing: 3,
       color: '#111',
@@ -766,13 +770,19 @@ export function buildPdfDocument(
   };
 
   // ---- Header / footer ----------------------------------------------------
-  // Page 1 is the front cover — no header/footer. Every other page
-  // (chapter plate, chapter body, back cover) shows the running header
-  // and page number. The cover and back cover are still labelled
-  // separately by the renderer, but the simpler "skip page 1 only"
-  // rule reads more naturally and matches the new one-page cover.
+  // With cover art: the front cover is a single page, so only page 1
+  // gets the "no header/footer" treatment; the running header and page
+  // number start on page 2.
+  // Without cover art: the renderer falls back to buildTitlePage,
+  // which produces TWO front-matter pages — the title page and the
+  // author colophon. Both are still front matter, so neither gets a
+  // running header; the body / chapters / back cover start on page 3.
+  // The skip count is captured in a closure so the header and footer
+  // functions agree.
+  const skipHeaderPages = context.coverArt ? 1 : 2;
+
   const header = (currentPage: number, _pageCount: number): DocContent | null => {
-    if (currentPage === 1) return null; // front cover
+    if (currentPage <= skipHeaderPages) return null; // front matter
     const isVerso = currentPage % 2 === 0;
     return {
       columns: [
@@ -787,9 +797,13 @@ export function buildPdfDocument(
   };
 
   const footer = (currentPage: number, _pageCount: number): DocContent | null => {
-    if (currentPage === 1) return null;
+    if (currentPage <= skipHeaderPages) return null;
     return {
-      text: String(currentPage - 1), // page 1 is the cover, so body starts at "1"
+      // Body pages are numbered 1, 2, 3, ... starting after the
+      // front matter. Subtract `skipHeaderPages` so the first body
+      // page always shows "1" regardless of whether the cover is
+      // 1 or 2 pages.
+      text: String(currentPage - skipHeaderPages),
       style: 'pageNumber',
       margin: [MARGIN_INNER, 0, MARGIN_OUTER, 24],
     };
@@ -802,6 +816,20 @@ export function buildPdfDocument(
     styles,
     header,
     footer,
+    // PDF metadata. pdfmake passes this to the underlying PDF
+    // document (see printer.js: `if (docDefinition.info) ...`), so
+    // the author / title show up in the file's "Properties" dialog
+    // and in downstream tools (Calibre, Adobe Reader, etc.). The
+    // author is hard-coded to "Written by artificial intelligence"
+    // because every book shipped from AutoBook is an AI-generated
+    // work; the in-cover "byline" is a separate concept (it can be
+    // any string the user typed in the protagonist field) and is
+    // rendered as page content, not as PDF metadata.
+    info: {
+      title: bookTitle,
+      author: 'Written by artificial intelligence',
+      creator: 'AutoBook',
+    },
     defaultStyle: {
       font: BODY_FONT,
       fontSize: BODY_SIZE,

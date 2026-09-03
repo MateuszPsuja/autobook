@@ -18,19 +18,42 @@ const PAGE_HEIGHT = 648;
 const MARGIN_INNER = 72;
 const MARGIN_OUTER = 48;
 const CONTENT_WIDTH = PAGE_WIDTH - MARGIN_INNER - MARGIN_OUTER; // 312pt
-// Cover image is generated at 2:3 (portrait, like a real book cover).
-// At 60% of the page height that's a 390pt-tall image — width is
-// 390 * 2/3 = 260pt, which sits comfortably in the 312pt content
-// width with breathing room on both sides.
-const COVER_IMAGE_HEIGHT = Math.round(PAGE_HEIGHT * 0.60); // 389pt ≈ 390
-// Back cover image is the same portrait 2:3 shape, sized to 35% of
-// the page height.
-const BACK_COVER_IMAGE_HEIGHT = Math.round(PAGE_HEIGHT * 0.35); // 227pt
+// Available height for cover/back cover content: page height minus
+// the top and bottom page margins. The renderer sets
+// pageMargins[1] = MARGIN_TOP + 12 and pageMargins[3] = MARGIN_BOTTOM + 12,
+// and MARGIN_TOP = MARGIN_BOTTOM = 72, so the content area is
+// 648 - 84 - 84 = 480pt. Every cover/back cover layout has to fit
+// inside this box on a single page; otherwise the second page
+// carries the orphaned author / rule and the cover ends up spread
+// across two pages.
+const CONTENT_AREA_HEIGHT = 480;
+// Cover and back cover images are generated at 3:4 portrait (a
+// common book-cover ratio). We pass `aspectRatio: '3:4'` to the
+// image model and ALSO tell pdfmake to `fit` the image into a
+// fixed box. The fit is the safety net: even if the model returns
+// a different ratio than 3:4 (which has been observed in
+// practice), the image still renders at a sensible size inside
+// the cover layout instead of overflowing the page or being
+// cropped to a thin strip. The aspect ratio request is the
+// preferred path; the fit is the fallback.
+const COVER_FIT: [number, number] = [210, 280]; // max width × max height, pt
+// Back cover image is smaller because the back cover also has a
+// multi-line blurb and author bio that need vertical room.
+const BACK_COVER_FIT: [number, number] = [150, 200]; // max width × max height, pt
 
 /**
  * Build the front cover page. Pure typographic design with an
  * optional image inset. Always renders correctly regardless of
  * whether the image generation succeeded.
+ *
+ * Layout budget — must fit inside CONTENT_AREA_HEIGHT (480pt) on a
+ * single page. Sizing is now:
+ *   - top rule + genre + title (1 line) + spacer  ≈  60pt
+ *   - image (`fit: [210, 280]`, 3:4 portrait)    ≈ 280pt max
+ *   - image margins + "a novel" + author + rule ≈  80pt
+ *   - 2-line title allowance                    ≈  36pt
+ *   - safety margin                             ≈  24pt
+ * The total is ~480pt, so a 2-line title still fits.
  */
 export function buildCoverPage(
   art: BookCoverArt,
@@ -49,7 +72,7 @@ export function buildCoverPage(
       x1: 0, y1: 0, x2: CONTENT_WIDTH, y2: 0,
       lineWidth: 0.5, lineColor: '#888',
     }],
-    margin: [0, 24, 0, 0],
+    margin: [0, 8, 0, 0],
   });
 
   // Optional genre eyebrow
@@ -57,7 +80,7 @@ export function buildCoverPage(
     out.push({
       text: eyebrow.toUpperCase(),
       style: 'coverEyebrow',
-      margin: [0, 18, 0, 0],
+      margin: [0, 10, 0, 0],
     });
   }
 
@@ -65,7 +88,7 @@ export function buildCoverPage(
   out.push({
     text: bookTitle.toUpperCase(),
     style: 'coverTitle',
-    margin: [0, 12, 0, 0],
+    margin: [0, 6, 0, 0],
   });
 
   // Decorative dot under title
@@ -74,13 +97,17 @@ export function buildCoverPage(
     style: 'titleSpacer',
   });
 
-  // Optional image (centered, 2:3 portrait at 60% of page height)
+  // Optional image (centered, 3:4 portrait). The `fit` directive
+  // tells pdfmake to scale the image to fit inside the box while
+  // preserving the aspect ratio — a safety net for cases where
+  // the model returns an image at a different ratio than the one
+  // we requested.
   if (hasImage) {
     out.push({
       image: `data:${art.mimeType};base64,${art.base64}`,
-      height: COVER_IMAGE_HEIGHT,
+      fit: COVER_FIT,
       alignment: 'center',
-      margin: [0, 24, 0, 8],
+      margin: [0, 16, 0, 12],
     });
   }
 
@@ -88,17 +115,16 @@ export function buildCoverPage(
   out.push({
     text: ctx.isPolish ? 'powieść' : 'a novel',
     style: 'aNovel',
-    margin: [0, 24, 0, 0],
+    margin: [0, 16, 0, 0],
   });
 
-  // Author name — bottom of the same page. A large top margin pushes
-  // it down; pdfmake doesn't have a native "push to page bottom"
-  // without absolutePosition, and we're avoiding that because of the
-  // rendering issues it caused on the cover image.
+  // Author name — same page, close to the bottom rule. The previous
+  // 96pt top margin pushed the author off the page; 24pt gives the
+  // visual separation we need without overflow.
   out.push({
     text: bookAuthor.toUpperCase(),
     style: 'bookAuthor',
-    margin: [0, 96, 0, 0],
+    margin: [0, 24, 0, 0],
   });
 
   // Bottom decorative rule to frame the cover
@@ -108,7 +134,7 @@ export function buildCoverPage(
       x1: 0, y1: 0, x2: CONTENT_WIDTH, y2: 0,
       lineWidth: 0.5, lineColor: '#888',
     }],
-    margin: [0, 16, 0, 0],
+    margin: [0, 10, 0, 0],
   });
 
   return out;
@@ -118,6 +144,15 @@ export function buildCoverPage(
  * Build the back cover page. Typographic, with the blurb in the
  * upper portion and the author bio in the lower portion. An optional
  * small image can sit in the middle as a decorative emblem.
+ *
+ * Layout budget — must fit inside CONTENT_AREA_HEIGHT (480pt) on a
+ * single page. Sizing is now:
+ *   - blurb top margin + blurb text (≤ 4 lines)   ≈  90pt
+ *   - decorative image (`fit: [150, 200]`, 3:4)  ≈ 200pt max
+ *   - image margins + author bio + rule + byline  ≈  95pt
+ *   - ISBN placeholder                            ≈  12pt
+ *   - breathing room                               ≈  83pt
+ * Total ≈ 480pt for the worst-case blurb / bio length.
  */
 export function buildBackCoverPage(
   art: BookCoverArt,
@@ -138,16 +173,19 @@ export function buildBackCoverPage(
     text: blurb,
     style: 'coverBlurb',
     pageBreak: 'before',
-    margin: [0, 60, 0, 0],
+    margin: [0, 32, 0, 0],
   });
 
-  // Decorative image in the middle, 2:3 portrait at 35% of page height
+  // Decorative image in the middle, 3:4 portrait. The `fit`
+  // directive tells pdfmake to scale the image to fit inside the
+  // box while preserving the aspect ratio — safety net for when
+  // the model returns a different ratio than the one requested.
   if (hasImage) {
     out.push({
       image: `data:${art.mimeType};base64,${art.base64}`,
-      height: BACK_COVER_IMAGE_HEIGHT,
+      fit: BACK_COVER_FIT,
       alignment: 'center',
-      margin: [0, 32, 0, 32],
+      margin: [0, 20, 0, 20],
     });
   }
 
@@ -155,7 +193,7 @@ export function buildBackCoverPage(
   out.push({
     text: authorBio,
     style: 'coverAuthorBio',
-    margin: [0, 24, 0, 24],
+    margin: [0, 16, 0, 16],
   });
 
   // Thin rule near the bottom
@@ -165,14 +203,14 @@ export function buildBackCoverPage(
       x1: 40, y1: 0, x2: CONTENT_WIDTH - 40, y2: 0,
       lineWidth: 0.4, lineColor: '#888',
     }],
-    margin: [0, 16, 0, 12],
+    margin: [0, 12, 0, 8],
   });
 
   // Author byline
   out.push({
     text: bookAuthor.toUpperCase(),
     style: 'bookAuthor',
-    margin: [0, 0, 0, 8],
+    margin: [0, 0, 0, 6],
   });
 
   // ISBN placeholder

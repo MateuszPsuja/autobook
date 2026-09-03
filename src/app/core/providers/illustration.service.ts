@@ -1,6 +1,6 @@
 import { Injectable, inject } from '@angular/core';
-import { Observable, of, defer, from } from 'rxjs';
-import { catchError, map, mergeMap, toArray, switchMap } from 'rxjs/operators';
+import { Observable, of, defer, forkJoin } from 'rxjs';
+import { catchError, map, switchMap, tap } from 'rxjs/operators';
 import { ProviderService } from './provider.service';
 import { ApiService } from '../api.service';
 import { PersistenceService } from '../persistence.service';
@@ -179,32 +179,40 @@ export class IllustrationService {
     const povNames = new Set<string>();
     if (req.config.protagonist?.name) povNames.add(req.config.protagonist.name);
     if (req.config.antagonist?.name) povNames.add(req.config.antagonist.name);
-    const briefByNumber = new Map<number, { povCharacter?: string; location?: string }>();
     for (const ch of req.chapters) {
       const briefOnChapter = (ch as any).brief;
       if (briefOnChapter?.povCharacter) povNames.add(briefOnChapter.povCharacter);
     }
-    void briefByNumber; // reserved for a future brief-map injection
     const povList = Array.from(povNames);
 
-    // 2. Cover prompts
+    // 2. Themes — used as a fallback when the LLM scene call fails
+    //    AND as ambient flavour in the final cover prompt. Kept
+    //    short (≤ 3) to avoid over-constraining the model.
     const themes = (req.config.themes || []).slice(0, 3).join(', ') || 'atmospheric';
-    const themesBack = (req.config.themes || []).slice(0, 3).join(', ') || 'abstract motif';
-    const frontPrompt = `Book cover art, ${styleSuffix}, ${themes}, cinematic, vertical composition, no text, no letters, no words`;
-    const backPrompt = `Book back cover art, ${styleSuffix}, ${themesBack}, muted, vertical composition, no text, no letters, no words`;
 
-    // 3. Total call count (character refs + cover front + cover back + chapters)
-    const totalCalls = povList.length + 2 + req.chapters.length;
+    // 3. Total call count. Two extra entries over the previous
+    //    version: the cover front + back now each go through a
+    //    scene-generation LLM call (same pattern as the chapter
+    //    illustrations) so the cover images get a concrete visual
+    //    brief instead of bare abstract themes. This is what makes
+    //    them stylistically consistent with the chapter plates.
+    //    Total = character refs + 2 cover scenes + 2 cover images
+    //    + chapter illustrations (each chapter is 1 image + 1
+    //    scene, counted as 1 in the existing pipeline).
+    const totalCalls = povList.length + 4 + req.chapters.length;
     let completed = 0;
     const tick = () => {
       completed++;
       try { req.onProgress?.(completed, totalCalls); } catch { /* ignore */ }
     };
 
-    // 4. Orchestrate the three phases. We do character-refs first so
-    //    the chapter phase can attach `subject_reference` to every
-    //    illustration that has a known POV. Covers and chapters run
-    //    in parallel after the character phase finishes.
+    // 4. Orchestrate the four phases. We do character-refs first
+    //    so the chapter phase can attach `subject_reference` to
+    //    every illustration that has a known POV. Cover scenes
+    //    come next (so the cover image prompts can use the same
+    //    `style + scene` structure as the chapter prompts). Cover
+    //    images + chapter images run in parallel after that,
+    //    sharing the concurrency-3 budget.
     return defer(() => {
       const characterWork = povList.map(name => defer(() =>
         this.ensureCharacterReference$(bookId, name, styleSuffix, req).pipe(
@@ -219,53 +227,78 @@ export class IllustrationService {
           const charRefs = new Map<string, CharacterReference>();
           for (const r of charResults) if (r && r.ref) charRefs.set(r.name, r.ref);
 
-          const coverWork = [
-            defer(() => this.minimaxImage.generateImage$({ prompt: frontPrompt, aspectRatio: '2:3' })
-              .pipe(map(r => ({ kind: 'front' as const, r })))),
-            defer(() => this.minimaxImage.generateImage$({ prompt: backPrompt, aspectRatio: '2:3' })
-              .pipe(map(r => ({ kind: 'back' as const, r })))),
-          ];
-          const chapterWork = req.chapters.map(ch => defer(() =>
-            this.generateChapterIllustration$(ch, req, bookId, styleSuffix, charRefs).pipe(
-              map(ill => ({ kind: 'chapter' as const, id: ch.id, ill })),
-              catchError(() => of<{ kind: 'chapter'; id: string; ill: ChapterIllustration | null }>({ kind: 'chapter', id: ch.id, ill: null })),
-            )
-          ));
+          // Cover scenes: same pattern as the chapter scene LLM
+          // call. The front and back get different scene briefs so
+          // they don't look like the same image. If the LLM call
+          // fails on either, we fall back to the themes string so
+          // the cover still ships.
+          return forkJoin({
+            frontScene: this.generateCoverScene$(req, 'front').pipe(
+              tap(() => tick()),
+              catchError(() => of(themes).pipe(tap(() => tick()))),
+            ),
+            backScene: this.generateCoverScene$(req, 'back').pipe(
+              tap(() => tick()),
+              catchError(() => of(themes).pipe(tap(() => tick()))),
+            ),
+          }).pipe(
+            switchMap(({ frontScene, backScene }) => {
+              // Cover prompts now follow the same `style + scene +
+              // ambient + no-text` structure as the chapter
+              // prompts, which is the consistency fix the user
+              // asked for. The previous version had a "Book cover
+              // art" prefix and abstract modifiers (cinematic /
+              // muted / vertical composition) that biased the
+              // model toward generic book covers and made them
+              // visually diverge from the chapter plates.
+              const frontPrompt = `${styleSuffix} illustration, ${frontScene}, ${themes}, no text, no letters, no words`;
+              const backPrompt = `${styleSuffix} illustration, ${backScene}, ${themes}, no text, no letters, no words`;
 
-          // Run covers and chapters in one combined pool so they share
-          // the concurrency-3 budget (per the brief: "image-01 calls
-          // AND M3 text calls" share the same pump). We also tick
-          // progress on each completion.
-          const coverObs: Observable<WorkResult>[] = coverWork as unknown as Observable<WorkResult>[];
-          const chapterObs: Observable<WorkResult>[] = chapterWork as unknown as Observable<WorkResult>[];
-          const allWork: Observable<WorkResult>[] = [
-            ...coverObs,
-            ...chapterObs,
-          ].map((item): Observable<WorkResult> => item.pipe(
-            map((r: WorkResult) => { tick(); return r; }),
-          ));
-          return runWithConcurrency<Observable<WorkResult>, WorkResult>(allWork, 3, src => src).pipe(
-            map(results => {
-              let coverArt: BookCoverArt | undefined;
-              let backCoverArt: BookCoverArt | undefined;
-              const chapterIllustrations = new Map<string, ChapterIllustration>();
-              for (const r of results) {
-                if (!r) continue;
-                if (r.kind === 'front' && r.r) {
-                  coverArt = { base64: r.r.base64, mimeType: r.r.mimeType, side: 'front' };
-                } else if (r.kind === 'back' && r.r) {
-                  backCoverArt = { base64: r.r.base64, mimeType: r.r.mimeType, side: 'back' };
-                } else if (r.kind === 'chapter' && r.ill) {
-                  chapterIllustrations.set(r.id, r.ill);
-                }
-              }
-              return {
-                chapterIllustrations,
-                coverArt,
-                backCoverArt,
-                totalCalls,
-                completedCalls: completed,
-              };
+              const coverWork = [
+                defer(() => this.minimaxImage.generateImage$({ prompt: frontPrompt, aspectRatio: '3:4' })
+                  .pipe(map(r => ({ kind: 'front' as const, r })))),
+                defer(() => this.minimaxImage.generateImage$({ prompt: backPrompt, aspectRatio: '3:4' })
+                  .pipe(map(r => ({ kind: 'back' as const, r })))),
+              ];
+              const chapterWork = req.chapters.map(ch => defer(() =>
+                this.generateChapterIllustration$(ch, req, bookId, styleSuffix, charRefs).pipe(
+                  map(ill => ({ kind: 'chapter' as const, id: ch.id, ill })),
+                  catchError(() => of<{ kind: 'chapter'; id: string; ill: ChapterIllustration | null }>({ kind: 'chapter', id: ch.id, ill: null })),
+                )
+              ));
+
+              const coverObs: Observable<WorkResult>[] = coverWork as unknown as Observable<WorkResult>[];
+              const chapterObs: Observable<WorkResult>[] = chapterWork as unknown as Observable<WorkResult>[];
+              const allWork: Observable<WorkResult>[] = [
+                ...coverObs,
+                ...chapterObs,
+              ].map((item): Observable<WorkResult> => item.pipe(
+                map((r: WorkResult) => { tick(); return r; }),
+              ));
+              return runWithConcurrency<Observable<WorkResult>, WorkResult>(allWork, 3, src => src).pipe(
+                map(results => {
+                  let coverArt: BookCoverArt | undefined;
+                  let backCoverArt: BookCoverArt | undefined;
+                  const chapterIllustrations = new Map<string, ChapterIllustration>();
+                  for (const r of results) {
+                    if (!r) continue;
+                    if (r.kind === 'front' && r.r) {
+                      coverArt = { base64: r.r.base64, mimeType: r.r.mimeType, side: 'front' };
+                    } else if (r.kind === 'back' && r.r) {
+                      backCoverArt = { base64: r.r.base64, mimeType: r.r.mimeType, side: 'back' };
+                    } else if (r.kind === 'chapter' && r.ill) {
+                      chapterIllustrations.set(r.id, r.ill);
+                    }
+                  }
+                  return {
+                    chapterIllustrations,
+                    coverArt,
+                    backCoverArt,
+                    totalCalls,
+                    completedCalls: completed,
+                  };
+                }),
+              );
             }),
           );
         }),
@@ -276,6 +309,49 @@ export class IllustrationService {
         })),
       );
     });
+  }
+
+  // === Cover scenes ========================================================
+
+  /**
+   * LLM-generated visual brief for the front or back cover. Mirrors
+   * the chapter-scene pattern: ask the chat model for ONE concrete
+   * sentence (setting, lighting, composition, mood) instead of
+   * pushing raw abstract themes into the image model.
+   *
+   * The front prompt asks for an iconic, central-composition
+   * moment — the visual that would sit on the front of a real
+   * book. The back prompt asks for an atmospheric, quieter scene
+   * that complements the front so the two covers don't look like
+   * the same image with different colours.
+   *
+   * On any failure the caller falls back to the themes string, so
+   * the cover still ships with *something* even if the LLM is
+   * down.
+   */
+  private generateCoverScene$(req: IllustrationRequest, side: 'front' | 'back'): Observable<string> {
+    const title = (req.config.title || '').trim() || 'this book';
+    const themes = (req.config.themes || []).slice(0, 3).join(', ') || 'atmospheric';
+    const genre = (req.config.genre || '').trim();
+    const frontOrBack = side === 'front'
+      ? 'one iconic, striking visual moment for the front cover, with a strong central composition'
+      : 'one atmospheric, quieter visual for the back cover, more abstract and complementary to the front cover';
+
+    const prompt = `Describe ${frontOrBack} of a ${genre || 'novel'} titled "${title}" (themes: ${themes}). ` +
+      `Output ONE sentence (30 words or fewer) with only visual elements: setting, lighting, composition, mood. ` +
+      `No abstract concepts, no character names, no text. Output only the sentence.`;
+
+    return this.apiService.chatCompletion({
+      model: this.resolveTextModel(),
+      messages: [{ role: 'user', content: prompt }],
+    }).pipe(
+      map(resp => {
+        const text = resp?.choices?.[0]?.message?.content?.trim() ?? '';
+        if (!text) return themes;
+        return text.split(/[.\n!?]/)[0].trim() + '.';
+      }),
+      catchError(() => of(themes)),
+    );
   }
 
   // === Character references ================================================

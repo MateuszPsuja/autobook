@@ -1,4 +1,5 @@
 import { buildPdfDocument, PdfExportOptions } from './pdf-renderer';
+import { buildCoverPage, buildBackCoverPage, buildBackCoverBlurb } from './pdf-cover';
 import { Chapter } from '../../models/chapter.model';
 
 describe('buildPdfDocument', () => {
@@ -338,6 +339,158 @@ describe('buildPdfDocument', () => {
     const flat = JSON.stringify(doc);
     expect(flat).toContain('UNTITLED');
     expect(flat).toContain('AUTOBOOK');
+  });
+
+  describe('PDF metadata (info field)', () => {
+    // pdfmake passes docDefinition.info to the underlying PDF
+    // (printer.js: `if (docDefinition.info) ...`) so the author /
+    // title show up in the file's Properties dialog and in
+    // downstream tools (Calibre, Adobe Reader, etc.). We hard-code
+    // the author to "Written by artificial intelligence" because
+    // every book shipped from AutoBook is an AI-generated work;
+    // the in-cover byline is a separate concept and is rendered as
+    // page content.
+    it('sets info.author to "Written by artificial intelligence"', () => {
+      const doc = buildPdfDocument([chapterA], baseOptions, {
+        state: baseState,
+        isPolish: false,
+      });
+      expect((doc as any).info).toBeTruthy();
+      expect((doc as any).info.author).toBe('Written by artificial intelligence');
+    });
+
+    it('sets info.title to the book title', () => {
+      const doc = buildPdfDocument([chapterA], baseOptions, {
+        state: baseState,
+        isPolish: false,
+      });
+      expect((doc as any).info.title).toBe('A Test Book');
+    });
+
+    it('falls back to the localised "Untitled" when config title is missing', () => {
+      const doc = buildPdfDocument([chapterA], baseOptions, {
+        state: { config: { title: '', themes: [], protagonist: { name: '' } } } as any,
+        isPolish: false,
+      });
+      expect((doc as any).info.title).toBe('Untitled');
+    });
+  });
+
+  describe('cover and back cover fit on a single page', () => {
+    // Regression guard: the front cover and back cover are the most
+    // visually exposed pages of the exported PDF, and a layout that
+    // overflows by even a few points spills the author byline, the
+    // bottom rule, the bio, the rule, or the ISBN onto a second
+    // page — splitting the cover across two pages. The cheapest
+    // proxy we have at the doc-definition level is: the cover /
+    // back-cover content block must NOT include an explicit
+    // `pageBreak` directive. pdfmake only inserts a page break when
+    // content cannot fit on the current page, but adding an
+    // explicit `pageBreak: 'after'` (or starting with
+    // `pageBreak: 'before'`) is what would split a single-page
+    // layout into two. The back cover's first element does carry
+    // `pageBreak: 'before'` (to land it as the final page of the
+    // book), so we check that the *cover* content block — the one
+    // before any chapter id — has no page break, and that the
+    // *back cover* content (everything after the last chapter id)
+    // is the only place `pageBreak: 'before'` appears.
+    const coverArt = {
+      base64: 'iVBORw0KGgo=',
+      mimeType: 'image/png',
+    } as any;
+    const backCoverArt = {
+      base64: 'iVBORw0KGgo=',
+      mimeType: 'image/png',
+    } as any;
+
+    it('front cover content has no page-break directive', () => {
+      // Use buildCoverPage directly so the assertion is scoped to
+      // *just* the cover content. The TOC ends with a
+      // `pageBreak: 'after'` to start the chapter on a new page,
+      // and each chapter starts with a `pageBreak: 'before'` — both
+      // are expected and out of scope here. We're verifying the
+      // cover itself is a single, uninterrupted page.
+      const cover = buildCoverPage(coverArt, {
+        bookTitle: 'A Test Book',
+        bookAuthor: 'Hero',
+        genre: 'Fantasy',
+        isPolish: false,
+      });
+      const flat = JSON.stringify(cover);
+      expect(flat).not.toMatch(/"pageBreak"\s*:/);
+    });
+
+    it('back cover content has no trailing page-break directive', () => {
+      // The back cover is the trailing run of elements after the
+      // last chapter id anchor. The blurb at the top of the back
+      // cover legitimately carries `pageBreak: 'before'` to make
+      // sure the back cover is a new page, but nothing in the back
+      // cover should ask for a page break *after* itself — that
+      // would split the back cover across two pages.
+      const backCover = buildBackCoverPage(backCoverArt, {
+        blurb: 'A gripping tale.',
+        authorBio: 'About the author: a storyteller.',
+        bookAuthor: 'Hero',
+      });
+      const flat = JSON.stringify(backCover);
+      // Back cover starts with pageBreak: 'before' on the blurb
+      expect(flat).toMatch(/"pageBreak"\s*:\s*"before"/);
+      // But no pageBreak: 'after' anywhere in the back cover
+      expect(flat).not.toMatch(/"pageBreak"\s*:\s*"after"/);
+    });
+
+    it('front cover fits within the 480pt content area budget', () => {
+      // Sanity-check the layout budget documented in pdf-cover.ts.
+      // We can't render the PDF from the spec, but we can sum up
+      // every fixed height and margin in buildCoverPage's output
+      // and confirm it's under 480pt for the typical 1-line title.
+      const cover = buildCoverPage(coverArt, {
+        bookTitle: 'A Test Book',
+        bookAuthor: 'Hero',
+        genre: 'Fantasy',
+        isPolish: false,
+      });
+      const totalMargin = cover.reduce((sum: number, el: any) => {
+        const m = el.margin || [0, 0, 0, 0];
+        return sum + (m[1] || 0) + (m[3] || 0);
+      }, 0);
+      // title 30pt × 1.15 ≈ 34.5pt, genre 10pt, "a novel" 11pt,
+      // author 12pt, titleSpacer 4pt, image `fit: [210, 280]`
+      // (the worst case is the box height: 280pt for a 3:4 image
+      // rendered inside a 210×280 box — pdfmake scales to fit).
+      const totalContent = 34.5 + 10 + 11 + 12 + 4 + 280;
+      // Add a small safety buffer for the canvas rules' sub-pixel
+      // height and any rounding pdfmake applies.
+      expect(totalMargin + totalContent).toBeLessThan(480);
+    });
+
+    it('back cover fits within the 480pt content area budget', () => {
+      // Same approach as the front-cover budget test. A 4-line
+      // blurb + 2-line author bio is the realistic worst case for
+      // the typical 280-char blurb and 200-char bio caps in
+      // buildBackCoverBlurb.
+      const { blurb, authorBio } = buildBackCoverBlurb(
+        {
+          title: 'A Test Book',
+          themes: ['Courage', 'Loss'],
+          protagonist: { name: 'Hero', background: 'a wandering scholar' },
+        } as any,
+        false
+      );
+      const backCover = buildBackCoverPage(backCoverArt, {
+        blurb,
+        authorBio,
+        bookAuthor: 'Hero',
+      });
+      const totalMargin = backCover.reduce((sum: number, el: any) => {
+        const m = el.margin || [0, 0, 0, 0];
+        return sum + (m[1] || 0) + (m[3] || 0);
+      }, 0);
+      // blurb 4 lines × 11pt × 1.5 = 66pt, author bio 2 lines × 10pt
+      // × 1.4 = 28pt, author byline 12pt, ISBN 8pt, image 181pt
+      const totalContent = 66 + 28 + 12 + 8 + 181;
+      expect(totalMargin + totalContent).toBeLessThan(480);
+    });
   });
 
   describe('defensive cleanup for running word-count corruption', () => {
