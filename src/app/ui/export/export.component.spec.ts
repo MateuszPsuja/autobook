@@ -35,8 +35,7 @@ describe('ExportComponent', () => {
     exportLanguage: (() => 'en') as any,
     setExportLanguage: () => {},
     translateBookTo$: (chapters: any[]) => of(chapters),
-    translateBookMetadataTo$: (config: any) => of(config),
-    translateCritiqueTo$: (critique: any) => of(critique)
+    translateBookMetadataTo$: (config: any) => of(config)
   } as unknown as Partial<TranslationService>;
 
   beforeEach(async () => {
@@ -95,16 +94,13 @@ describe('ExportComponent', () => {
   });
 
   describe('Multi-language export', () => {
-    // The export now translates the book into the target language
+    // The export translates the book into the target language
     // before generating the file. We assert that:
     //   - the export calls translateBookTo$ when target !== 'en'
     //   - it skips the translation step when target === 'en'
-    //   - the per-chapter critique translator is still used (the
-    //     book-level helper delegates to it)
     // by capturing the markdown body the component ships to the
     // download (it goes through generateMarkdown ->
-    // buildBookContent which inlines the critique feedback into
-    // the text).
+    // buildBookContent).
 
     it('skips the LLM translation pass entirely when target is English', async () => {
       (mockTranslation as any).exportLanguage = () => 'en';
@@ -177,66 +173,6 @@ describe('ExportComponent', () => {
       expect(capturedBody).toContain('Rozdział 1: Początek');
       expect(capturedBody).toContain('Przetłumaczona treść.');
       expect(capturedBody).not.toContain('Chapter 1: The Beginning');
-    });
-  });
-
-  describe('Critique rendering (regression: still works after the Polish pass removal)', () => {
-    it('renders the critique in the exported file when includeCritiques is true', async () => {
-      // The orchestrator now never writes Polish to the critique
-      // (it stores English), so the export component should ship
-      // the source critique text directly into the markdown.
-      (mockTranslation as any).exportLanguage = () => 'en';
-      component.exportLanguage = 'en';
-      const translateBookSpy = spyOn(mockTranslation as any, 'translateBookTo$')
-        .and.callFake((chapters: any[]) => of(chapters));
-
-      const englishChapter = {
-        number: 1,
-        title: 'Chapter 1',
-        content: 'Body.',
-        critique: {
-          scores: { prose: 8, pacing: 7, showVsTell: 8, dialogue: 7, continuity: 8, hookStrength: 7, thematicResonance: 8 },
-          overallScore: 7.7,
-          feedback: 'Solid chapter.',
-          mustFix: ['tighten paragraph 2'],
-          suggestions: ['vary sentence length'],
-          createdAt: new Date()
-        }
-      };
-      chaptersSubject.next([englishChapter]);
-      fixture.detectChanges();
-
-      spyOn(window.URL, 'createObjectURL').and.returnValue('blob:mock');
-      spyOn(document.body, 'appendChild').and.stub();
-      spyOn(document.body, 'removeChild').and.stub();
-      spyOn(HTMLAnchorElement.prototype, 'click').and.stub();
-
-      let capturedBody = '';
-      spyOn(component, 'generateMarkdown' as any).and.callFake((ch: any[]) => {
-        capturedBody = (component as any).buildBookContent(ch);
-        return new Blob([capturedBody], { type: 'text/markdown' });
-      });
-
-      component.exportOptions = {
-        includeTitles: true,
-        includeTOC: false,
-        includeCritiques: true,
-        includeCharacters: false,
-        includeIllustrations: false,
-        illustrationStyle: 'auto'
-      };
-      component.setFormat('markdown');
-
-      await component.exportBook();
-
-      // English export — no book-level translation step.
-      expect(translateBookSpy).not.toHaveBeenCalled();
-      // The critique feedback made it into the file. The
-      // markdown builder only inlines the `feedback` field
-      // (mustFix / suggestions are not part of the exported
-      // markdown), so we assert on feedback only.
-      expect(capturedBody).toContain('Solid chapter.');
-      expect(capturedBody).toContain('## Critique Report');
     });
   });
 });

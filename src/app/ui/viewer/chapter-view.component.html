@@ -125,41 +125,6 @@
               <div class="text-sm text-gray-600 dark:text-gray-400">{{ t('generator.dialogue') }}</div>
             </div>
           </div>
-
-          <div class="space-y-4">
-            <div>
-              <h4 class="font-medium text-gray-900 dark:text-white mb-2">{{ t('viewer.feedback') }}</h4>
-              <p class="text-sm text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-700 p-3 rounded-lg">
-                {{ getFeedback() }}
-              </p>
-            </div>
-
-            @if (getMustFix().length) {
-              <div>
-                <h4 class="font-medium text-gray-900 dark:text-white mb-2">{{ t('viewer.mustFix') }}</h4>
-                <ul class="space-y-1">
-                  @for (issue of getMustFix(); track $index) {
-                    <li class="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 p-2 rounded">
-                      • {{ issue }}
-                    </li>
-                  }
-                </ul>
-              </div>
-            }
-
-            @if (getSuggestions().length) {
-              <div>
-                <h4 class="font-medium text-gray-900 dark:text-white mb-2">{{ t('viewer.suggestions') }}</h4>
-                <ul class="space-y-1">
-                  @for (suggestion of getSuggestions(); track $index) {
-                    <li class="text-sm text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-700 p-2 rounded">
-                      • {{ suggestion }}
-                    </li>
-                  }
-                </ul>
-              </div>
-            }
-          </div>
         }
       </div>
 

@@ -38,7 +38,6 @@ const BODY_LEADING = 1.4;
 export interface PdfExportOptions {
   includeTitles: boolean;
   includeTOC: boolean;
-  includeCritiques: boolean;
   includeCharacters: boolean;
   includeIllustrations: boolean;
   illustrationStyle: IllustrationStyle;
@@ -48,10 +47,10 @@ export interface PdfExportContext {
   state: ReturnType<BookStateService['getState']>;
   /**
    * Target language for the export. Drives the localised labels
-   * (TOC, "Chapter", "Critique Report", …) and the author byline.
-   * The chapter bodies themselves are translated upstream by the
-   * export component, so by the time the renderer sees them they
-   * are already in `language`.
+   * (TOC, "Chapter", …) and the author byline. The chapter bodies
+   * themselves are translated upstream by the export component, so
+   * by the time the renderer sees them they are already in
+   * `language`.
    */
   language: ExportLanguage;
   chapterIllustrations?: Map<string, ChapterIllustration>;
@@ -280,9 +279,6 @@ function buildChapter(args: {
   options: PdfExportOptions;
   labels: {
     chapterLabel: string;
-    critiqueLabel: string;
-    overallScoreLabel: string;
-    feedbackLabel: string;
   };
   chapterIllustrations?: Map<string, ChapterIllustration>;
 }): DocContent[] {
@@ -381,53 +377,6 @@ function buildChapter(args: {
       });
     }
   });
-
-  // Critique block, if requested.
-  if (options.includeCritiques && chapter.critique) {
-    out.push({
-      text: '',
-      pageBreak: 'before',
-    });
-    out.push({
-      text: labels.critiqueLabel.toUpperCase(),
-      style: 'critiqueHeading',
-    });
-    out.push({
-      canvas: [
-        {
-          type: 'line',
-          x1: 0,
-          y1: 0,
-          x2: 60,
-          y2: 0,
-          lineWidth: 0.6,
-          lineColor: '#666',
-        },
-      ],
-      margin: [0, 0, 0, 8],
-    });
-    out.push({
-      text: [
-        {
-          text: `${labels.overallScoreLabel}:  `,
-          style: 'critiqueLabel',
-        },
-        {
-          text: `${chapter.critique.overallScore} / 10`,
-          style: 'critiqueValue',
-        },
-      ],
-      margin: [0, 0, 0, 4],
-    });
-    if (chapter.critique.feedback) {
-      out.push({
-        text: [
-          { text: `${labels.feedbackLabel}:  `, style: 'critiqueLabel' },
-          { text: chapter.critique.feedback, style: 'critiqueBody' },
-        ],
-      });
-    }
-  }
 
   return out;
 }
@@ -547,9 +496,6 @@ export function buildPdfDocument(
         options,
         labels: {
           chapterLabel: labels.chapterLabel,
-          critiqueLabel: labels.critiqueLabel,
-          overallScoreLabel: labels.overallScoreLabel,
-          feedbackLabel: labels.feedbackLabel
         },
         chapterIllustrations: context.chapterIllustrations,
       }),
@@ -686,31 +632,6 @@ export function buildPdfDocument(
       font: BODY_FONT,
       fontSize: 11,
       alignment: 'right',
-    },
-    critiqueHeading: {
-      font: BODY_FONT,
-      fontSize: 10,
-      characterSpacing: 4,
-      color: '#555',
-      margin: [0, 0, 0, 4],
-    },
-    critiqueLabel: {
-      font: BODY_FONT,
-      fontSize: 10,
-      characterSpacing: 2,
-      color: '#555',
-    },
-    critiqueValue: {
-      font: BODY_FONT,
-      fontSize: 11,
-      bold: true,
-    },
-    critiqueBody: {
-      font: BODY_FONT,
-      fontSize: 10,
-      italics: true,
-      color: '#444',
-      lineHeight: 1.35,
     },
     headerText: {
       font: BODY_FONT,

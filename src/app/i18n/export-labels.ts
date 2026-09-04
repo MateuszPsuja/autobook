@@ -68,12 +68,6 @@ export interface ExportLabels {
   tocLabel: string;
   /** "Chapter" / "Rozdział" / "Chapitre" label. */
   chapterLabel: string;
-  /** "Critique Report" / "Raport krytyka" heading. */
-  critiqueLabel: string;
-  /** "Overall score" / "Ocena ogólna" label. */
-  overallScoreLabel: string;
-  /** "Feedback" / "Uwagi" label. */
-  feedbackLabel: string;
   /** Fallback for an empty book title (e.g. "Untitled"). */
   untitledFallback: string;
   /** Status string shown in the UI when the user clicks Stop. */
@@ -121,9 +115,6 @@ const ENGLISH_LABELS: ExportLabels = {
   aBookLabel: 'a novel',
   tocLabel: 'Table of Contents',
   chapterLabel: 'Chapter',
-  critiqueLabel: 'Critique Report',
-  overallScoreLabel: 'Overall score',
-  feedbackLabel: 'Feedback',
   untitledFallback: 'Untitled',
   stopping: 'Stopping...',
   translating: 'Translating...',
@@ -143,9 +134,6 @@ const POLISH_LABELS: ExportLabels = {
   aBookLabel: 'powieść',
   tocLabel: 'Spis treści',
   chapterLabel: 'Rozdział',
-  critiqueLabel: 'Raport krytyka',
-  overallScoreLabel: 'Ocena ogólna',
-  feedbackLabel: 'Uwagi',
   untitledFallback: 'Bez tytułu',
   stopping: 'Zatrzymywanie...',
   translating: 'Tłumaczenie...',
@@ -165,9 +153,6 @@ const SPANISH_LABELS: ExportLabels = {
   aBookLabel: 'una novela',
   tocLabel: 'Índice',
   chapterLabel: 'Capítulo',
-  critiqueLabel: 'Informe de crítica',
-  overallScoreLabel: 'Puntuación general',
-  feedbackLabel: 'Comentarios',
   untitledFallback: 'Sin título',
   stopping: 'Deteniendo...',
   translating: 'Traduciendo...',
@@ -187,9 +172,6 @@ const FRENCH_LABELS: ExportLabels = {
   aBookLabel: 'un roman',
   tocLabel: 'Table des matières',
   chapterLabel: 'Chapitre',
-  critiqueLabel: 'Rapport de critique',
-  overallScoreLabel: 'Note globale',
-  feedbackLabel: 'Commentaires',
   untitledFallback: 'Sans titre',
   stopping: 'Arrêt...',
   translating: 'Traduction...',
@@ -209,9 +191,6 @@ const GERMAN_LABELS: ExportLabels = {
   aBookLabel: 'ein Roman',
   tocLabel: 'Inhaltsverzeichnis',
   chapterLabel: 'Kapitel',
-  critiqueLabel: 'Kritikbericht',
-  overallScoreLabel: 'Gesamtbewertung',
-  feedbackLabel: 'Feedback',
   untitledFallback: 'Ohne Titel',
   stopping: 'Wird gestoppt...',
   translating: 'Übersetzung...',
@@ -231,9 +210,6 @@ const ITALIAN_LABELS: ExportLabels = {
   aBookLabel: 'un romanzo',
   tocLabel: 'Indice',
   chapterLabel: 'Capitolo',
-  critiqueLabel: 'Rapporto di critica',
-  overallScoreLabel: 'Valutazione complessiva',
-  feedbackLabel: 'Feedback',
   untitledFallback: 'Senza titolo',
   stopping: 'Arresto...',
   translating: 'Traduzione...',
@@ -253,9 +229,6 @@ const PORTUGUESE_LABELS: ExportLabels = {
   aBookLabel: 'um romance',
   tocLabel: 'Sumário',
   chapterLabel: 'Capítulo',
-  critiqueLabel: 'Relatório de crítica',
-  overallScoreLabel: 'Pontuação geral',
-  feedbackLabel: 'Comentários',
   untitledFallback: 'Sem título',
   stopping: 'Parando...',
   translating: 'Traduzindo...',
@@ -275,9 +248,6 @@ const DUTCH_LABELS: ExportLabels = {
   aBookLabel: 'een roman',
   tocLabel: 'Inhoudsopgave',
   chapterLabel: 'Hoofdstuk',
-  critiqueLabel: 'Kritiekrapport',
-  overallScoreLabel: 'Algemene beoordeling',
-  feedbackLabel: 'Feedback',
   untitledFallback: 'Zonder titel',
   stopping: 'Stoppen...',
   translating: 'Vertalen...',
@@ -297,9 +267,6 @@ const RUSSIAN_LABELS: ExportLabels = {
   aBookLabel: 'роман',
   tocLabel: 'Содержание',
   chapterLabel: 'Глава',
-  critiqueLabel: 'Отчёт о редактуре',
-  overallScoreLabel: 'Общая оценка',
-  feedbackLabel: 'Отзыв',
   untitledFallback: 'Без названия',
   stopping: 'Остановка...',
   translating: 'Перевод...',
@@ -319,9 +286,6 @@ const UKRAINIAN_LABELS: ExportLabels = {
   aBookLabel: 'роман',
   tocLabel: 'Зміст',
   chapterLabel: 'Розділ',
-  critiqueLabel: 'Звіт про редактуру',
-  overallScoreLabel: 'Загальна оцінка',
-  feedbackLabel: 'Відгук',
   untitledFallback: 'Без назви',
   stopping: 'Зупинка...',
   translating: 'Переклад...',
@@ -341,9 +305,6 @@ const CZECH_LABELS: ExportLabels = {
   aBookLabel: 'román',
   tocLabel: 'Obsah',
   chapterLabel: 'Kapitola',
-  critiqueLabel: 'Kritická zpráva',
-  overallScoreLabel: 'Celkové hodnocení',
-  feedbackLabel: 'Zpětná vazba',
   untitledFallback: 'Bez názvu',
   stopping: 'Zastavování...',
   translating: 'Překlad...',

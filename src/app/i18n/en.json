@@ -251,8 +251,6 @@
     "includeChapterTitlesDesc": "Add chapter headings to export",
     "includeToc": "Include Table of Contents",
     "includeTocDesc": "Add TOC at the beginning",
-    "includeCritiques": "Include Critique Reports",
-    "includeCritiquesDesc": "Add critique scores and feedback",
     "includeCharacters": "Include Character Profiles",
     "includeCharactersDesc": "Add character information",
     "includeIllustrations": "Add illustrations",

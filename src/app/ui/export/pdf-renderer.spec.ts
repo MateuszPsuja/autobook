@@ -7,7 +7,6 @@ describe('buildPdfDocument', () => {
   const baseOptions: PdfExportOptions = {
     includeTitles: true,
     includeTOC: true,
-    includeCritiques: false,
     includeCharacters: false,
     includeIllustrations: false,
     illustrationStyle: 'auto',
@@ -33,22 +32,6 @@ describe('buildPdfDocument', () => {
     status: 'approved',
     createdAt: new Date(),
     revisions: [],
-  };
-
-  const chapterWithCritique: Chapter = {
-    ...chapterA,
-    id: 'c',
-    number: 3,
-    title: 'The Trial',
-    critique: {
-      overallScore: 8,
-      feedback: 'Strong pacing.',
-      mustFix: [],
-      suggestions: [],
-      prose: 0,
-      pacing: 0,
-      dialogue: 0,
-    } as any,
   };
 
   const baseState = {
@@ -330,16 +313,6 @@ describe('buildPdfDocument', () => {
     });
     const flat = JSON.stringify(doc);
     expect(flat).not.toContain('TABLE OF CONTENTS');
-  });
-
-  it('appends a critique section when includeCritiques is true', () => {
-    const doc = buildPdfDocument([chapterWithCritique], { ...baseOptions, includeCritiques: true }, {
-      state: baseState,
-      language: 'en',
-    });
-    const flat = JSON.stringify(doc);
-    expect(flat).toContain('CRITIQUE REPORT');
-    expect(flat).toContain('Strong pacing.');
   });
 
   it('falls back to sensible defaults when config is missing', () => {

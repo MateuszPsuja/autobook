@@ -47,7 +47,6 @@ export class ExportComponent implements OnInit {
   exportOptions: PdfExportOptions = {
     includeTitles: true,
     includeTOC: true,
-    includeCritiques: false,
     includeCharacters: false,
     includeIllustrations: false,
     illustrationStyle: 'auto'
@@ -419,12 +418,6 @@ export class ExportComponent implements OnInit {
         content += `# ${labels.chapterLabel} ${chapter.number}: ${chapter.title}\n\n`;
       }
       content += `${stripRunningWordCount(chapter.content)}\n\n`;
-
-      if (this.exportOptions.includeCritiques && chapter.critique) {
-        content += `## ${labels.critiqueLabel}\n\n`;
-        content += `**${labels.overallScoreLabel}:** ${chapter.critique.overallScore}/10\n\n`;
-        content += `**${labels.feedbackLabel}:** ${chapter.critique.feedback}\n\n`;
-      }
 
       content += '---\n\n';
     });

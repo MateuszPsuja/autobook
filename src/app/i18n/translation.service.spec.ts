@@ -215,10 +215,12 @@ describe('TranslationService', () => {
 
   describe('translateChapterTo$', () => {
     // The export calls this once per chapter. It does ONE LLM
-    // call returning a JSON object with the translated title,
-    // content, and (optional) critique. The previous per-field
-    // fanout was removed because it fired 8+ parallel
-    // completions per chapter.
+    // call returning a JSON object with the translated title and
+    // content. The previous per-field fanout (title + content +
+    // per-critique-field) was removed because it fired 8+
+    // parallel completions per chapter; the critique fields are
+    // no longer translated because the export no longer ships
+    // them.
     const buildChapter = (overrides: Partial<any> = {}): any => ({
       id: 'ch-1',
       number: 1,
@@ -228,14 +230,6 @@ describe('TranslationService', () => {
       status: 'approved',
       createdAt: new Date(),
       revisions: [],
-      critique: {
-        scores: { prose: 8, pacing: 7, showVsTell: 8, dialogue: 7, continuity: 8, hookStrength: 7, thematicResonance: 8 },
-        overallScore: 7.7,
-        feedback: 'Solid chapter.',
-        mustFix: ['Tighten paragraph 2.'],
-        suggestions: ['Vary sentence length.'],
-        createdAt: new Date()
-      },
       ...overrides
     });
 
@@ -257,13 +251,7 @@ describe('TranslationService', () => {
     it('parses the JSON response and merges translated fields into the source chapter', (done) => {
       const translatedJson = {
         title: 'Chapitre 1 : Le Commencement',
-        content: '[FR] Un long paragraphe d\'ouverture.',
-        critique: {
-          feedback: '[FR] Chapitre solide.',
-          mustFix: ['[FR] Resserrer le deuxième paragraphe.'],
-          suggestions: ['[FR] Varier la longueur des phrases.'],
-          unavailableReason: ''
-        }
+        content: '[FR] Un long paragraphe d\'ouverture.'
       };
       spyOn(service as any, 'translateWithRetry').and.callFake(
         (_text: string, _prompt: string, _maxTokens: number) => of(JSON.stringify(translatedJson))
@@ -273,9 +261,6 @@ describe('TranslationService', () => {
       service.translateChapterTo$(original, 'fr', 'Chapitre').pipe(take(1)).subscribe(result => {
         expect(result.title).toBe('Chapitre 1 : Le Commencement');
         expect(result.content).toBe('[FR] Un long paragraphe d\'ouverture.');
-        expect(result.critique?.feedback).toBe('[FR] Chapitre solide.');
-        expect(result.critique?.mustFix).toEqual(['[FR] Resserrer le deuxième paragraphe.']);
-        expect(result.critique?.suggestions).toEqual(['[FR] Varier la longueur des phrases.']);
         // Metadata preserved.
         expect(result.id).toBe('ch-1');
         expect(result.number).toBe(1);
@@ -285,14 +270,14 @@ describe('TranslationService', () => {
       });
     });
 
-    it('makes exactly one LLM call per chapter (not 8+ for title + content + per-critique-field)', (done) => {
+    it('makes exactly one LLM call per chapter for the title and content', (done) => {
       // Regression: the old implementation fanned out into one
       // completion per field (title + content + feedback + per
       // mustFix item + per suggestion item + unavailableReason)
-      // — 5+ parallel completions for one chapter. The new
-      // batched call fires ONE completion per chapter.
+      // — 5+ parallel completions for one chapter. The batched
+      // call fires ONE completion per chapter.
       const spy = spyOn(service as any, 'translateWithRetry').and.callFake(
-        () => of(JSON.stringify({ title: 'x', content: 'y', critique: null }))
+        () => of(JSON.stringify({ title: 'x', content: 'y' }))
       );
 
       const original = buildChapter();
@@ -310,20 +295,6 @@ describe('TranslationService', () => {
       const original = buildChapter();
       service.translateChapterTo$(original, 'fr', 'Chapitre').pipe(take(1)).subscribe(result => {
         expect(result).toBe(original);
-        done();
-      });
-    });
-
-    it('skips critique translation when the chapter has no critique', (done) => {
-      const original = buildChapter({ critique: undefined });
-      spyOn(service as any, 'translateWithRetry').and.callFake(
-        () => of(JSON.stringify({ title: '[FR-T] Title', content: '[FR-C] Body', critique: null }))
-      );
-
-      service.translateChapterTo$(original, 'fr', 'Chapitre').pipe(take(1)).subscribe(result => {
-        expect(result.title).toBe('[FR-T] Title');
-        expect(result.content).toBe('[FR-C] Body');
-        expect(result.critique).toBeUndefined();
         done();
       });
     });

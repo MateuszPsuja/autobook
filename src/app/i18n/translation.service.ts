@@ -516,13 +516,12 @@ export class TranslationService {
    * receives a JSON payload and returns a JSON object with the
    * same keys, wrapped in [T]…[/T] markers. On any failure
    * (parse error, API error, missing keys) the function falls
-   * back to the original English critique so the rest of the
-   * export still ships.
+   * back to the original English critique.
    *
-   * Kept for backwards compat — the export now folds critique
-   * translation into the per-chapter batched call
-   * (`translateChapterTo$`) so the whole chapter is one LLM
-   * request, not three+.
+   * Kept for backwards compat — the export no longer ships
+   * critique data, so this is no longer called from the export
+   * pipeline. It remains public for any future caller that
+   * needs a translated critique.
    */
   translateCritiqueTo$(critique: CritiqueReport, target: ExportLanguage): Observable<CritiqueReport> {
     if (!critique) {
@@ -560,20 +559,18 @@ export class TranslationService {
   }
 
   /**
-   * Translate a full chapter (title + content + critique) in ONE
-   * LLM call. The model receives a JSON payload with the source
-   * fields and returns a JSON object with the translated fields,
-   * wrapped in [T]…[/T] markers so `cleanTranslation` strips any
-   * preamble.
+   * Translate a full chapter (title + content) in ONE LLM call.
+   * The model receives a JSON payload with the source fields and
+   * returns a JSON object with the translated fields, wrapped in
+   * [T]…[/T] markers so `cleanTranslation` strips any preamble.
    *
-   * This is the export's per-chapter translation path. The old
+   * This is the export's per-chapter translation path. The older
    * implementation fired 8+ parallel completions per chapter
    * (title + content + critique feedback + per-item mustFix +
    * per-item suggestions + unavailableReason), which adds up to
    * ~50 simultaneous requests for a 5-chapter book and crowds
    * out other API traffic. Batching into one call per chapter
-   * cuts that down to N parallel calls (one per chapter) while
-   * still producing a localised result.
+   * cuts that down to N parallel calls (one per chapter).
    */
   translateChapterTo$(chapter: Chapter, target: ExportLanguage, chapterWord: string): Observable<Chapter> {
     if (!chapter) {
@@ -586,28 +583,18 @@ export class TranslationService {
     const payload: any = {
       chapterWord,
       title: chapter.title || '',
-      content: chapter.content || '',
-      critique: chapter.critique
-        ? {
-            feedback: chapter.critique.feedback || '',
-            mustFix: Array.isArray(chapter.critique.mustFix) ? chapter.critique.mustFix : [],
-            suggestions: Array.isArray(chapter.critique.suggestions) ? chapter.critique.suggestions : [],
-            unavailableReason: chapter.critique.unavailableReason || ''
-          }
-        : null
+      content: chapter.content || ''
     };
 
     const langName = LANGUAGE_DISPLAY_NAME[target];
     const systemPrompt = `You are a literary translator. Translate the English book chapter below into ${langName}. ` +
       `The input is a JSON object with the keys "title" (string), "content" (string), ` +
-      `"chapterWord" (the localised "Chapter" word, e.g. "Rozdział" for Polish — keep it as-is in the output title), ` +
-      `and an optional "critique" object with "feedback" (string), ` +
-      `"mustFix" (array of strings), "suggestions" (array of strings), "unavailableReason" (string). ` +
+      `and "chapterWord" (the localised "Chapter" word, e.g. "Rozdział" for Polish — keep it as-is in the output title). ` +
       `Return a JSON object with the SAME keys and translated values. ` +
       `For the title, re-emit it with the "chapterWord" prefix if the original had a "Chapter N:" prefix. ` +
       `Wrap your entire JSON response with [T] and [/T] markers, e.g. "[T]{...}[/T]". ` +
       `Do not include any preamble, explanation, or the original text inside or outside the markers. ` +
-      `Preserve paragraph breaks and the number of items in the mustFix and suggestions arrays.`;
+      `Preserve paragraph breaks.`;
 
     return this.translateWithRetry(JSON.stringify(payload), systemPrompt, 12000).pipe(
       map(cleaned => {
@@ -622,10 +609,7 @@ export class TranslationService {
             : chapter.title,
           content: typeof parsed.content === 'string' && parsed.content
             ? parsed.content
-            : chapter.content,
-          critique: chapter.critique
-            ? mergeTranslatedCritique(chapter.critique, parsed.critique)
-            : chapter.critique
+            : chapter.content
         };
       }),
       catchError(err => {
