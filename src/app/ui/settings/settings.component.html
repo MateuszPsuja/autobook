@@ -1,55 +1,55 @@
-<div class="max-w-3xl mx-auto space-y-8">
-  <!-- Page Header -->
-  <div class="text-center">
-    <h1 class="text-3xl font-bold text-gray-900 dark:text-white mb-2">{{ t('settings.title') }}</h1>
-    <p class="text-gray-600 dark:text-gray-400">{{ t('settings.subtitle') }}</p>
+<div class="max-w-3xl mx-auto space-y-5">
+
+  <!-- ===== Page header ===== -->
+  <div>
+    <span class="eyebrow">Preferences</span>
+    <h1 class="mt-1 text-2xl font-bold tracking-tight text-surface-strong">
+      {{ t('settings.title') }}
+    </h1>
+    <p class="text-sm text-surface-subtle mt-0.5">{{ t('settings.subtitle') }}</p>
   </div>
 
-  <!-- Provider Section -->
-  <div class="p-6 bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-lg">
-    <div class="flex items-center gap-3 mb-6">
-      <div class="w-12 h-12 bg-indigo-100 dark:bg-indigo-900/30 rounded-xl flex items-center justify-center">
-        <svg class="w-6 h-6 text-indigo-600 dark:text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+  <!-- ===== Provider ===== -->
+  <section class="card p-6">
+    <div class="flex items-center gap-3 mb-5">
+      <div class="w-10 h-10 rounded-xl bg-accent-500/15 text-accent-600 dark:text-accent-300 flex items-center justify-center">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 21a9.004 9.004 0 008.716-6.747M12 21a9.004 9.004 0 01-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 017.843 4.582M12 3a8.997 8.997 0 00-7.843 4.582m15.686 0A11.953 11.953 0 0112 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0121 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0112 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 013 12c0-1.605.42-3.113 1.157-4.418"></path>
         </svg>
       </div>
       <div>
-        <h2 class="text-xl font-semibold text-gray-900 dark:text-white">{{ t('settings.providerTitle') }}</h2>
-        <p class="text-sm text-gray-500 dark:text-gray-400">{{ t('settings.providerDescription') }}</p>
+        <h2 class="text-base font-semibold text-surface-strong">{{ t('settings.providerTitle') }}</h2>
+        <p class="text-xs text-surface-subtle">{{ t('settings.providerDescription') }}</p>
       </div>
     </div>
 
-    <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+    <label class="block text-xs font-semibold text-surface-subtle uppercase tracking-wider mb-1.5">
       {{ t('settings.providerLabel') }}
     </label>
     <select
       [ngModel]="activeProvider.id"
       (ngModelChange)="onProviderChange($event)"
-      class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-accent-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all">
+      class="field">
       @for (provider of providers; track provider.id) {
-        <option [value]="provider.id">
-          {{ getProviderIcon(provider.name) }} {{ provider.name }}
-        </option>
+        <option [value]="provider.id">{{ getProviderIcon(provider.name) }} {{ provider.name }}</option>
       }
     </select>
-    <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">
-      {{ activeProvider.description }}
-    </p>
-  </div>
+    <p class="mt-1.5 text-xs text-surface-subtle">{{ activeProvider.description }}</p>
+  </section>
 
-  <!-- API Key Section -->
-  <div class="p-6 bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-lg">
-    <div class="flex items-center gap-3 mb-6">
-      <div class="w-12 h-12 bg-gray-100 dark:bg-gray-800 rounded-xl flex items-center justify-center text-accent-600 dark:text-accent-300">
-        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"></path>
+  <!-- ===== API key ===== -->
+  <section class="card p-6">
+    <div class="flex items-center gap-3 mb-5">
+      <div class="w-10 h-10 rounded-xl bg-accent-500/15 text-accent-600 dark:text-accent-300 flex items-center justify-center">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z"></path>
         </svg>
       </div>
       <div>
-        <h2 class="text-xl font-semibold text-gray-900 dark:text-white">
+        <h2 class="text-base font-semibold text-surface-strong">
           {{ activeProvider.name }} {{ t('settings.apiKeyTitle') }}
         </h2>
-        <p class="text-sm text-gray-500 dark:text-gray-400">
+        <p class="text-xs text-surface-subtle">
           @if (activeProvider.requiresApiKey) {
             {{ t('settings.apiKeyDescription') }}
           } @else {
@@ -60,37 +60,31 @@
     </div>
 
     @if (!activeProvider.requiresApiKey) {
-      <div class="p-4 bg-green-50 dark:bg-green-900/20 rounded-xl border border-green-200 dark:border-green-800">
-        <div class="flex items-center gap-2">
-          <div class="w-2.5 h-2.5 bg-green-500 rounded-full"></div>
-          <span class="text-sm font-medium text-green-700 dark:text-green-400">
+      <div class="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-lg flex items-start gap-2.5">
+        <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 mt-1.5 shadow-[0_0_6px_1px_rgba(16,185,129,0.6)]"></span>
+        <div>
+          <p class="text-sm font-medium text-emerald-600 dark:text-emerald-400">
             {{ t('settings.localProviderReady') }}
-          </span>
+          </p>
+          <p class="mt-0.5 text-xs text-surface-subtle">
+            {{ t('settings.localProviderHint', { url: activeProvider.defaultBaseUrl }) }}
+          </p>
         </div>
-        <p class="mt-2 text-xs text-gray-600 dark:text-gray-400">
-          {{ t('settings.localProviderHint', { url: activeProvider.defaultBaseUrl }) }}
-        </p>
       </div>
     } @else {
-      <!-- Current Status -->
       @if (currentApiKey) {
-        <div class="mb-6 p-4 bg-green-50 dark:bg-green-900/20 rounded-xl border border-green-200 dark:border-green-800">
-          <div class="flex items-center gap-2">
-            <div class="w-2.5 h-2.5 bg-green-500 rounded-full"></div>
-            <span class="text-sm font-medium text-green-700 dark:text-green-400">{{ t('settings.apiKeyConfigured') }}</span>
-          </div>
+        <div class="mb-4 p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-lg flex items-center gap-2.5">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_6px_1px_rgba(16,185,129,0.6)]"></span>
+          <span class="text-sm font-medium text-emerald-600 dark:text-emerald-400">{{ t('settings.apiKeyConfigured') }}</span>
         </div>
       } @else {
-        <div class="mb-6 p-4 bg-red-50 dark:bg-red-900/20 rounded-xl border border-red-200 dark:border-red-800">
-          <div class="flex items-center gap-2">
-            <div class="w-2.5 h-2.5 bg-red-500 rounded-full"></div>
-            <span class="text-sm font-medium text-red-700 dark:text-red-400">{{ t('settings.apiKeyNotConfigured') }}</span>
-          </div>
+        <div class="mb-4 p-3 bg-rose-500/10 border border-rose-500/30 rounded-lg flex items-center gap-2.5">
+          <span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
+          <span class="text-sm font-medium text-rose-600 dark:text-rose-400">{{ t('settings.apiKeyNotConfigured') }}</span>
         </div>
       }
 
-      <!-- API Key Input -->
-      <div class="space-y-4">
+      <div class="space-y-3">
         <div class="relative">
           <input
             [type]="isApiKeyVisible ? 'text' : 'password'"
@@ -104,13 +98,13 @@
             data-bwignore="true"
             data-form-type="other"
             data-lpignore="true"
-            class="w-full px-4 py-3 pr-20 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-accent-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all">
-          <div class="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1">
+            class="field font-mono pr-24">
+          <div class="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
             @if (apiKeyInput) {
               <button
                 type="button"
                 (click)="clearApiKeyInput()"
-                class="px-2 py-1 bg-red-500 text-white text-xs font-medium rounded-lg hover:bg-red-600 transition-colors"
+                class="px-2 py-1 text-xs font-medium text-rose-600 dark:text-rose-400 rounded hover:bg-rose-500/10 transition-colors"
                 title="Clear input">
                 Clear
               </button>
@@ -118,59 +112,51 @@
             <button
               type="button"
               (click)="toggleApiKeyVisibility()"
-              class="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
+              class="p-1.5 text-surface-subtle hover:text-surface-strong rounded hover:bg-surface-sunken transition-colors">
               @if (isApiKeyVisible) {
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"></path>
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88"></path>
                 </svg>
               } @else {
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z"></path>
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
                 </svg>
               }
             </button>
           </div>
         </div>
 
-        <!-- Status Messages -->
         @if (apiError) {
-          <div class="p-3 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800">
-            <p class="text-sm text-red-600 dark:text-red-400 flex items-center gap-2">
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-              </svg>
-              {{ apiError }}
-            </p>
+          <div class="p-3 bg-rose-500/10 border border-rose-500/30 rounded-lg flex items-center gap-2.5">
+            <svg class="w-4 h-4 text-rose-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"></path>
+            </svg>
+            <p class="text-sm text-rose-600 dark:text-rose-400">{{ apiError }}</p>
           </div>
         }
 
         @if (apiSuccess) {
-          <div class="p-3 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
-            <p class="text-sm text-green-600 dark:text-green-400 flex items-center gap-2">
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-              </svg>
-              {{ t('settings.apiKeyValid') }}
-            </p>
+          <div class="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-lg flex items-center gap-2.5">
+            <svg class="w-4 h-4 text-emerald-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            </svg>
+            <p class="text-sm text-emerald-600 dark:text-emerald-400">{{ t('settings.apiKeyValid') }}</p>
           </div>
         }
 
-        <!-- Action Buttons -->
-        <div class="flex flex-wrap gap-3">
+        <div class="flex flex-wrap gap-2">
           <button
             type="button"
             (click)="testApiKey()"
             [disabled]="apiTesting || (!apiKeyInput && !currentApiKey)"
-            class="px-5 py-2.5 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 font-medium rounded-xl hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+            class="btn btn-secondary">
             @if (apiTesting) {
-              <span class="flex items-center gap-2">
-                <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                {{ t('settings.testing') }}
-              </span>
+              <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              {{ t('settings.testing') }}
             } @else {
               {{ t('settings.testKey') }}
             }
@@ -181,7 +167,7 @@
               type="button"
               (click)="saveApiKey()"
               [disabled]="!isKeyFormatValid()"
-              class="px-5 py-2.5 bg-brand-500 text-white font-medium rounded-xl hover:bg-brand-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-md">
+              class="btn btn-primary">
               {{ t('settings.saveKey') }}
             </button>
           }
@@ -190,92 +176,90 @@
             <button
               type="button"
               (click)="clearApiKey()"
-              class="px-5 py-2.5 bg-red-500 text-white font-medium rounded-xl hover:bg-red-600 transition-colors shadow-md">
+              class="btn btn-ghost text-rose-600 dark:text-rose-400 hover:bg-rose-500/10">
               {{ t('settings.clearKey') }}
             </button>
           }
         </div>
       </div>
     }
+  </section>
 
-  </div>
-
-  <!-- Base URL Section (only for providers that allow override) -->
+  <!-- ===== Base URL ===== -->
   @if (activeProvider.baseUrlEditable) {
-    <div class="p-6 bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-lg">
-      <div class="flex items-center gap-3 mb-6">
-        <div class="w-12 h-12 bg-cyan-100 dark:bg-cyan-900/30 rounded-xl flex items-center justify-center">
-          <svg class="w-6 h-6 text-cyan-600 dark:text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path>
+    <section class="card p-6">
+      <div class="flex items-center gap-3 mb-5">
+        <div class="w-10 h-10 rounded-xl bg-cyan-500/15 text-cyan-600 dark:text-cyan-400 flex items-center justify-center">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244"></path>
           </svg>
         </div>
         <div>
-          <h2 class="text-xl font-semibold text-gray-900 dark:text-white">{{ t('settings.baseUrlTitle') }}</h2>
-          <p class="text-sm text-gray-500 dark:text-gray-400">{{ t('settings.baseUrlDescription') }}</p>
+          <h2 class="text-base font-semibold text-surface-strong">{{ t('settings.baseUrlTitle') }}</h2>
+          <p class="text-xs text-surface-subtle">{{ t('settings.baseUrlDescription') }}</p>
         </div>
       </div>
 
-      <div class="flex flex-col sm:flex-row gap-3">
+      <div class="flex flex-col sm:flex-row gap-2">
         <input
           type="text"
           [(ngModel)]="baseUrlInput"
           [placeholder]="activeProvider.defaultBaseUrl"
-          class="flex-1 px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-accent-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all font-mono text-sm">
+          class="field flex-1 font-mono text-sm">
         <button
           type="button"
           (click)="saveBaseUrl()"
           [disabled]="!isBaseUrlValid() || baseUrlInput === currentBaseUrl"
-          class="px-5 py-2.5 bg-brand-500 text-white font-medium rounded-xl hover:bg-brand-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-md">
+          class="btn btn-primary">
           {{ t('settings.saveBaseUrl') }}
         </button>
         <button
           type="button"
           (click)="resetBaseUrl()"
-          class="px-5 py-2.5 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 font-medium rounded-xl hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">
+          class="btn btn-secondary">
           {{ t('settings.resetBaseUrl') }}
         </button>
       </div>
-    </div>
+    </section>
   }
 
-  <!-- Model Selection Section -->
-  <div class="p-6 bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-lg">
-    <div class="flex items-center gap-3 mb-6">
-      <div class="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 rounded-xl flex items-center justify-center">
-        <svg class="w-6 h-6 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+  <!-- ===== Model selection ===== -->
+  <section class="card p-6">
+    <div class="flex items-center gap-3 mb-5">
+      <div class="w-10 h-10 rounded-xl bg-sky-500/15 text-sky-600 dark:text-sky-400 flex items-center justify-center">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
         </svg>
       </div>
       <div>
-        <h2 class="text-xl font-semibold text-gray-900 dark:text-white">{{ t('settings.modelTitle') }}</h2>
-        <p class="text-sm text-gray-500 dark:text-gray-400">{{ t('settings.modelDescription') }}</p>
+        <h2 class="text-base font-semibold text-surface-strong">{{ t('settings.modelTitle') }}</h2>
+        <p class="text-xs text-surface-subtle">{{ t('settings.modelDescription') }}</p>
       </div>
     </div>
 
     @if (!isConfigured()) {
-      <div class="p-6 bg-amber-50 dark:bg-amber-900/20 rounded-xl border border-amber-200 dark:border-amber-800 text-center">
+      <div class="p-6 bg-amber-500/10 border border-amber-500/30 rounded-xl text-center">
         <svg class="w-10 h-10 text-amber-500 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"></path>
         </svg>
-        <p class="text-amber-700 dark:text-amber-400 font-medium">{{ t('settings.configureApiKeyFirst') }}</p>
-        <p class="text-sm text-amber-600 dark:text-amber-500 mt-1">{{ t('settings.apiKeyRequiredForModels') }}</p>
+        <p class="text-amber-600 dark:text-amber-400 font-medium">{{ t('settings.configureApiKeyFirst') }}</p>
+        <p class="text-xs text-surface-subtle mt-1">{{ t('settings.apiKeyRequiredForModels') }}</p>
       </div>
     } @else {
-      <!-- Load Models Button -->
       @if (models.length === 0) {
         <button
           type="button"
           (click)="loadModels()"
           [disabled]="isLoadingModels"
-          class="w-full px-5 py-3 bg-blue-500 text-white font-medium rounded-xl hover:bg-blue-600 transition-colors disabled:opacity-50 shadow-md flex items-center justify-center gap-2">
+          class="btn btn-primary w-full justify-center py-3">
           @if (isLoadingModels) {
-            <svg class="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
+            <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
               <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
               <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
             </svg>
             {{ t('settings.loadingModels') }}
           } @else {
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
             </svg>
             {{ t('settings.loadModels') }}
@@ -284,112 +268,109 @@
       }
 
       @if (modelsError) {
-        <div class="mb-4 p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-800">
-          <p class="text-sm text-amber-600 dark:text-amber-400 flex items-center gap-2">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-            </svg>
-            {{ modelsError }}
-          </p>
+        <div class="mt-3 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg flex items-center gap-2.5">
+          <svg class="w-4 h-4 text-amber-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+          </svg>
+          <p class="text-sm text-amber-600 dark:text-amber-400">{{ modelsError }}</p>
         </div>
       }
 
       @if (models.length > 0) {
-        <!-- Current Model Banner -->
+        <!-- Current selection — orange-edged highlight card, the "you're
+             editing this one" tell. -->
         @if (getCurrentModelInfo()) {
-          <div class="relative p-3 rounded-xl border border-accent-500/30 bg-gradient-to-r from-gray-100 via-gray-50 to-transparent dark:from-gray-800 dark:via-gray-900/40 dark:to-transparent mb-4 overflow-hidden">
-            <div class="absolute left-0 top-0 bottom-0 w-1 bg-accent-500"></div>
-            <div class="flex items-center gap-2">
-              <span class="text-sm font-medium text-gray-700 dark:text-gray-300">{{ t('settings.currentSelection') }}:</span>
-              <span class="font-semibold text-gray-900 dark:text-white">{{ getCurrentModelInfo()?.name }}</span>
-              <span class="text-sm text-gray-500 dark:text-gray-400">({{ getCurrentModelInfo()?.provider }})</span>
+          <div class="relative p-3 rounded-lg border border-accent-500/30 bg-gradient-to-r from-accent-500/10 via-accent-500/5 to-transparent mb-4 overflow-hidden">
+            <div class="absolute left-0 top-0 bottom-0 w-1 bg-accent-500" style="box-shadow: 0 0 6px 1px rgb(232 120 72 / 0.5);"></div>
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="eyebrow text-accent-600 dark:text-accent-400">{{ t('settings.currentSelection') }}</span>
+              <span class="font-semibold text-surface-strong">{{ getCurrentModelInfo()?.name }}</span>
+              <span class="text-xs font-mono text-surface-subtle">({{ getCurrentModelInfo()?.provider }})</span>
             </div>
           </div>
         }
 
-        <!-- Search and Filter Bar -->
-        <div class="flex flex-col sm:flex-row gap-3 mb-4">
+        <div class="flex flex-col sm:flex-row gap-2 mb-4">
           <div class="relative flex-1">
-            <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+            <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-surface-subtle" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"></path>
             </svg>
             <input
               type="text"
               [(ngModel)]="searchQuery"
               placeholder="Search models..."
-              class="w-full pl-10 pr-4 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-accent-500 focus:border-transparent">
+              class="field pl-9">
           </div>
           @if (activeProvider.id === 'openrouter') {
-            <label class="flex items-center gap-2 px-4 py-2 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
-              <input
-                type="checkbox"
-                [(ngModel)]="showFreeOnly"
-                class="w-4 h-4 text-accent-500 rounded focus:ring-accent-500">
-              <span class="text-sm font-medium text-gray-700 dark:text-gray-300">Free</span>
+            <label class="flex items-center gap-2 px-3 py-2.5 rounded-lg border border-surface-border bg-surface-card hover:bg-surface-sunken cursor-pointer transition-colors">
+              <span class="relative inline-flex">
+                <input type="checkbox" [(ngModel)]="showFreeOnly"
+                  class="peer w-4 h-4 rounded border-surface-border text-accent-500 focus:ring-accent-500 bg-surface-sunken">
+                <svg class="absolute inset-0 w-4 h-4 text-white pointer-events-none opacity-0 peer-checked:opacity-100 transition-opacity" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="3">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"></path>
+                </svg>
+              </span>
+              <span class="text-sm font-medium text-surface-strong">Free only</span>
             </label>
           }
         </div>
 
-        <!-- Model List with Scroll -->
-        <div class="models-list-container mb-4">
+        <div class="max-h-96 overflow-y-auto -mx-1 px-1 space-y-1.5 mb-4">
           @if (filteredModels.length === 0) {
-            <div class="text-center py-8 text-gray-500 dark:text-gray-400">
+            <div class="text-center py-10 text-surface-subtle">
               <svg class="w-10 h-10 mx-auto mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M15.182 16.318A4.486 4.486 0 0012.016 15a4.486 4.486 0 00-3.198 1.318M21 12a9 9 0 11-18 0 9 9 0 0118 0zM9.75 9.75c0 .414-.168.75-.375.75S9 10.164 9 9.75 9.168 9 9.375 9s.375.336.375.75zm-.375 0h.008v.015h-.008V9.75zm5.625 0c0 .414-.168.75-.375.75s-.375-.336-.375-.75.168-.75.375-.75.375.336.375.75zm-.375 0h.008v.015h-.008V9.75z"></path>
               </svg>
               <p class="text-sm">No models found matching your criteria</p>
             </div>
           } @else {
-            <div class="space-y-2">
-              @for (model of filteredModels; track model.id) {
-                <label
-                  class="flex items-center gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all"
-                  [class]="selectedModel === model.id
-                    ? 'border-accent-500 bg-gray-100 dark:bg-gray-800'
-                    : 'border-gray-200 dark:border-gray-700 hover:border-accent-500/40 dark:hover:border-accent-500/40'">
-                  <input
-                    type="radio"
-                    name="model"
-                    [value]="model.id"
-                    [(ngModel)]="selectedModel"
-                    class="w-4 h-4 text-accent-500 focus:ring-accent-500">
-                  <div class="flex-1 min-w-0">
-                    <div class="flex items-center gap-2 flex-wrap">
-                      <span class="font-medium text-gray-900 dark:text-white truncate">{{ model.name }}</span>
-                      @if (model.recommended) {
-                        <span class="px-1.5 py-0.5 text-xs font-medium bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white rounded-full shrink-0">
-                          {{ t('settings.recommended') }}
-                        </span>
-                      }
-                      <span class="px-1.5 py-0.5 text-xs font-medium rounded-full shrink-0" [class]="getTierBadgeClass(model.tier)">
-                        {{ model.tier }}
+            @for (model of filteredModels; track model.id) {
+              <label
+                class="flex items-center gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all"
+                [class]="selectedModel === model.id
+                  ? 'border-accent-500 bg-accent-500/10'
+                  : 'border-surface-border hover:border-accent-500/40 hover:bg-surface-sunken'">
+                <input
+                  type="radio"
+                  name="model"
+                  [value]="model.id"
+                  [(ngModel)]="selectedModel"
+                  class="w-4 h-4 text-accent-500 focus:ring-accent-500 border-surface-border">
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <span class="font-medium text-surface-strong truncate">{{ model.name }}</span>
+                    @if (model.recommended) {
+                      <span class="px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider bg-surface-sunken text-surface-strong rounded">
+                        {{ t('settings.recommended') }}
                       </span>
-                    </div>
-                    <div class="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
-                      <span class="flex items-center gap-1 shrink-0">
-                        {{ getProviderIcon(model.provider) }}
-                        {{ model.provider }}
-                      </span>
-                      <span class="shrink-0">•</span>
-                      @if (model.contextWindow && model.contextWindow !== 'Unknown') {
-                        <span class="shrink-0">{{ model.contextWindow }} ctx</span>
-                      }
-                    </div>
+                    }
+                    <span class="px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider rounded" [class]="getTierBadgeClass(model.tier)">
+                      {{ model.tier }}
+                    </span>
                   </div>
-                </label>
-              }
-            </div>
+                  <div class="flex items-center gap-2 text-[11px] font-mono text-surface-subtle mt-0.5">
+                    <span class="flex items-center gap-1">
+                      {{ getProviderIcon(model.provider) }}
+                      {{ model.provider }}
+                    </span>
+                    <span>•</span>
+                    @if (model.contextWindow && model.contextWindow !== 'Unknown') {
+                      <span>{{ model.contextWindow }} ctx</span>
+                    }
+                  </div>
+                </div>
+              </label>
+            }
           }
         </div>
 
-        <!-- Save Button -->
         <button
           type="button"
           (click)="saveModel()"
           [disabled]="isModelSaving || selectedModel === currentModel"
-          class="w-full px-5 py-3 bg-brand-500 text-white font-medium rounded-xl hover:bg-brand-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-md flex items-center justify-center gap-2">
+          class="btn btn-primary w-full justify-center py-3">
           @if (isModelSaving) {
-            <svg class="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
+            <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
               <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
               <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
             </svg>
@@ -400,6 +381,5 @@
         </button>
       }
     }
-  </div>
-
+  </section>
 </div>

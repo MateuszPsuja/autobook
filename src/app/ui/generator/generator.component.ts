@@ -44,6 +44,13 @@ export class GeneratorComponent implements OnInit, OnDestroy {
   elapsedSeconds = 0;
   isCompleted = false;
 
+  // Ordered list of agents in the pipeline. Single source of truth for
+  // the horizontal agent cards in the template, so reordering happens in
+  // one place and the connector arrow logic just walks the array.
+  pipelineAgents: AgentType[] = [
+    'architect', 'author', 'critic', 'reviser', 'character', 'continuity'
+  ];
+
   // Agent states for UI
   agentStates = {
     architect: { status: 'idle', active: false },

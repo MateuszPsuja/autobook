@@ -1,105 +1,118 @@
-<div class="space-y-6">
-  <!-- Header -->
-  <div class="flex items-center justify-between">
+<div class="max-w-5xl mx-auto space-y-5">
+
+  <!-- ===== Page header ===== -->
+  <div class="flex items-end justify-between gap-4 flex-wrap">
     <div>
-      <h1 class="text-2xl font-bold text-gray-900 dark:text-white">{{ t('export.title') }}</h1>
-      <p class="text-sm text-gray-600 dark:text-gray-400">{{ t('export.downloadFinished') }}</p>
+      <span class="eyebrow">Output</span>
+      <h1 class="mt-1 text-2xl font-bold tracking-tight text-surface-strong">
+        {{ t('export.title') }}
+      </h1>
+      <p class="text-sm text-surface-subtle mt-0.5">{{ t('export.downloadFinished') }}</p>
     </div>
-    
-    <div class="flex items-center gap-4">
-      <span class="text-sm text-gray-500 dark:text-gray-400">
-        {{ getChapterCount() }} {{ t('export.chapterCount') }}
-      </span>
-      <button
-        (click)="clearData()"
-        class="px-4 py-2 text-sm font-medium text-white bg-red-500 rounded-md hover:bg-red-600 dark:bg-red-600 dark:hover:bg-red-500 transition-colors">
+
+    <div class="flex items-center gap-3">
+      <div class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-surface-card border border-surface-border text-sm">
+        <span class="w-1.5 h-1.5 rounded-full bg-accent-500 shadow-glow-accent"></span>
+        <span class="text-surface-subtle font-mono">{{ getChapterCount() }}</span>
+        <span class="font-medium text-surface-strong">{{ t('export.chapterCount') }}</span>
+      </div>
+      <button (click)="clearData()" class="btn btn-ghost text-rose-600 dark:text-rose-400 hover:bg-rose-500/10">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"></path>
+        </svg>
         {{ t('export.clearData') }}
       </button>
     </div>
   </div>
 
-  <!-- Row 1: Format Selection -->
-  <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
-    <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">{{ t('export.format') }}</h3>
-    <div class="flex flex-wrap gap-3">
+  <!-- ===== Format selection ===== -->
+  <div class="card p-6">
+    <div class="flex items-center gap-2.5 mb-4">
+      <span class="eyebrow">Step 1</span>
+      <h3 class="text-base font-semibold text-surface-strong">{{ t('export.format') }}</h3>
+    </div>
+
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
       @for (format of ['pdf', 'epub', 'docx', 'markdown']; track format) {
+        @let active = selectedFormat === format;
         <button
           type="button"
           (click)="setFormat(format)"
           [disabled]="isExporting"
-          class="flex-1 min-w-[120px] flex items-center justify-center gap-2 px-4 py-3 border-2 rounded-lg cursor-pointer transition-all duration-200 font-semibold"
-          [class.border-accent-500]="selectedFormat === format"
-          [class.bg-gray-200]="selectedFormat === format"
-          [class.dark:bg-gray-700]="selectedFormat === format"
-          [class.dark:border-accent-400]="selectedFormat === format"
-          [class.text-gray-900]="selectedFormat === format"
-          [class.dark:text-white]="selectedFormat === format"
-          [class.border-gray-300]="selectedFormat !== format"
-          [class.dark:border-gray-600]="selectedFormat !== format"
-          [class.bg-gray-50]="selectedFormat !== format"
-          [class.dark:bg-gray-900/40]="selectedFormat !== format"
-          [class.hover:bg-gray-100]="selectedFormat !== format && !isExporting"
-          [class.dark:hover:bg-gray-700]="selectedFormat !== format && !isExporting"
-          [class.text-gray-700]="selectedFormat !== format"
-          [class.dark:text-gray-200]="selectedFormat !== format"
-          [class.opacity-50]="isExporting"
+          class="relative flex flex-col items-center justify-center gap-1 py-4 px-3 rounded-xl border-2 transition-all duration-200 font-semibold cursor-pointer"
+          [class]="active
+            ? 'border-accent-500 bg-accent-500/10 text-accent-600 dark:text-accent-300'
+            : 'border-surface-border bg-surface-card text-surface-strong hover:border-surface-strong/30 hover:bg-surface-sunken'"
+          [class.opacity-40]="isExporting"
           [class.cursor-not-allowed]="isExporting">
-          {{ format.toUpperCase() }}
+          @if (active) {
+            <span class="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-accent-500 text-white flex items-center justify-center shadow-glow-accent">
+              <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="3">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"></path>
+              </svg>
+            </span>
+          }
+          <span class="text-sm font-bold tracking-wider">{{ format.toUpperCase() }}</span>
+          <span class="text-[10px] font-mono uppercase tracking-wider opacity-60">
+            {{ format === 'pdf' ? 'Document' : format === 'epub' ? 'eBook' : format === 'docx' ? 'Word' : 'Markdown' }}
+          </span>
         </button>
       }
     </div>
 
-    <!-- Target Language Selector -->
-    <div class="mt-5 flex flex-wrap items-center gap-3">
-      <label for="export-language" class="text-sm font-medium text-gray-700 dark:text-gray-300">
-        {{ t('export.targetLanguage') || 'Target language' }}
-      </label>
-      <select
-        id="export-language"
-        [ngModel]="exportLanguage"
-        (ngModelChange)="setExportLanguage($event)"
-        [disabled]="isExporting"
-        class="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-accent-500 focus:border-accent-500 disabled:opacity-50 disabled:cursor-not-allowed">
-        @for (lang of availableExportLanguages; track lang.code) {
-          <option [value]="lang.code">{{ lang.nativeName }}</option>
+    <!-- Target language -->
+    <div class="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div>
+        <label for="export-language" class="block text-xs font-semibold text-surface-subtle uppercase tracking-wider mb-1.5">
+          {{ t('export.targetLanguage') || 'Target language' }}
+        </label>
+        <select
+          id="export-language"
+          [ngModel]="exportLanguage"
+          (ngModelChange)="setExportLanguage($event)"
+          [disabled]="isExporting"
+          class="field">
+          @for (lang of availableExportLanguages; track lang.code) {
+            <option [value]="lang.code">{{ lang.nativeName }}</option>
+          }
+        </select>
+        @if (exportLanguage !== 'en') {
+          <p class="mt-1.5 text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"></path>
+            </svg>
+            {{ t('export.willTranslate') || 'The book will be translated via LLM on export. This may take a few minutes.' }}
+          </p>
         }
-      </select>
-      @if (exportLanguage !== 'en') {
-        <span class="text-xs text-amber-700 dark:text-amber-400">
-          ⚠ {{ t('export.willTranslate') || 'The book will be translated via LLM on export. This may take a few minutes.' }}
-        </span>
-      }
+      </div>
+
+      <div>
+        <label for="export-author" class="block text-xs font-semibold text-surface-subtle uppercase tracking-wider mb-1.5">
+          {{ t('export.author') || 'Author' }}
+        </label>
+        <input
+          id="export-author"
+          type="text"
+          [(ngModel)]="customAuthor"
+          [disabled]="isExporting"
+          [placeholder]="getEffectiveAuthor()"
+          [title]="t('export.authorHelp') || 'Appears on the cover, title page, and back cover. Leave empty to use the default.'"
+          class="field">
+      </div>
     </div>
 
-    <!-- Author / byline -->
-    <div class="mt-4">
-      <label for="export-author" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-        {{ t('export.author') || 'Author' }}
-      </label>
-      <input
-        id="export-author"
-        type="text"
-        [(ngModel)]="customAuthor"
-        [disabled]="isExporting"
-        [placeholder]="getEffectiveAuthor()"
-        [title]="t('export.authorHelp') || 'Appears on the cover, title page, and back cover. Leave empty to use the default.'"
-        class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-accent-500 focus:border-accent-500 disabled:opacity-50 disabled:cursor-not-allowed">
-      <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-        {{ t('export.authorHelp') || 'Appears on the cover, title page, and back cover. Leave empty to use the default.' }}
-      </p>
-    </div>
-
-    <!-- Status Row -->
+    <!-- Status row (only while exporting) -->
     @if (isExporting && exportStatus) {
-      <div class="mt-4 flex items-center justify-between bg-gray-100 dark:bg-gray-800 border border-accent-500/30 rounded-lg px-4 py-3">
-        <div class="flex items-center gap-2">
+      <div class="mt-4 flex items-center justify-between bg-surface-sunken border border-surface-border rounded-lg px-4 py-3">
+        <div class="flex items-center gap-2.5">
           <div class="w-4 h-4 border-2 border-accent-500 border-t-transparent rounded-full animate-spin"></div>
-          <span class="text-sm font-medium text-gray-900 dark:text-white">{{ exportStatus }}</span>
+          <span class="text-sm font-medium text-surface-strong">{{ exportStatus }}</span>
         </div>
         @if (exportStatus !== 'Translating...') {
           <button
             (click)="stopExport()"
-            class="px-3 py-1 text-sm font-medium text-white bg-red-500 rounded-md hover:bg-red-600 dark:bg-red-600 dark:hover:bg-red-500 transition-colors">
+            class="btn btn-ghost text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 text-xs">
             {{ t('export.stop') || 'Stop' }}
           </button>
         }
@@ -107,116 +120,120 @@
     }
   </div>
 
-  <!-- Row 2: Options & Export -->
-  <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
-    <div class="flex flex-col lg:flex-row gap-6">
-      <!-- Options -->
-      <div class="flex-1">
-        <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">{{ t('export.options') }}</h3>
-        <div class="flex flex-wrap gap-4">
-          <!-- Include Chapter Titles -->
-          <label class="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              [(ngModel)]="exportOptions.includeTitles"
-              class="w-4 h-4 text-accent-500 border-gray-300 rounded focus:ring-accent-500">
-            <span class="text-sm text-gray-700 dark:text-gray-300">{{ t('export.includeChapterTitles') }}</span>
-          </label>
+  <!-- ===== Options + Export action ===== -->
+  <div class="card p-6">
+    <div class="flex items-center gap-2.5 mb-5">
+      <span class="eyebrow">Step 2</span>
+      <h3 class="text-base font-semibold text-surface-strong">{{ t('export.options') }}</h3>
+    </div>
 
-          <!-- Include TOC -->
-          <label class="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              [(ngModel)]="exportOptions.includeTOC"
-              class="w-4 h-4 text-accent-500 border-gray-300 rounded focus:ring-accent-500">
-            <span class="text-sm text-gray-700 dark:text-gray-300">{{ t('export.includeToc') }}</span>
-          </label>
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <!-- Options: 2-col grid of checkboxes, each on its own line so the
+           labels don't wrap awkwardly. -->
+      <div class="lg:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <label class="flex items-center gap-2.5 px-3 py-2.5 rounded-lg border border-surface-border hover:bg-surface-sunken cursor-pointer transition-colors">
+          <span class="relative inline-flex">
+            <input type="checkbox" [(ngModel)]="exportOptions.includeTitles"
+              class="peer w-4 h-4 rounded border-surface-border text-accent-500 focus:ring-accent-500 bg-surface-sunken">
+            <svg class="absolute inset-0 w-4 h-4 text-white pointer-events-none opacity-0 peer-checked:opacity-100 transition-opacity" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="3">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"></path>
+            </svg>
+          </span>
+          <span class="text-sm text-surface-strong">{{ t('export.includeChapterTitles') }}</span>
+        </label>
 
-          <!-- Include Characters -->
-          <label class="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              [(ngModel)]="exportOptions.includeCharacters"
-              class="w-4 h-4 text-accent-500 border-gray-300 rounded focus:ring-accent-500">
-            <span class="text-sm text-gray-700 dark:text-gray-300">{{ t('export.includeCharacters') }}</span>
-          </label>
+        <label class="flex items-center gap-2.5 px-3 py-2.5 rounded-lg border border-surface-border hover:bg-surface-sunken cursor-pointer transition-colors">
+          <span class="relative inline-flex">
+            <input type="checkbox" [(ngModel)]="exportOptions.includeTOC"
+              class="peer w-4 h-4 rounded border-surface-border text-accent-500 focus:ring-accent-500 bg-surface-sunken">
+            <svg class="absolute inset-0 w-4 h-4 text-white pointer-events-none opacity-0 peer-checked:opacity-100 transition-opacity" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="3">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"></path>
+            </svg>
+          </span>
+          <span class="text-sm text-surface-strong">{{ t('export.includeToc') }}</span>
+        </label>
 
-          <!-- Include Illustrations (minimax only) -->
-          @if (providerService.getActiveProviderId() === 'minimax') {
-            <label class="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                [(ngModel)]="exportOptions.includeIllustrations"
-                class="w-4 h-4 text-accent-500 border-gray-300 rounded focus:ring-accent-500">
-              <span class="text-sm text-gray-700 dark:text-gray-300">{{ t('export.includeIllustrations') }}</span>
-            </label>
-            @if (exportOptions.includeIllustrations) {
-              <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-                <span>{{ t('export.illustrationStyle') }}:</span>
-                <select
-                  [(ngModel)]="exportOptions.illustrationStyle"
-                  class="px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800">
-                  <option value="auto">{{ t('export.illustrationStyleAuto') }}</option>
-                  <option value="photorealistic">Photorealistic</option>
-                  <option value="watercolor">Watercolor</option>
-                  <option value="oil-painting">Oil painting</option>
-                  <option value="digital-art">Digital art</option>
-                  <option value="pencil-sketch">Pencil sketch</option>
-                  <option value="anime">Anime</option>
-                  <option value="comic">Comic book</option>
-                </select>
-              </label>
-            }
-          }
-        </div>
+        <label class="flex items-center gap-2.5 px-3 py-2.5 rounded-lg border border-surface-border hover:bg-surface-sunken cursor-pointer transition-colors">
+          <span class="relative inline-flex">
+            <input type="checkbox" [(ngModel)]="exportOptions.includeCharacters"
+              class="peer w-4 h-4 rounded border-surface-border text-accent-500 focus:ring-accent-500 bg-surface-sunken">
+            <svg class="absolute inset-0 w-4 h-4 text-white pointer-events-none opacity-0 peer-checked:opacity-100 transition-opacity" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="3">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"></path>
+            </svg>
+          </span>
+          <span class="text-sm text-surface-strong">{{ t('export.includeCharacters') }}</span>
+        </label>
+
+        @if (providerService.getActiveProviderId() === 'minimax') {
+          <label class="flex items-center gap-2.5 px-3 py-2.5 rounded-lg border border-surface-border hover:bg-surface-sunken cursor-pointer transition-colors">
+            <span class="relative inline-flex">
+              <input type="checkbox" [(ngModel)]="exportOptions.includeIllustrations"
+                class="peer w-4 h-4 rounded border-surface-border text-accent-500 focus:ring-accent-500 bg-surface-sunken">
+              <svg class="absolute inset-0 w-4 h-4 text-white pointer-events-none opacity-0 peer-checked:opacity-100 transition-opacity" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="3">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"></path>
+              </svg>
+            </span>
+            <span class="text-sm text-surface-strong">{{ t('export.includeIllustrations') }}</span>
+          </label>
+        }
       </div>
 
-      <!-- Export Button -->
-      <div class="lg:w-64 flex flex-col justify-end">
-        <div class="space-y-3">
-          <!-- Progress Bar -->
+      <!-- Export CTA. Stacks the progress bar, the button, and the empty
+           state hint. Button is the same .btn-primary as elsewhere but
+           slightly larger and full-width. -->
+      <div class="lg:col-span-1 flex flex-col gap-3">
+        @if (isExporting) {
+          <div class="space-y-1.5">
+            <div class="flex items-center justify-between text-xs font-mono">
+              <span class="text-surface-subtle uppercase tracking-wider">{{ t('export.exporting') }}</span>
+              <span class="text-accent-600 dark:text-accent-300 font-bold">{{ exportProgress }}%</span>
+            </div>
+            <div class="progress-track h-2">
+              <div class="progress-fill is-animated" [style.width.%]="exportProgress"></div>
+            </div>
+          </div>
+        }
+
+        <button
+          (click)="exportBook()"
+          [disabled]="isExporting || getChapterCount() === 0"
+          class="btn btn-primary w-full py-3 text-base justify-center"
+          [class.opacity-50]="isExporting || getChapterCount() === 0"
+          [class.cursor-not-allowed]="isExporting || getChapterCount() === 0">
           @if (isExporting) {
-            <div class="space-y-2">
-              <div class="flex items-center justify-between text-sm">
-                <span class="text-gray-600 dark:text-gray-400">{{ t('export.exporting') }}</span>
-                <span class="font-medium">{{ exportProgress }}%</span>
-              </div>
-              <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
-                <div
-                  class="bg-gradient-to-r from-accent-500 to-accent-400 h-2 rounded-full transition-all duration-300 shadow-sm shadow-accent-500/30"
-                  [style.width.%]="exportProgress">
-                </div>
-              </div>
-            </div>
+            <div class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+            {{ getExportButtonText() }}
+          } @else {
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3"></path>
+            </svg>
+            {{ getExportButtonText() }}
           }
+        </button>
 
-          <!-- Export Button -->
-          <button
-            (click)="exportBook()"
-            [disabled]="isExporting || getChapterCount() === 0"
-            class="w-full py-3 px-4 bg-brand-500 text-white rounded-lg hover:bg-brand-600 transition-colors font-medium"
-            [class.opacity-50]="isExporting || getChapterCount() === 0"
-            [class.cursor-not-allowed]="isExporting || getChapterCount() === 0">
-            @if (isExporting) {
-              <span class="flex items-center justify-center gap-2">
-                <div class="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                {{ getExportButtonText() }}
-              </span>
-            } @else {
-              <span class="flex items-center justify-center gap-2">
-                📤 {{ getExportButtonText() }}
-              </span>
-            }
-          </button>
-
-          <!-- Empty State -->
-          @if (getChapterCount() === 0) {
-            <div class="text-center py-2">
-              <p class="text-sm text-gray-500 dark:text-gray-400">{{ t('export.noChaptersToExport') }}</p>
-            </div>
-          }
-        </div>
+        @if (getChapterCount() === 0) {
+          <p class="text-xs text-center text-surface-subtle">{{ t('export.noChaptersToExport') }}</p>
+        }
       </div>
     </div>
+
+    @if (providerService.getActiveProviderId() === 'minimax' && exportOptions.includeIllustrations) {
+      <div class="mt-4 pt-4 border-t border-surface-border">
+        <label class="text-xs font-semibold text-surface-subtle uppercase tracking-wider mb-1.5 block">
+          {{ t('export.illustrationStyle') }}
+        </label>
+        <select [(ngModel)]="exportOptions.illustrationStyle" class="field max-w-xs">
+          <option value="auto">{{ t('export.illustrationStyleAuto') }}</option>
+          <option value="photorealistic">Photorealistic</option>
+          <option value="watercolor">Watercolor</option>
+          <option value="oil-painting">Oil painting</option>
+          <option value="digital-art">Digital art</option>
+          <option value="pencil-sketch">Pencil sketch</option>
+          <option value="anime">Anime</option>
+          <option value="comic">Comic book</option>
+        </select>
+      </div>
+    }
   </div>
 </div>
