@@ -98,14 +98,25 @@
     <div class="flex items-center gap-2 overflow-x-auto pb-1">
       @for (agent of pipelineAgents; track agent; let last = $last) {
         <div class="flex items-center gap-2 flex-shrink-0">
-          <div class="card-sm flex items-center gap-2 pl-2.5 pr-3.5 py-2 transition-all"
-               [class]="getAgentClass(agent)">
+          <!-- Single class binding drives the whole card so the active
+               state can't get drowned out by .card-sm's background.
+               Active = solid orange + halo. Done = green chip. Idle =
+               sunken gray. -->
+          <div class="relative flex items-center gap-2.5 pl-3 pr-3.5 py-2 rounded-xl border-2 transition-all duration-200"
+               [class]="isAgentActive(agent)
+                 ? 'bg-accent-500 text-white border-accent-500 shadow-glow-accent animate-halo'
+                 : getAgentStatus(agent) === 'done'
+                   ? 'bg-surface-card text-surface-strong border-emerald-500/40'
+                   : 'bg-surface-card text-surface-subtle border-surface-border'">
+            @if (isAgentActive(agent)) {
+              <div class="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-white animate-ping"></div>
+            }
             <div class="w-6 h-6 rounded-md flex items-center justify-center"
-              [class]="{
-                'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400': getAgentStatus(agent) === 'done',
-                'bg-accent-500 text-white shadow-glow-accent animate-halo': isAgentActive(agent),
-                'bg-surface-sunken text-surface-subtle': getAgentStatus(agent) === 'idle'
-              }">
+              [class]="isAgentActive(agent)
+                ? 'bg-white/20 text-white'
+                : getAgentStatus(agent) === 'done'
+                  ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                  : 'bg-surface-sunken text-surface-subtle'">
               @if (getAgentStatus(agent) === 'done') {
                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"></path>
@@ -119,11 +130,13 @@
                 <span class="w-1.5 h-1.5 rounded-full bg-current opacity-50"></span>
               }
             </div>
-            <span class="text-xs font-semibold whitespace-nowrap text-surface-strong">{{ getAgentDisplayName(agent) }}</span>
+            <span class="text-xs font-semibold whitespace-nowrap">{{ getAgentDisplayName(agent) }}</span>
           </div>
 
           @if (!last) {
-            <svg class="w-4 h-4 text-surface-subtle flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg class="w-4 h-4 text-surface-subtle flex-shrink-0 transition-colors"
+                 [class]="isAgentActive(agent) || getAgentStatus(agent) === 'done' ? 'text-accent-500' : 'text-surface-subtle'"
+                 fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 5l7 7-7 7"></path>
             </svg>
           }
