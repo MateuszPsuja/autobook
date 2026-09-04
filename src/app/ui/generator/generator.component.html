@@ -18,7 +18,7 @@
       } @else if (currentStatus === 'translating') {
         <!-- Translating: blue disc, language icon. -->
         <div class="w-12 h-12 rounded-xl bg-sky-500/15 text-sky-600 dark:text-sky-400 flex items-center justify-center">
-          <svg class="w-6 h-6 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129"></path>
           </svg>
         </div>
@@ -33,7 +33,7 @@
           <div class="absolute inset-0 rounded-xl bg-accent-500/20 blur-md"
                [class.opacity-0]="!isGenerating"></div>
           <div class="relative w-12 h-12 rounded-xl bg-accent-500 text-white flex items-center justify-center shadow-glow-accent">
-            <svg class="w-6 h-6" [class.animate-pulse]="isGenerating" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
             </svg>
           </div>
@@ -100,17 +100,15 @@
         <div class="flex items-center gap-2 flex-shrink-0">
           <!-- Single class binding drives the whole card so the active
                state can't get drowned out by .card-sm's background.
-               Active = solid orange + halo. Done = green chip. Idle =
-               sunken gray. -->
+               Active = solid orange + static glow. Done = green chip.
+               Idle = sunken gray. No pulsing/ping — the user asked
+               to keep the active state steady. -->
           <div class="relative flex items-center gap-2.5 pl-3 pr-3.5 py-2 rounded-xl border-2 transition-all duration-200"
                [class]="isAgentActive(agent)
-                 ? 'bg-accent-500 text-white border-accent-500 shadow-glow-accent animate-halo'
+                 ? 'bg-accent-500 text-white border-accent-500 shadow-glow-accent'
                  : getAgentStatus(agent) === 'done'
                    ? 'bg-surface-card text-surface-strong border-emerald-500/40'
                    : 'bg-surface-card text-surface-subtle border-surface-border'">
-            @if (isAgentActive(agent)) {
-              <div class="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-white animate-ping"></div>
-            }
             <div class="w-6 h-6 rounded-md flex items-center justify-center"
               [class]="isAgentActive(agent)
                 ? 'bg-white/20 text-white'

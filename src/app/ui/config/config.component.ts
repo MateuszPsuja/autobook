@@ -295,9 +295,10 @@ export class ConfigComponent implements OnInit {
       // Completed: orange-tinted disc, thin orange ring, check icon visible.
       return 'bg-accent-500/15 text-accent-600 dark:text-accent-300 border-2 border-accent-500/40';
     } else if (stepNumber === this.currentStep) {
-      // Current: solid orange disc, white text, animated halo. This is the
-      // single brightest element on the page by design.
-      return 'bg-accent-500 text-white border-2 border-accent-500 shadow-glow-accent animate-halo';
+      // Current: solid orange disc with a static glow. No animation —
+      // the user asked to keep this steady so it doesn't read as
+      // a notification ping.
+      return 'bg-accent-500 text-white border-2 border-accent-500 shadow-glow-accent';
     } else {
       // Future: sunken disc, faint border, muted text.
       return 'bg-surface-sunken text-surface-subtle border-2 border-surface-border';
