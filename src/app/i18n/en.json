@@ -272,7 +272,9 @@
     "generateChaptersFirst": "Generate chapters first in the Generation tab.",
     "targetLanguage": "Target language",
     "willTranslate": "The book will be translated via LLM on export. This may take a few minutes.",
-    "stop": "Stop"
+    "stop": "Stop",
+    "author": "Author",
+    "authorHelp": "Appears on the cover, title page, and back cover. Leave empty to use the default."
   },
   "status": {
     "idle": "Idle",

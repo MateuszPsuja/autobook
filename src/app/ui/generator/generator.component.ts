@@ -263,7 +263,7 @@ export class GeneratorComponent implements OnInit, OnDestroy {
   getAgentClass(agent: AgentType): string {
     const state = this.agentStates[agent];
     if (state.active) {
-      return 'border-brand-500 bg-brand-50 dark:bg-brand-900/20 text-brand-700 dark:text-brand-300';
+      return 'border-accent-500 bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white shadow-sm shadow-accent-500/20';
     }
     return 'border-gray-300 bg-white text-gray-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300';
   }
@@ -271,7 +271,7 @@ export class GeneratorComponent implements OnInit, OnDestroy {
   getAgentChipClass(agent: AgentType): string {
     const state = this.agentStates[agent];
     if (state.active) {
-      return 'bg-brand-100 dark:bg-brand-900/50 text-brand-700 dark:text-brand-300';
+      return 'bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white';
     }
     return 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300';
   }

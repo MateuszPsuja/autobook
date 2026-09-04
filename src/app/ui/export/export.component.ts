@@ -44,6 +44,16 @@ export class ExportComponent implements OnInit {
   exportLanguage: ExportLanguage = 'en';
   readonly availableExportLanguages = EXPORT_LANGUAGES;
 
+  /**
+   * Optional user-supplied byline / author name. When empty, the
+   * exporter falls back to the localised default
+   * ("Written by artificial intelligence" in the target language).
+   * Used on the cover, title page, back cover, and the PDF `info`
+   * metadata so the file's "Properties" dialog matches what's
+   * printed on the page.
+   */
+  customAuthor = '';
+
   exportOptions: PdfExportOptions = {
     includeTitles: true,
     includeTOC: true,
@@ -107,6 +117,17 @@ export class ExportComponent implements OnInit {
    */
   willTranslate(): boolean {
     return this.exportLanguage !== 'en';
+  }
+
+  /**
+   * Returns the user-supplied byline when set, otherwise the
+   * localised default from `ExportLabels.bookAuthor`. Trimmed so
+   * whitespace-only input still falls through to the default.
+   */
+  getEffectiveAuthor(): string {
+    const trimmed = (this.customAuthor || '').trim();
+    if (trimmed) return trimmed;
+    return getExportLabels(this.exportLanguage).bookAuthor;
   }
 
   stopExport(): void {
@@ -363,6 +384,7 @@ export class ExportComponent implements OnInit {
     const docDefinition = buildPdfDocument(chapters, this.exportOptions, {
       state: viewState,
       language: this.exportLanguage,
+      bookAuthor: this.getEffectiveAuthor(),
       chapterIllustrations: illustrationCtx?.chapterIllustrations,
       coverArt: illustrationCtx?.coverArt,
       backCoverArt: illustrationCtx?.backCoverArt,
@@ -403,7 +425,7 @@ export class ExportComponent implements OnInit {
     const config = translatedConfig ?? baseState.config;
     const bookTitle = config?.title || labels.untitledFallback;
 
-    let content = `# ${bookTitle}\n\n`;
+    let content = `# ${bookTitle}\n\n*${this.getEffectiveAuthor()}*\n\n`;
 
     if (this.exportOptions.includeTOC) {
       content += `## ${labels.tocLabel}\n\n`;

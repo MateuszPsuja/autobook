@@ -587,14 +587,26 @@ export class TranslationService {
     };
 
     const langName = LANGUAGE_DISPLAY_NAME[target];
+    // The `chapterWord` is passed in only as context so the model
+    // knows which language the surrounding "CHAPTER N" / "ROZDZIAŁ N"
+    // / "CAPÍTULO N" labels are in. The PDF renderer adds that
+    // eyebrow itself from `labels.chapterLabel`; the model must
+    // return ONLY the bare translated title (no "Chapter N:" prefix,
+    // no "Rozdział N:" prefix, no numbering). The previous prompt
+    // told the model to "keep chapterWord as-is in the output title",
+    // which many LLMs interpreted as "include the Chapter word in the
+    // title" — so they returned the English title with "Chapter"
+    // prepended, or returned it untranslated entirely.
     const systemPrompt = `You are a literary translator. Translate the English book chapter below into ${langName}. ` +
-      `The input is a JSON object with the keys "title" (string), "content" (string), ` +
-      `and "chapterWord" (the localised "Chapter" word, e.g. "Rozdział" for Polish — keep it as-is in the output title). ` +
-      `Return a JSON object with the SAME keys and translated values. ` +
-      `For the title, re-emit it with the "chapterWord" prefix if the original had a "Chapter N:" prefix. ` +
-      `Wrap your entire JSON response with [T] and [/T] markers, e.g. "[T]{...}[/T]". ` +
+      `The input is a JSON object with three keys: "title" (string), "content" (string), ` +
+      `and "chapterWord" (the localised "Chapter" word used elsewhere in the book, e.g. "Rozdział" for Polish). ` +
+      `The "chapterWord" field is reference only — do NOT include it, the word "Chapter", or any other ` +
+      `numbering prefix in your output. ` +
+      `Return a JSON object with the SAME two keys, "title" and "content", with their values translated into ${langName}. ` +
+      `The "title" must be the bare translated title only — no "Chapter", no "Rozdział", no "Capitulo", no number. ` +
+      `Wrap your entire JSON response with [T] and [/T] markers, e.g. "[T]{\\"title\\":\\"...\\",\\"content\\":\\"...\\"}[/T]". ` +
       `Do not include any preamble, explanation, or the original text inside or outside the markers. ` +
-      `Preserve paragraph breaks.`;
+      `Preserve paragraph breaks in the content.`;
 
     return this.translateWithRetry(JSON.stringify(payload), systemPrompt, 12000).pipe(
       map(cleaned => {

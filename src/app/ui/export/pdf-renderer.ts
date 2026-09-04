@@ -53,6 +53,13 @@ export interface PdfExportContext {
    * `language`.
    */
   language: ExportLanguage;
+  /**
+   * Optional user-supplied byline. When set, overrides the
+   * localised default on the cover, title page, back cover, and
+   * the PDF `info.author` metadata. Falls through to
+   * `ExportLabels.bookAuthor` for the target language when empty.
+   */
+  bookAuthor?: string;
   chapterIllustrations?: Map<string, ChapterIllustration>;
   coverArt?: BookCoverArt;
   backCoverArt?: BookCoverArt;
@@ -389,17 +396,23 @@ function buildDropCapParagraph(text: string): DocContent {
     return { text, style: 'bodyParagraph' };
   }
   const [, leading, firstChar, rest] = match;
-  // The drop cap column is roughly 2.5 character widths of body text wide.
+  // The drop cap is a single character in its own column. The body
+  // text in the next column uses `bodyNoIndent` (fontSize 11,
+  // lineHeight 1.4 → ~15.4 pt per line). To span roughly 3 lines of
+  // body text the cap needs to be ~46 pt tall, so we use fontSize 48
+  // with lineHeight 1 and no top margin — the previous 4 pt top
+  // margin was pushing the cap below the body text's first baseline
+  // and the 0.9 lineHeight was making it shorter than 3 body lines.
   return {
     columns: [
       {
-        width: 36,
+        width: 40,
         text: firstChar.toUpperCase(),
-        fontSize: 44,
+        fontSize: 48,
         bold: false,
         font: DISPLAY_FONT,
-        lineHeight: 0.9,
-        margin: [0, 4, 0, 0],
+        lineHeight: 1,
+        margin: [0, 0, 0, 0],
         alignment: 'left',
       },
       {
@@ -443,12 +456,12 @@ export function buildPdfDocument(
   const config = context.state.config;
   const bookTitle = (config?.title || '').trim() || labels.untitledFallback;
   // The on-page byline (cover, back cover, title page) is the same
-  // string used for the PDF `info.author` metadata — every book
-  // shipped from AutoBook is an AI-generated work, so the visible
-  // byline and the file metadata stay in sync. The protagonist name
-  // is the story's main character, not the author, and is no longer
-  // used as the byline.
-  const bookAuthor = labels.bookAuthor;
+  // string used for the PDF `info.author` metadata. The export
+  // component can pass a user-supplied `bookAuthor`; when it
+  // doesn't, we fall through to the localised default. The
+  // protagonist name is the story's main character, not the author,
+  // and is no longer used as the byline.
+  const bookAuthor = (context.bookAuthor || '').trim() || labels.bookAuthor;
   const bookSubtitle = (config?.themes && config.themes.length)
     ? config.themes.slice(0, 3).join('  \u00B7  ')
     : null;
@@ -570,7 +583,11 @@ export function buildPdfDocument(
       font: BODY_FONT,
       fontSize: 11,
       alignment: 'center',
-      characterSpacing: 8,
+      // The localised chapter word ("ROZDZIAŁ", "CAPÍTULO", "KAPITEL",
+      // "ГЛАВА") is up to 8 letters — a `characterSpacing` of 8 pt would
+      // push the trailing roman numeral off the right margin on narrower
+      // pages. 2 pt gives a clean, even breath without breaking the line.
+      characterSpacing: 2,
       color: '#666',
       margin: [0, 56, 0, 10],
     },
@@ -755,14 +772,12 @@ export function buildPdfDocument(
     // document (see printer.js: `if (docDefinition.info) ...`), so
     // the author / title show up in the file's "Properties" dialog
     // and in downstream tools (Calibre, Adobe Reader, etc.). The
-    // author is hard-coded to "Written by artificial intelligence"
-    // because every book shipped from AutoBook is an AI-generated
-    // work. The visible on-page byline (cover, back cover, title
-    // page) uses the same string so the file metadata and the
-    // rendered content stay in sync.
+    // author is whatever the export component passed (or the
+    // localised default) so the file metadata and the on-page
+    // byline (cover, back cover, title page) always match.
     info: {
       title: bookTitle,
-      author: 'Written by artificial intelligence',
+      author: bookAuthor,
       creator: 'AutoBook',
     },
     defaultStyle: {

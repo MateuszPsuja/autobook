@@ -282,14 +282,14 @@ export class ConfigComponent implements OnInit {
 
   getStepClass(stepNumber: number): string {
     if (stepNumber < this.currentStep || this.completedSteps.includes(stepNumber)) {
-      // Completed step
-      return 'bg-brand-500 text-white shadow-md';
+      // Completed step: gray disc, orange border, high-contrast text.
+      return 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white border-2 border-accent-500';
     } else if (stepNumber === this.currentStep) {
-      // Current step
-      return 'bg-brand-100 dark:bg-brand-900/50 text-brand-600 dark:text-brand-400 ring-2 ring-brand-500 shadow-md';
+      // Current step: gray disc, orange border, high-contrast text, halo to draw the eye.
+      return 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white border-2 border-accent-500 ring-4 ring-accent-500/20 shadow-lg shadow-accent-500/30';
     } else {
-      // Future step
-      return 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400';
+      // Future step: gray disc, gray border, high-contrast text.
+      return 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white border-2 border-gray-200 dark:border-gray-700';
     }
   }
 

@@ -1,0 +1,576 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Autobook — Orange Accent Analysis</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50:  '#eef2ff', 100: '#e0e7ff', 200: '#c7d2fe', 300: '#a5b4fc',
+              400: '#818cf8', 500: '#6366f1', 600: '#4f46e5', 700: '#4338ca',
+              800: '#3730a3', 900: '#312e81', 950: '#1e1b4b',
+            },
+            accent: {
+              50:  '#fff7ed', 100: '#ffedd5', 200: '#fed7aa', 300: '#fdba74',
+              400: '#fb923c', 500: '#f97316', 600: '#ea580c', 700: '#c2410c',
+              800: '#9a3412', 900: '#7c2d12', 950: '#431407',
+            },
+          },
+        },
+      },
+    };
+  </script>
+  <style>
+    body { font-family: 'Inter', system-ui, sans-serif; }
+    .grid-bg {
+      background-image: linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px),
+                        linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px);
+      background-size: 24px 24px;
+    }
+  </style>
+</head>
+<body class="bg-[#0b0d12] text-gray-200">
+
+  <!-- Header -->
+  <header class="border-b border-white/5 bg-[#0b0d12]/80 backdrop-blur sticky top-0 z-10">
+    <div class="max-w-7xl mx-auto px-6 py-5 flex items-center gap-4">
+      <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-accent-500 to-accent-700 flex items-center justify-center text-white text-lg shadow-lg shadow-accent-500/20">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path>
+        </svg>
+      </div>
+      <div>
+        <h1 class="text-xl font-bold text-white">Autobook — Orange Accent Analysis</h1>
+        <p class="text-xs text-gray-500">Subtle orange threads through the design, in the color of the logo</p>
+      </div>
+      <div class="ml-auto flex items-center gap-2 text-xs">
+        <span class="px-2 py-1 rounded-full bg-accent-500/10 text-accent-300 border border-accent-500/20">Design proposal</span>
+        <span class="px-2 py-1 rounded-full bg-white/5 text-gray-400 border border-white/10">v0.1</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-6 py-10 space-y-16">
+
+    <!-- ============ DIAGNOSIS ============ -->
+    <section>
+      <div class="flex items-baseline gap-3 mb-2">
+        <span class="text-accent-500 font-mono text-sm">01</span>
+        <h2 class="text-2xl font-bold text-white">The mismatch</h2>
+      </div>
+      <p class="text-gray-400 max-w-3xl mb-8">
+        The logo is a warm coral orange (<code class="text-accent-400">#E87848</code>), but every accent
+        in the UI is indigo (<code class="text-brand-300">#4f46e5</code>). The eye is trained to read
+        orange as the brand, so any indigo flourish quietly fights the logo.
+      </p>
+
+      <div class="grid md:grid-cols-2 gap-6">
+        <!-- Logo swatch -->
+        <div class="rounded-2xl border border-white/10 bg-white/[0.02] p-6">
+          <div class="text-xs uppercase tracking-widest text-gray-500 mb-3">Logo (the truth)</div>
+          <div class="flex items-center gap-4">
+            <div class="w-24 h-24 rounded-xl bg-[#E87848] flex items-center justify-center text-white text-3xl font-bold shadow-lg shadow-[#E87848]/30">
+              Ab
+            </div>
+            <div>
+              <div class="font-mono text-sm text-accent-300">#E87848</div>
+              <div class="font-mono text-xs text-gray-500">rgb(232, 120, 72)</div>
+              <div class="text-xs text-gray-500 mt-1">sampled from autobook_trans.png (724×220)</div>
+            </div>
+          </div>
+        </div>
+        <!-- Current brand swatch -->
+        <div class="rounded-2xl border border-white/10 bg-white/[0.02] p-6">
+          <div class="text-xs uppercase tracking-widest text-gray-500 mb-3">Current brand-* (the impostor)</div>
+          <div class="flex items-center gap-4">
+            <div class="w-24 h-24 rounded-xl bg-brand-600 flex items-center justify-center text-white text-3xl font-bold shadow-lg shadow-brand-600/30">
+              Ab
+            </div>
+            <div>
+              <div class="font-mono text-sm text-brand-300">#4F46E5</div>
+              <div class="font-mono text-xs text-gray-500">rgb(79, 70, 229)</div>
+              <div class="text-xs text-gray-500 mt-1">defined in tailwind.config.js → brand.600</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ PALETTE ============ -->
+    <section>
+      <div class="flex items-baseline gap-3 mb-2">
+        <span class="text-accent-500 font-mono text-sm">02</span>
+        <h2 class="text-2xl font-bold text-white">The proposed palette</h2>
+      </div>
+      <p class="text-gray-400 max-w-3xl mb-8">
+        Keep <code class="text-brand-300">brand-*</code> for primary surfaces and the dark canvas.
+        Add an <code class="text-accent-300">accent-*</code> scale derived from the logo orange.
+        Use accent for <em>small</em> things: icons, dots, rings, the active state, the progress fill.
+      </p>
+
+      <div class="grid md:grid-cols-2 gap-6">
+        <div class="rounded-2xl border border-white/10 bg-white/[0.02] p-6">
+          <div class="text-xs uppercase tracking-widest text-accent-300 mb-3">accent — new</div>
+          <div class="grid grid-cols-11 gap-1 text-[10px] font-mono">
+            <div class="text-center"><div class="h-12 rounded bg-accent-50"></div>50</div>
+            <div class="text-center"><div class="h-12 rounded bg-accent-100"></div>100</div>
+            <div class="text-center"><div class="h-12 rounded bg-accent-200"></div>200</div>
+            <div class="text-center"><div class="h-12 rounded bg-accent-300"></div>300</div>
+            <div class="text-center"><div class="h-12 rounded bg-accent-400"></div>400</div>
+            <div class="text-center"><div class="h-12 rounded bg-accent-500 ring-2 ring-white/30"></div>500</div>
+            <div class="text-center"><div class="h-12 rounded bg-accent-600"></div>600</div>
+            <div class="text-center"><div class="h-12 rounded bg-accent-700"></div>700</div>
+            <div class="text-center"><div class="h-12 rounded bg-accent-800"></div>800</div>
+            <div class="text-center"><div class="h-12 rounded bg-accent-900"></div>900</div>
+            <div class="text-center"><div class="h-12 rounded bg-accent-950"></div>950</div>
+          </div>
+          <div class="mt-3 font-mono text-xs text-gray-500">500 = logo orange · 300 = icon on dark · 100 = chip bg</div>
+        </div>
+
+        <div class="rounded-2xl border border-white/10 bg-white/[0.02] p-6">
+          <div class="text-xs uppercase tracking-widest text-brand-300 mb-3">brand — keep, demote to surface role</div>
+          <div class="grid grid-cols-11 gap-1 text-[10px] font-mono">
+            <div class="text-center"><div class="h-12 rounded bg-brand-50"></div>50</div>
+            <div class="text-center"><div class="h-12 rounded bg-brand-100"></div>100</div>
+            <div class="text-center"><div class="h-12 rounded bg-brand-200"></div>200</div>
+            <div class="text-center"><div class="h-12 rounded bg-brand-300"></div>300</div>
+            <div class="text-center"><div class="h-12 rounded bg-brand-400"></div>400</div>
+            <div class="text-center"><div class="h-12 rounded bg-brand-500 ring-2 ring-white/30"></div>500</div>
+            <div class="text-center"><div class="h-12 rounded bg-brand-600"></div>600</div>
+            <div class="text-center"><div class="h-12 rounded bg-brand-700"></div>700</div>
+            <div class="text-center"><div class="h-12 rounded bg-brand-800"></div>800</div>
+            <div class="text-center"><div class="h-12 rounded bg-brand-900"></div>900</div>
+            <div class="text-center"><div class="h-12 rounded bg-brand-950"></div>950</div>
+          </div>
+          <div class="mt-3 font-mono text-xs text-gray-500">stays for dark canvas + large primary fills only</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ WHERE ORANGE LIVES ============ -->
+    <section>
+      <div class="flex items-baseline gap-3 mb-2">
+        <span class="text-accent-500 font-mono text-sm">03</span>
+        <h2 class="text-2xl font-bold text-white">Where orange goes (the rules)</h2>
+      </div>
+      <p class="text-gray-400 max-w-3xl mb-8">
+        Three simple rules keep the orange from becoming noise: <strong class="text-white">small</strong> elements,
+        <strong class="text-white">moving</strong> state, and <strong class="text-white">logo-adjacent</strong> marks.
+        Everything else stays indigo / gray.
+      </p>
+
+      <div class="grid md:grid-cols-3 gap-5">
+        <div class="rounded-2xl border border-accent-500/20 bg-accent-500/[0.04] p-5">
+          <div class="flex items-center gap-2 mb-3">
+            <div class="w-7 h-7 rounded-lg bg-accent-500/15 text-accent-400 flex items-center justify-center">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+            </div>
+            <h3 class="font-semibold text-white">Active state</h3>
+          </div>
+          <p class="text-sm text-gray-400">The thing you're doing <em>right now</em> should glow orange. Sidebar nav, current step, selected tab.</p>
+        </div>
+        <div class="rounded-2xl border border-accent-500/20 bg-accent-500/[0.04] p-5">
+          <div class="flex items-center gap-2 mb-3">
+            <div class="w-7 h-7 rounded-lg bg-accent-500/15 text-accent-400 flex items-center justify-center">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            </div>
+            <h3 class="font-semibold text-white">Progress & motion</h3>
+          </div>
+          <p class="text-sm text-gray-400">Progress bars, spinners, focus rings — anywhere attention is on the move.</p>
+        </div>
+        <div class="rounded-2xl border border-accent-500/20 bg-accent-500/[0.04] p-5">
+          <div class="flex items-center gap-2 mb-3">
+            <div class="w-7 h-7 rounded-lg bg-accent-500/15 text-accent-400 flex items-center justify-center">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"></path></svg>
+            </div>
+            <h3 class="font-semibold text-white">Marks & dots</h3>
+          </div>
+          <p class="text-sm text-gray-400">Tiny "is this thing on?" indicators: connection dot, "current selection" chip, badge counts, the small book icon.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ BEFORE / AFTER ============ -->
+    <section>
+      <div class="flex items-baseline gap-3 mb-2">
+        <span class="text-accent-500 font-mono text-sm">04</span>
+        <h2 class="text-2xl font-bold text-white">Before / after</h2>
+      </div>
+      <p class="text-gray-400 max-w-3xl mb-8">
+        Real UI elements from the app, rebuilt with the orange accent.
+      </p>
+
+      <!-- A. Sidebar nav active item -->
+      <div class="rounded-2xl border border-white/10 bg-white/[0.02] p-6 mb-6">
+        <div class="text-sm font-semibold text-white mb-1">A · Sidebar nav item</div>
+        <p class="text-xs text-gray-500 mb-5">Active state becomes orange. The icon's container background lifts, the text turns orange, and a subtle 4px bar appears on the left edge.</p>
+        <div class="grid md:grid-cols-2 gap-5">
+          <!-- Before -->
+          <div>
+            <div class="text-[10px] uppercase tracking-widest text-gray-600 mb-2">Before · indigo</div>
+            <div class="rounded-xl bg-[#0f1217] p-3 border border-white/5 space-y-1">
+              <div class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl text-gray-400 hover:bg-white/5">
+                <div class="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253"></path></svg>
+                </div>
+                Configure
+              </div>
+              <div class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl bg-brand-900/30 text-brand-400 shadow-sm">
+                <div class="w-8 h-8 rounded-lg bg-brand-800 flex items-center justify-center">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
+                </div>
+                Generate
+              </div>
+              <div class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl text-gray-400 hover:bg-white/5">
+                <div class="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                </div>
+                Export
+              </div>
+            </div>
+          </div>
+          <!-- After -->
+          <div>
+            <div class="text-[10px] uppercase tracking-widest text-accent-400 mb-2">After · orange accent</div>
+            <div class="rounded-xl bg-[#0f1217] p-3 border border-white/5 space-y-1 relative overflow-hidden">
+              <div class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl text-gray-400 hover:bg-white/5">
+                <div class="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253"></path></svg>
+                </div>
+                Configure
+              </div>
+              <div class="relative flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl bg-accent-500/10 text-accent-300 shadow-sm">
+                <div class="absolute left-0 top-2 bottom-2 w-1 rounded-r-full bg-accent-500"></div>
+                <div class="w-8 h-8 rounded-lg bg-accent-500/20 text-accent-300 flex items-center justify-center">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
+                </div>
+                Generate
+              </div>
+              <div class="flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl text-gray-400 hover:bg-white/5">
+                <div class="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                </div>
+                Export
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- B. Step progress indicator -->
+      <div class="rounded-2xl border border-white/10 bg-white/[0.02] p-6 mb-6">
+        <div class="text-sm font-semibold text-white mb-1">B · Config step indicator</div>
+        <p class="text-xs text-gray-500 mb-5">Done steps get a small orange check on a gray disc. Current step gets a filled orange disc with a halo. Connectors fade from orange → gray.</p>
+        <div class="grid md:grid-cols-2 gap-5">
+          <div>
+            <div class="text-[10px] uppercase tracking-widest text-gray-600 mb-2">Before</div>
+            <div class="rounded-xl bg-[#0f1217] p-5 border border-white/5">
+              <div class="flex items-center gap-2">
+                <div class="w-10 h-10 rounded-full bg-brand-500 text-white flex items-center justify-center font-semibold text-sm">
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"></path></svg>
+                </div>
+                <div class="flex-1 h-0.5 rounded-full bg-brand-500"></div>
+                <div class="w-10 h-10 rounded-full bg-brand-100 text-brand-600 ring-2 ring-brand-500 flex items-center justify-center font-semibold text-sm">2</div>
+                <div class="flex-1 h-0.5 rounded-full bg-gray-700"></div>
+                <div class="w-10 h-10 rounded-full bg-gray-800 text-gray-500 flex items-center justify-center font-semibold text-sm">3</div>
+                <div class="flex-1 h-0.5 rounded-full bg-gray-700"></div>
+                <div class="w-10 h-10 rounded-full bg-gray-800 text-gray-500 flex items-center justify-center font-semibold text-sm">4</div>
+              </div>
+              <div class="grid grid-cols-4 mt-2 text-[10px] text-center">
+                <div class="text-brand-400">Creative</div>
+                <div class="text-brand-400">Characters</div>
+                <div class="text-gray-500">Structure</div>
+                <div class="text-gray-500">Review</div>
+              </div>
+            </div>
+          </div>
+          <div>
+            <div class="text-[10px] uppercase tracking-widest text-accent-400 mb-2">After</div>
+            <div class="rounded-xl bg-[#0f1217] p-5 border border-white/5">
+              <div class="flex items-center gap-2">
+                <div class="w-10 h-10 rounded-full bg-accent-500/15 text-accent-400 ring-1 ring-accent-500/40 flex items-center justify-center">
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"></path></svg>
+                </div>
+                <div class="flex-1 h-0.5 rounded-full bg-gradient-to-r from-accent-500/60 to-accent-500/10"></div>
+                <div class="relative w-10 h-10">
+                  <div class="absolute inset-0 rounded-full bg-accent-500/20 animate-pulse"></div>
+                  <div class="relative w-10 h-10 rounded-full bg-accent-500 text-white flex items-center justify-center font-semibold text-sm shadow-lg shadow-accent-500/40">2</div>
+                </div>
+                <div class="flex-1 h-0.5 rounded-full bg-white/5"></div>
+                <div class="w-10 h-10 rounded-full bg-white/5 text-gray-500 ring-1 ring-white/5 flex items-center justify-center font-semibold text-sm">3</div>
+                <div class="flex-1 h-0.5 rounded-full bg-white/5"></div>
+                <div class="w-10 h-10 rounded-full bg-white/5 text-gray-500 ring-1 ring-white/5 flex items-center justify-center font-semibold text-sm">4</div>
+              </div>
+              <div class="grid grid-cols-4 mt-2 text-[10px] text-center">
+                <div class="text-accent-300/70">Creative</div>
+                <div class="text-accent-300 font-medium">Characters</div>
+                <div class="text-gray-500">Structure</div>
+                <div class="text-gray-500">Review</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- C. Progress bar + connection dot -->
+      <div class="rounded-2xl border border-white/10 bg-white/[0.02] p-6 mb-6">
+        <div class="text-sm font-semibold text-white mb-1">C · Status: connection dot, progress bar, model chip</div>
+        <p class="text-xs text-gray-500 mb-5">Replace indigo progress with orange fill. Keep success green, but make the "connected" indicator a tiny warm dot.</p>
+        <div class="grid md:grid-cols-2 gap-5">
+          <div>
+            <div class="text-[10px] uppercase tracking-widest text-gray-600 mb-2">Before</div>
+            <div class="rounded-xl bg-[#0f1217] p-5 border border-white/5 space-y-4">
+              <div class="flex items-center gap-2">
+                <div class="w-2.5 h-2.5 rounded-full ring-2 ring-[#0f1217] bg-green-500 animate-pulse"></div>
+                <span class="text-xs font-medium text-gray-400">Connected</span>
+              </div>
+              <div>
+                <div class="flex items-center justify-between text-xs text-gray-400 mb-1">
+                  <span>Exporting…</span><span>62%</span>
+                </div>
+                <div class="w-full bg-gray-700 rounded-full h-2">
+                  <div class="bg-brand-500 h-2 rounded-full" style="width: 62%"></div>
+                </div>
+              </div>
+              <div class="flex items-center gap-2 px-3 py-2 bg-white/5 rounded-lg text-xs">
+                <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+                <span class="text-gray-500">Model:</span>
+                <span class="text-gray-300 font-medium">Gpt 4 1106 Preview</span>
+              </div>
+            </div>
+          </div>
+          <div>
+            <div class="text-[10px] uppercase tracking-widest text-accent-400 mb-2">After</div>
+            <div class="rounded-xl bg-[#0f1217] p-5 border border-white/5 space-y-4">
+              <div class="flex items-center gap-2">
+                <div class="relative w-2.5 h-2.5">
+                  <div class="absolute inset-0 rounded-full bg-accent-500 animate-ping opacity-60"></div>
+                  <div class="relative w-2.5 h-2.5 rounded-full ring-2 ring-[#0f1217] bg-accent-500"></div>
+                </div>
+                <span class="text-xs font-medium text-gray-300">Connected</span>
+              </div>
+              <div>
+                <div class="flex items-center justify-between text-xs text-gray-400 mb-1">
+                  <span>Exporting…</span><span class="text-accent-300 font-semibold">62%</span>
+                </div>
+                <div class="w-full bg-white/5 rounded-full h-2 overflow-hidden">
+                  <div class="bg-gradient-to-r from-accent-500 to-accent-400 h-2 rounded-full shadow-[0_0_10px_rgba(232,120,72,0.5)]" style="width: 62%"></div>
+                </div>
+              </div>
+              <div class="flex items-center gap-2 px-3 py-2 bg-white/5 rounded-lg text-xs">
+                <svg class="w-4 h-4 text-accent-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+                <span class="text-gray-500">Model:</span>
+                <span class="text-gray-200 font-medium">Gpt 4 1106 Preview</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- D. Settings card + form focus ring -->
+      <div class="rounded-2xl border border-white/10 bg-white/[0.02] p-6 mb-6">
+        <div class="text-sm font-semibold text-white mb-1">D · Settings "current selection" chip & focus ring</div>
+        <p class="text-xs text-gray-500 mb-5">The "Current model" callout is a perfect place to dress up in orange — it's already highlighted in the design, just not in the brand color.</p>
+        <div class="grid md:grid-cols-2 gap-5">
+          <div>
+            <div class="text-[10px] uppercase tracking-widest text-gray-600 mb-2">Before</div>
+            <div class="rounded-xl bg-[#0f1217] p-5 border border-white/5 space-y-4">
+              <div class="p-3 bg-brand-50/5 rounded-xl border border-brand-800/40">
+                <span class="text-xs font-medium text-brand-400">Current selection:</span>
+                <span class="font-semibold text-brand-300 ml-2">Gpt 4 1106 Preview</span>
+              </div>
+              <div>
+                <label class="text-xs text-gray-400">API key</label>
+                <div class="mt-1 px-3 py-2 rounded-lg bg-white/5 border border-gray-700 font-mono text-sm">sk-or-v1-…</div>
+              </div>
+              <div>
+                <label class="text-xs text-gray-400">Focused field</label>
+                <div class="mt-1 px-3 py-2 rounded-lg bg-white/5 border-2 border-brand-500 text-sm">I am being edited</div>
+              </div>
+            </div>
+          </div>
+          <div>
+            <div class="text-[10px] uppercase tracking-widest text-accent-400 mb-2">After</div>
+            <div class="rounded-xl bg-[#0f1217] p-5 border border-white/5 space-y-4">
+              <div class="relative p-3 rounded-xl border border-accent-500/30 bg-gradient-to-r from-accent-500/10 to-transparent overflow-hidden">
+                <div class="absolute left-0 top-0 bottom-0 w-1 bg-accent-500"></div>
+                <span class="text-xs font-medium text-accent-300">Current selection:</span>
+                <span class="font-semibold text-accent-200 ml-2">Gpt 4 1106 Preview</span>
+              </div>
+              <div>
+                <label class="text-xs text-gray-400">API key</label>
+                <div class="mt-1 px-3 py-2 rounded-lg bg-white/5 border border-white/10 font-mono text-sm">sk-or-v1-…</div>
+              </div>
+              <div>
+                <label class="text-xs text-gray-400">Focused field</label>
+                <div class="mt-1 px-3 py-2 rounded-lg bg-accent-500/5 border-2 border-accent-500 text-sm ring-4 ring-accent-500/15">I am being edited</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- E. Theme toggle + generator header -->
+      <div class="rounded-2xl border border-white/10 bg-white/[0.02] p-6">
+        <div class="text-sm font-semibold text-white mb-1">E · Theme toggle icons + generator badge</div>
+        <p class="text-xs text-gray-500 mb-5">Small wins: tint the sun/moon icon orange. Replace the indigo badge behind the chapter progress % with a soft orange chip.</p>
+        <div class="grid md:grid-cols-2 gap-5">
+          <div>
+            <div class="text-[10px] uppercase tracking-widest text-gray-600 mb-2">Before</div>
+            <div class="rounded-xl bg-[#0f1217] p-5 border border-white/5 space-y-3">
+              <button class="w-full flex items-center justify-between px-4 py-2.5 text-sm font-medium text-gray-300 rounded-xl hover:bg-white/5">
+                <div class="flex items-center gap-3">
+                  <svg class="w-5 h-5 text-brand-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path></svg>
+                  Dark mode
+                </div>
+                <div class="w-10 h-5 bg-gray-700 rounded-full relative">
+                  <div class="w-4 h-4 bg-white rounded-full absolute top-0.5 translate-x-5 shadow-sm"></div>
+                </div>
+              </button>
+              <div class="flex items-center justify-between px-3 py-2 rounded-lg bg-white/5">
+                <div class="flex items-center gap-2">
+                  <div class="w-8 h-8 rounded-lg bg-brand-900/30 flex items-center justify-center">
+                    <svg class="w-4 h-4 text-brand-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253"></path></svg>
+                  </div>
+                  <span class="text-sm">Chapter 3</span>
+                </div>
+                <span class="text-lg font-bold text-brand-400">68%</span>
+              </div>
+            </div>
+          </div>
+          <div>
+            <div class="text-[10px] uppercase tracking-widest text-accent-400 mb-2">After</div>
+            <div class="rounded-xl bg-[#0f1217] p-5 border border-white/5 space-y-3">
+              <button class="w-full flex items-center justify-between px-4 py-2.5 text-sm font-medium text-gray-300 rounded-xl hover:bg-white/5">
+                <div class="flex items-center gap-3">
+                  <svg class="w-5 h-5 text-accent-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+                  <span>Light mode</span>
+                </div>
+                <div class="w-10 h-5 bg-accent-500/30 rounded-full relative ring-1 ring-accent-500/40">
+                  <div class="w-4 h-4 bg-accent-500 rounded-full absolute top-0.5 translate-x-0.5 shadow-sm shadow-accent-500/40"></div>
+                </div>
+              </button>
+              <div class="flex items-center justify-between px-3 py-2 rounded-lg bg-white/5">
+                <div class="flex items-center gap-2">
+                  <div class="w-8 h-8 rounded-lg bg-accent-500/15 flex items-center justify-center text-accent-300">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253"></path></svg>
+                  </div>
+                  <span class="text-sm">Chapter 3</span>
+                </div>
+                <span class="text-lg font-bold text-accent-300">68%</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ============ IMPLEMENTATION ============ -->
+    <section>
+      <div class="flex items-baseline gap-3 mb-2">
+        <span class="text-accent-500 font-mono text-sm">05</span>
+        <h2 class="text-2xl font-bold text-white">Implementation in 3 small steps</h2>
+      </div>
+
+      <!-- Step 1 -->
+      <div class="rounded-2xl border border-white/10 bg-white/[0.02] p-6 mb-4">
+        <div class="flex items-center gap-2 mb-3">
+          <span class="text-accent-400 font-mono text-xs px-2 py-0.5 rounded bg-accent-500/10 border border-accent-500/20">step 1</span>
+          <h3 class="font-semibold text-white">Add the <code class="text-accent-300">accent</code> palette to tailwind.config.js</h3>
+        </div>
+        <pre class="bg-black/50 rounded-lg p-4 text-xs overflow-x-auto leading-relaxed"><code><span class="text-gray-500">// tailwind.config.js — inside theme.extend.colors</span>
+accent: {
+  50:  '#fdf4ef', 100: '#fae6da', 200: '#f5cdb6', 300: '#eda988',
+  400: '#e58e62', 500: '#e87848',  <span class="text-accent-300">// logo orange</span>
+  600: '#d8633a', 700: '#b34e2c', 800: '#8c3d24', 900: '#5f2a1a', 950: '#3a1810',
+},</code></pre>
+      </div>
+
+      <!-- Step 2 -->
+      <div class="rounded-2xl border border-white/10 bg-white/[0.02] p-6 mb-4">
+        <div class="flex items-center gap-2 mb-3">
+          <span class="text-accent-400 font-mono text-xs px-2 py-0.5 rounded bg-accent-500/10 border border-accent-500/20">step 2</span>
+          <h3 class="font-semibold text-white">Pick the swap targets (one file, one decision)</h3>
+        </div>
+        <p class="text-sm text-gray-400 mb-4">
+          Don't rewrite everything. Use a single global search/replace per pattern in these 5 files:
+        </p>
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs">
+            <thead>
+              <tr class="text-left text-gray-500 border-b border-white/10">
+                <th class="py-2 pr-4 font-medium">File</th>
+                <th class="py-2 pr-4 font-medium">Find (indigo accent)</th>
+                <th class="py-2 font-medium">Replace (orange accent)</th>
+              </tr>
+            </thead>
+            <tbody class="font-mono text-[11px]">
+              <tr class="border-b border-white/5">
+                <td class="py-2 pr-4 text-gray-300">shell.component.html</td>
+                <td class="py-2 pr-4 text-brand-300">bg-brand-50/30 text-brand-600/400</td>
+                <td class="py-2 text-accent-300">bg-accent-500/10 text-accent-300/400</td>
+              </tr>
+              <tr class="border-b border-white/5">
+                <td class="py-2 pr-4 text-gray-300">shell.component.html</td>
+                <td class="py-2 pr-4 text-brand-300">text-brand-500 (theme icons)</td>
+                <td class="py-2 text-accent-300">text-accent-400</td>
+              </tr>
+              <tr class="border-b border-white/5">
+                <td class="py-2 pr-4 text-gray-300">config.component.ts</td>
+                <td class="py-2 pr-4 text-brand-300">getStepClass — current/done</td>
+                <td class="py-2 text-accent-300">→ accent-500 + ring-accent-500/40 + pulse halo</td>
+              </tr>
+              <tr class="border-b border-white/5">
+                <td class="py-2 pr-4 text-gray-300">export.component.html</td>
+                <td class="py-2 pr-4 text-brand-300">bg-brand-500 (progress bar)</td>
+                <td class="py-2 text-accent-300">bg-accent-500 + shadow glow</td>
+              </tr>
+              <tr class="border-b border-white/5">
+                <td class="py-2 pr-4 text-gray-300">settings.component.html</td>
+                <td class="py-2 pr-4 text-brand-300">current-selection card</td>
+                <td class="py-2 text-accent-300">orange-bordered, accent-tinted bg</td>
+              </tr>
+              <tr class="border-b border-white/5">
+                <td class="py-2 pr-4 text-gray-300">all form inputs</td>
+                <td class="py-2 pr-4 text-brand-300">focus:ring-brand-500</td>
+                <td class="py-2 text-accent-300">focus:ring-accent-500</td>
+              </tr>
+              <tr>
+                <td class="py-2 pr-4 text-gray-300">shell status dot</td>
+                <td class="py-2 pr-4 text-brand-300">status dot (green/red only)</td>
+                <td class="py-2 text-accent-300">add tiny orange "ready" dot + green stays for live</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Step 3 -->
+      <div class="rounded-2xl border border-white/10 bg-white/[0.02] p-6">
+        <div class="flex items-center gap-2 mb-3">
+          <span class="text-accent-400 font-mono text-xs px-2 py-0.5 rounded bg-accent-500/10 border border-accent-500/20">step 3</span>
+          <h3 class="font-semibold text-white">What to leave alone</h3>
+        </div>
+        <ul class="space-y-2 text-sm text-gray-300">
+          <li class="flex gap-2"><span class="text-accent-400">›</span> <span><strong>Large primary CTAs</strong> (Save, Generate, Export full) — keep indigo. They need to feel <em>structural</em>, not decorative.</span></li>
+          <li class="flex gap-2"><span class="text-accent-400">›</span> <span><strong>Big gradient tiles</strong> like the generator header card (currently <code class="text-brand-300">from-brand-500 to-brand-700</code>) — swap the start stop to <code class="text-accent-300">from-accent-500</code> if you want, but the dark-to-light gradient feels right in indigo too.</span></li>
+          <li class="flex gap-2"><span class="text-accent-400">›</span> <span><strong>The "Fill Random" purple button</strong> in config — it already uses a different color on purpose. Leave it.</span></li>
+          <li class="flex gap-2"><span class="text-accent-400">›</span> <span><strong>The favicon</strong> in <code>public/favicon.svg</code> — that's a system asset, not a UI element. (But you could ship a new orange book icon later if you want consistency.)</span></li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ============ FOOTER ============ -->
+    <footer class="text-center text-xs text-gray-600 pt-4 pb-10">
+      Mockup built for Autobook · the orange is sampled from <code>src/assets/autobook_trans.png</code>
+    </footer>
+  </main>
+</body>
+</html>

@@ -18,6 +18,25 @@ module.exports = {
           900: '#312e81',
           950: '#1e1b4b',
         },
+        // accent is the juicier tangerine orange, kept in the same hue family as the
+        // logo's coral (#E87848) but bumped to match the saturation of the green and
+        // indigo used elsewhere in the design. Use it for small, "this is the thing
+        // you're on right now" highlights: active nav, current step, progress fills,
+        // focus rings, status dots, badges. Keep `brand` for large primary CTAs,
+        // gradients on big surfaces, and the dark canvas.
+        accent: {
+          50:  '#fff7ed',
+          100: '#ffedd5',
+          200: '#fed7aa',
+          300: '#fdba74',
+          400: '#fb923c',
+          500: '#f97316',
+          600: '#ea580c',
+          700: '#c2410c',
+          800: '#9a3412',
+          900: '#7c2d12',
+          950: '#431407',
+        },
         surface: {
           DEFAULT: '#ffffff',
           secondary: '#f9fafb',

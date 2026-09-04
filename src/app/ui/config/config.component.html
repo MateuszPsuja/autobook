@@ -25,9 +25,9 @@
               </button>
               <!-- Label below circle with min-height to prevent movement -->
               <div class="mt-2 min-h-[2rem] flex items-start justify-center">
-                <span 
+                <span
                   class="text-xs font-medium text-center"
-                  [class]="step.number === currentStep ? 'text-brand-600 dark:text-brand-400' : 'text-gray-500 dark:text-gray-400'">
+                  [class]="step.number === currentStep ? 'text-gray-900 dark:text-white font-semibold' : step.number < currentStep ? 'text-gray-700 dark:text-gray-300' : 'text-gray-500 dark:text-gray-400'">
                   {{ step.label }}
                 </span>
               </div>
@@ -36,7 +36,7 @@
             <!-- Connector Line -->
             @if (i < steps.length - 1) {
               <div class="flex-1 h-0.5 -mt-8 rounded-full transition-all duration-500"
-                [class]="step.number < currentStep ? 'bg-brand-500' : 'bg-gray-200 dark:bg-gray-700'">
+                [class]="step.number < currentStep ? 'bg-accent-500' : 'bg-gray-200 dark:bg-gray-700'">
               </div>
             }
           }
@@ -58,7 +58,7 @@
             <button
               type="button"
               (click)="fillRandom()"
-              class="px-4 py-2 text-sm font-medium bg-gradient-to-r from-purple-500 to-purple-600 text-white rounded-xl hover:from-purple-600 hover:to-purple-700 transition-all shadow-md hover:shadow-lg flex items-center gap-2">
+              class="px-4 py-2 text-sm font-medium bg-brand-500 text-white hover:bg-brand-600 rounded-xl transition-all shadow-md hover:shadow-lg flex items-center gap-2">
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
               </svg>
@@ -73,7 +73,7 @@
                 formControlName="title"
                 type="text"
                 [placeholder]="t('config.titlePlaceholder')"
-                class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all">
+                class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-accent-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all">
               @if (configForm.get('title')?.invalid && configForm.get('title')?.touched) {
                 <p class="mt-2 text-red-600 text-sm flex items-center gap-1">
                   <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -86,7 +86,7 @@
 
             <div class="p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
               <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">{{ t('config.genre') }}</label>
-              <select formControlName="genre" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all">
+              <select formControlName="genre" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-accent-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all">
                 <option value="">{{ t('config.selectGenre') }}</option>
                 @for (genre of genres; track trackByIndex($index)) {
                   <option [value]="genre">{{ genre }}</option>
@@ -110,7 +110,7 @@
               rows="6"
               maxlength="2000"
               [placeholder]="t('config.plotPlaceholder')"
-              class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all resize-y leading-relaxed"></textarea>
+              class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-accent-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all resize-y leading-relaxed"></textarea>
             <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">
               {{ t('config.plotHelp') }}
             </p>
@@ -119,7 +119,7 @@
           <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div class="p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
               <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">{{ t('config.writingStyle') }}</label>
-              <select formControlName="style" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all">
+              <select formControlName="style" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-accent-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all">
                 <option value="">{{ t('config.selectStyle') }}</option>
                 @for (style of writingStyles; track trackByIndex($index)) {
                   <option [value]="style">{{ style }}</option>
@@ -129,7 +129,7 @@
             
             <div class="p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
               <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">{{ t('config.tone') }}</label>
-              <select formControlName="tone" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all">
+              <select formControlName="tone" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-accent-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all">
                 <option value="">{{ t('config.selectTone') }}</option>
                 @for (tone of tones; track trackByIndex($index)) {
                   <option [value]="tone">{{ tone }}</option>
@@ -141,7 +141,7 @@
           <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
             <div class="p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
               <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">{{ t('config.pov') }}</label>
-              <select formControlName="pov" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all">
+              <select formControlName="pov" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-accent-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all">
                 <option value="">{{ t('config.selectPov') }}</option>
                 @for (pov of povs; track trackByIndex($index)) {
                   <option [value]="pov">{{ pov }}</option>
@@ -151,7 +151,7 @@
             
             <div class="p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
               <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">{{ t('config.tense') }}</label>
-              <select formControlName="tense" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all">
+              <select formControlName="tense" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-accent-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all">
                 <option value="">{{ t('config.selectTense') }}</option>
                 @for (tense of tenses; track trackByIndex($index)) {
                   <option [value]="tense">{{ tense }}</option>
@@ -161,7 +161,7 @@
             
             <div class="p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
               <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">{{ t('config.audience') }}</label>
-              <select formControlName="audience" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all">
+              <select formControlName="audience" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-accent-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all">
                 <option value="">{{ t('config.selectAudience') }}</option>
                 @for (audience of audiences; track trackByIndex($index)) {
                   <option [value]="audience">{{ audience }}</option>
@@ -177,12 +177,12 @@
                 formControlName="themes"
                 type="text"
                 [placeholder]="t('config.themesPlaceholder')"
-                class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all">
+                class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-accent-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all">
             </div>
             
             <div class="p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
               <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">{{ t('config.worldType') }}</label>
-              <select formControlName="worldType" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all">
+              <select formControlName="worldType" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-accent-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all">
                 <option value="">{{ t('config.selectWorldType') }}</option>
                 @for (worldType of worldTypes; track trackByIndex($index)) {
                   <option [value]="worldType">{{ worldType }}</option>
@@ -194,7 +194,7 @@
           <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div class="p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
               <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">{{ t('config.targetLength') }}</label>
-              <select formControlName="targetLength" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all">
+              <select formControlName="targetLength" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-accent-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all">
                 <option value="">{{ t('config.selectLength') }}</option>
                 @for (length of bookLengths; track trackByIndex($index)) {
                   <option [value]="length">{{ length }}</option>
@@ -204,7 +204,7 @@
             
             <div class="p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
               <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">{{ t('config.chapterLength') }}</label>
-              <select formControlName="chapterLength" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all">
+              <select formControlName="chapterLength" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-accent-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all">
                 <option value="">{{ t('config.selectChapterLength') }}</option>
                 @for (length of chapterLengths; track trackByIndex($index)) {
                   <option [value]="length">{{ length }}</option>
@@ -239,7 +239,7 @@
                 <input
                   formControlName="name"
                   type="text"
-                  class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all">
+                  class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-accent-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all">
               </div>
               
               <div>
@@ -249,7 +249,7 @@
                   type="number"
                   min="1"
                   max="100"
-                  class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all">
+                  class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-accent-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all">
               </div>
             </div>
             
@@ -258,7 +258,7 @@
               <textarea
                 formControlName="background"
                 rows="3"
-                class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all"></textarea>
+                class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-accent-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all"></textarea>
             </div>
             
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
@@ -267,7 +267,7 @@
                 <textarea
                   formControlName="motivations"
                   rows="2"
-                  class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all"></textarea>
+                  class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-accent-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all"></textarea>
               </div>
               
               <div>
@@ -275,7 +275,7 @@
                 <textarea
                   formControlName="flaws"
                   rows="2"
-                  class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all"></textarea>
+                  class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-accent-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all"></textarea>
               </div>
             </div>
             
@@ -284,7 +284,7 @@
               <textarea
                 formControlName="arc"
                 rows="2"
-                class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all"></textarea>
+                class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-accent-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all"></textarea>
             </div>
           </div>
 
@@ -304,7 +304,7 @@
                 <input
                   formControlName="name"
                   type="text"
-                  class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all">
+                  class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-accent-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all">
               </div>
               
               <div>
@@ -314,7 +314,7 @@
                   type="number"
                   min="1"
                   max="100"
-                  class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all">
+                  class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-accent-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all">
               </div>
             </div>
             
@@ -323,7 +323,7 @@
               <textarea
                 formControlName="background"
                 rows="3"
-                class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all"></textarea>
+                class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-accent-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all"></textarea>
             </div>
             
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
@@ -332,7 +332,7 @@
                 <textarea
                   formControlName="motivations"
                   rows="2"
-                  class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all"></textarea>
+                  class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-accent-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all"></textarea>
               </div>
               
               <div>
@@ -340,7 +340,7 @@
                 <textarea
                   formControlName="flaws"
                   rows="2"
-                  class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all"></textarea>
+                  class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-accent-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all"></textarea>
               </div>
             </div>
             
@@ -349,7 +349,7 @@
               <textarea
                 formControlName="arc"
                 rows="2"
-                class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all"></textarea>
+                class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-accent-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all"></textarea>
             </div>
           </div>
         </div>
@@ -366,7 +366,7 @@
           <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div class="p-5 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-md">
               <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">{{ t('config.plotArchetype') }}</label>
-              <select formControlName="plotArchetype" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all">
+              <select formControlName="plotArchetype" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-accent-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all">
                 <option value="">{{ t('config.selectArchetype') }}</option>
                 @for (archetype of plotArchetypes; track trackByIndex($index)) {
                   <option [value]="archetype">{{ archetype }}</option>
@@ -376,7 +376,7 @@
             
             <div class="p-5 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-md">
               <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">{{ t('config.actStructure') }}</label>
-              <select formControlName="actStructure" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all">
+              <select formControlName="actStructure" class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-accent-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all">
                 <option value="">{{ t('config.selectStructure') }}</option>
                 @for (structure of actStructures; track trackByIndex($index)) {
                   <option [value]="structure">{{ structure }}</option>
@@ -387,12 +387,12 @@
 
           <div class="flex gap-6 p-5 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-md">
             <label class="flex items-center gap-3 cursor-pointer">
-              <input formControlName="hasPrologue" type="checkbox" class="w-5 h-5 text-brand-500 rounded focus:ring-brand-500">
+              <input formControlName="hasPrologue" type="checkbox" class="w-5 h-5 text-accent-500 rounded focus:ring-accent-500">
               <span class="text-sm font-medium text-gray-700 dark:text-gray-300">{{ t('config.includePrologue') }}</span>
             </label>
             
             <label class="flex items-center gap-3 cursor-pointer">
-              <input formControlName="hasEpilogue" type="checkbox" class="w-5 h-5 text-brand-500 rounded focus:ring-brand-500">
+              <input formControlName="hasEpilogue" type="checkbox" class="w-5 h-5 text-accent-500 rounded focus:ring-accent-500">
               <span class="text-sm font-medium text-gray-700 dark:text-gray-300">{{ t('config.includeEpilogue') }}</span>
             </label>
           </div>
@@ -410,8 +410,8 @@
           <div class="space-y-4">
             <div class="p-5 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-md">
               <div class="flex items-center gap-2 mb-3">
-                <div class="w-8 h-8 bg-brand-100 dark:bg-brand-900/30 rounded-lg flex items-center justify-center">
-                  <svg class="w-4 h-4 text-brand-600 dark:text-brand-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div class="w-8 h-8 bg-gray-100 dark:bg-gray-800 rounded-lg flex items-center justify-center text-accent-600 dark:text-accent-300">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path>
                   </svg>
                 </div>

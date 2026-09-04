@@ -25,7 +25,7 @@
     <select
       [ngModel]="activeProvider.id"
       (ngModelChange)="onProviderChange($event)"
-      class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all">
+      class="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-accent-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all">
       @for (provider of providers; track provider.id) {
         <option [value]="provider.id">
           {{ getProviderIcon(provider.name) }} {{ provider.name }}
@@ -40,8 +40,8 @@
   <!-- API Key Section -->
   <div class="p-6 bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-lg">
     <div class="flex items-center gap-3 mb-6">
-      <div class="w-12 h-12 bg-brand-100 dark:bg-brand-900/30 rounded-xl flex items-center justify-center">
-        <svg class="w-6 h-6 text-brand-600 dark:text-brand-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <div class="w-12 h-12 bg-gray-100 dark:bg-gray-800 rounded-xl flex items-center justify-center text-accent-600 dark:text-accent-300">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"></path>
         </svg>
       </div>
@@ -104,7 +104,7 @@
             data-bwignore="true"
             data-form-type="other"
             data-lpignore="true"
-            class="w-full px-4 py-3 pr-20 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all">
+            class="w-full px-4 py-3 pr-20 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-accent-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all">
           <div class="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1">
             @if (apiKeyInput) {
               <button
@@ -220,7 +220,7 @@
           type="text"
           [(ngModel)]="baseUrlInput"
           [placeholder]="activeProvider.defaultBaseUrl"
-          class="flex-1 px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all font-mono text-sm">
+          class="flex-1 px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-accent-500 focus:border-transparent bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-all font-mono text-sm">
         <button
           type="button"
           (click)="saveBaseUrl()"
@@ -297,11 +297,12 @@
       @if (models.length > 0) {
         <!-- Current Model Banner -->
         @if (getCurrentModelInfo()) {
-          <div class="p-3 bg-brand-50 dark:bg-brand-900/20 rounded-xl border border-brand-200 dark:border-brand-800 mb-4">
+          <div class="relative p-3 rounded-xl border border-accent-500/30 bg-gradient-to-r from-gray-100 via-gray-50 to-transparent dark:from-gray-800 dark:via-gray-900/40 dark:to-transparent mb-4 overflow-hidden">
+            <div class="absolute left-0 top-0 bottom-0 w-1 bg-accent-500"></div>
             <div class="flex items-center gap-2">
-              <span class="text-sm font-medium text-brand-700 dark:text-brand-400">{{ t('settings.currentSelection') }}:</span>
-              <span class="font-semibold text-brand-900 dark:text-brand-300">{{ getCurrentModelInfo()?.name }}</span>
-              <span class="text-sm text-brand-600 dark:text-brand-500">({{ getCurrentModelInfo()?.provider }})</span>
+              <span class="text-sm font-medium text-gray-700 dark:text-gray-300">{{ t('settings.currentSelection') }}:</span>
+              <span class="font-semibold text-gray-900 dark:text-white">{{ getCurrentModelInfo()?.name }}</span>
+              <span class="text-sm text-gray-500 dark:text-gray-400">({{ getCurrentModelInfo()?.provider }})</span>
             </div>
           </div>
         }
@@ -316,14 +317,14 @@
               type="text"
               [(ngModel)]="searchQuery"
               placeholder="Search models..."
-              class="w-full pl-10 pr-4 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+              class="w-full pl-10 pr-4 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-accent-500 focus:border-transparent">
           </div>
           @if (activeProvider.id === 'openrouter') {
             <label class="flex items-center gap-2 px-4 py-2 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
               <input
                 type="checkbox"
                 [(ngModel)]="showFreeOnly"
-                class="w-4 h-4 text-brand-500 rounded focus:ring-brand-500">
+                class="w-4 h-4 text-accent-500 rounded focus:ring-accent-500">
               <span class="text-sm font-medium text-gray-700 dark:text-gray-300">Free</span>
             </label>
           }
@@ -344,19 +345,19 @@
                 <label
                   class="flex items-center gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all"
                   [class]="selectedModel === model.id
-                    ? 'border-brand-500 bg-brand-50 dark:bg-brand-900/20'
-                    : 'border-gray-200 dark:border-gray-700 hover:border-brand-300 dark:hover:border-brand-700'">
+                    ? 'border-accent-500 bg-gray-100 dark:bg-gray-800'
+                    : 'border-gray-200 dark:border-gray-700 hover:border-accent-500/40 dark:hover:border-accent-500/40'">
                   <input
                     type="radio"
                     name="model"
                     [value]="model.id"
                     [(ngModel)]="selectedModel"
-                    class="w-4 h-4 text-brand-500 focus:ring-brand-500">
+                    class="w-4 h-4 text-accent-500 focus:ring-accent-500">
                   <div class="flex-1 min-w-0">
                     <div class="flex items-center gap-2 flex-wrap">
                       <span class="font-medium text-gray-900 dark:text-white truncate">{{ model.name }}</span>
                       @if (model.recommended) {
-                        <span class="px-1.5 py-0.5 text-xs font-medium bg-brand-100 dark:bg-brand-900/50 text-brand-600 dark:text-brand-400 rounded-full shrink-0">
+                        <span class="px-1.5 py-0.5 text-xs font-medium bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white rounded-full shrink-0">
                           {{ t('settings.recommended') }}
                         </span>
                       }
