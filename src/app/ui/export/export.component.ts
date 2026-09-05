@@ -211,8 +211,13 @@ export class ExportComponent implements OnInit {
       // language. English is the source — the orchestrator always
       // writes English — so 'en' is a no-op.
       const target = this.exportLanguage;
+      // Hoisted out of the `if (target !== 'en')` block so the
+      // illustration caption rewriter below can also use the
+      // localised "Chapter" word. Cheap (just a dict lookup) and
+      // also lets the English-only path drop into a sensible
+      // default.
+      const labels = getExportLabels(target);
       if (target !== 'en' && chapters.length > 0) {
-        const labels = getExportLabels(target);
         this.ngZone.run(() => {
           this.exportProgress = 30;
           // Keep the in-progress status in English so it stays
@@ -290,6 +295,27 @@ export class ExportComponent implements OnInit {
         chapterIllustrations = result.chapterIllustrations;
         coverArt = result.coverArt;
         backCoverArt = result.backCoverArt;
+      }
+
+      // The illustration service builds each chapter caption as
+      // "Chapter N · <title>" with the English "Chapter" word and
+      // the title it pulled from the (English) blueprint. When the
+      // user exported to a non-English target, the chapter titles
+      // have just been translated — rewrite the captions here so
+      // they read in the target language too. Keeps the service
+      // language-agnostic; the export component owns localisation.
+      if (chapterIllustrations && chapterIllustrations.size > 0) {
+        const chapterById = new Map(chapters.map(c => [c.id, c]));
+        const rewritten = new Map<string, ChapterIllustration>();
+        for (const [id, ill] of chapterIllustrations.entries()) {
+          const ch = chapterById.get(id);
+          if (!ch) { rewritten.set(id, ill); continue; }
+          rewritten.set(id, {
+            ...ill,
+            caption: `${labels.chapterLabel} ${ch.number} \u00B7 ${ch.title || ''}`.trim()
+          });
+        }
+        chapterIllustrations = rewritten;
       }
 
       this.ngZone.run(() => {

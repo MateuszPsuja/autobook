@@ -578,13 +578,15 @@ export class IllustrationService {
         }).pipe(
           map(r => {
             if (!r) return null;
-            // Caption prefers the brief title (cleaner, what the
-            // reader actually sees in the TOC) and falls back to
-            // the LLM-generated scene sentence when the brief
-            // isn't available.
-            const captionText = brief?.title?.trim()
-              ? brief.title.trim()
-              : truncate(scene.replace(/\.$/, ''), 60);
+            // Caption prefers the chapter's own title (which has
+            // been translated when the export is non-English) and
+            // falls back to the architect's English brief title
+            // for hand-imported books where the chapter title may
+            // be empty. Only when both are missing do we use the
+            // LLM-generated scene sentence.
+            const captionText = (chapter.title && chapter.title.trim())
+              || (brief?.title && brief.title.trim())
+              || truncate(scene.replace(/\.$/, ''), 60);
             const caption = `Chapter ${chapter.number} \u00B7 ${captionText}`;
             return {
               base64: r.base64,
