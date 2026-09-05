@@ -21,6 +21,14 @@ export interface BookConfig {
   chapterLength: ChapterLength;
   protagonist: CharacterProfile;
   antagonist: CharacterProfile;
+  /**
+   * Optional secondary cast. Each entry is a full `CharacterProfile` so
+   * the prompts (architect/author/character) can reference them like any
+   * other character. The form lets the user add them with a stripped
+   * UI (name + role + notes) and fills the unused fields with safe
+   * defaults (empty arrays / zero age) so the profile stays valid.
+   */
+  supportingCharacters?: CharacterProfile[];
   hasPrologue: boolean;
   hasEpilogue: boolean;
   model: string;             // single OpenRouter model ID for all agents
@@ -110,7 +118,14 @@ export type ChapterLength =
 
 export interface CharacterProfile {
   name: string;
-  role: 'Protagonist' | 'Antagonist' | 'Supporting';
+  /**
+   * `Protagonist` / `Antagonist` for the named leads, or a free-form
+   * archetype string for supporting characters (e.g. "Mentor",
+   * "Sidekick", "Love Interest"). The string is widened here so the
+   * form's role select can store custom archetypes without forcing a
+   * new union member every time.
+   */
+  role: string;
   age: number;
   background: string;
   motivations: string[];

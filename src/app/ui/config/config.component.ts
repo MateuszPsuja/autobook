@@ -1,7 +1,7 @@
 import { Component, OnInit, inject } from '@angular/core';
-import { FormBuilder, FormGroup, Validators, ReactiveFormsModule } from '@angular/forms';
+import { FormArray, FormBuilder, FormGroup, Validators, ReactiveFormsModule } from '@angular/forms';
 import { Router, ActivatedRoute } from '@angular/router';
-import { BookConfig } from '../../models/book-config.model';
+import { BookConfig, CharacterProfile } from '../../models/book-config.model';
 import { ApiService } from '../../core/api.service';
 import { BookStateService } from '../../book/state/book-state.service';
 import { TranslationService } from '../../i18n/translation.service';
@@ -102,6 +102,11 @@ export class ConfigComponent implements OnInit {
         flaws: ['', Validators.required],
         arc: ['', Validators.required]
       }),
+      // FormArray of stripped supporting characters: name + role + notes.
+      // Other CharacterProfile fields (age, motivations, flaws, arc) are
+      // not exposed — the form fills them with safe defaults when
+      // serialising to the BookConfig.
+      supportingCharacters: this.fb.array([]),
 
       // Step 3: Structure
       plotArchetype: ['', Validators.required],
@@ -159,6 +164,10 @@ export class ConfigComponent implements OnInit {
         ...this.bookConfig,
         model: selectedModelFromStorage
       });
+      // Re-populate the supporting-characters FormArray (patchValue
+      // doesn't deep-merge FormArrays — the array literal from the
+      // saved config would be ignored).
+      this.hydrateSupportingCharacters(this.bookConfig.supportingCharacters);
       this.selectedModel = selectedModelFromStorage;
     } else {
       // Initialize form with default model from localStorage
@@ -259,8 +268,30 @@ export class ConfigComponent implements OnInit {
       plotArchetype: '',
       actStructure: ''
     });
+    // Clear supporting characters too — patchValue ignores FormArrays.
+    this.hydrateSupportingCharacters([]);
     this.currentStep = 0;
     this.completedSteps = [];
+  }
+
+  /**
+   * Replace the supporting-characters FormArray contents with a list
+   * of pre-existing profiles (e.g. loaded from localStorage). Used by
+   * both the hydration path and the language-change reset. Always
+   * clears the array first so we don't end up with duplicates if the
+   * caller forgot to clear.
+   */
+  private hydrateSupportingCharacters(characters?: CharacterProfile[]): void {
+    const arr = this.supportingCharactersForm;
+    while (arr.length > 0) arr.removeAt(0);
+    if (!characters || characters.length === 0) return;
+    for (const c of characters) {
+      arr.push(this.createSupportingCharacterGroup({
+        name: c.name,
+        role: c.role && c.role !== 'Supporting' ? c.role : 'Other',
+        notes: c.background,
+      }));
+    }
   }
 
   t(key: string): string {
@@ -349,11 +380,17 @@ export class ConfigComponent implements OnInit {
     
     // Build complete config with the selected model - always use the active provider's choice
     const currentSelectedModel = this.providerService.getSelectedModel() || this.apiService.getDefaultModel().id;
+    // Strip empty-name supporting rows before persisting — a row the
+    // user added but never filled in shouldn't show up in the prompt.
+    const supportingProfiles: CharacterProfile[] = (translatedFormValue.supportingCharacters ?? [])
+      .map((g: any) => this.supportingCharacterToProfile({ value: g } as FormGroup))
+      .filter((p: CharacterProfile) => p.name.length > 0);
     this.bookConfig = {
       ...translatedFormValue,
       themes: themesArray,
       protagonist: { ...translatedFormValue.protagonist, role: 'Protagonist' },
       antagonist: { ...translatedFormValue.antagonist, role: 'Antagonist' },
+      supportingCharacters: supportingProfiles,
       model: currentSelectedModel
     };
 
@@ -407,6 +444,79 @@ export class ConfigComponent implements OnInit {
     return this.configForm.get('antagonist') as FormGroup;
   }
 
+  get supportingCharactersForm() {
+    return this.configForm.get('supportingCharacters') as FormArray;
+  }
+
+  /**
+   * Options shown in the supporting-character role select. Keep the
+   * canonical English string in the i18n file, but the form select
+   * needs the actual values locally. Mirrors the keys in en.json
+   * (`config.supportingRole*`).
+   */
+  readonly supportingCharacterRoles: string[] = [
+    'Mentor',
+    'Sidekick',
+    'Love Interest',
+    'Ally',
+    'Henchman',
+    'Family',
+    'Other',
+  ];
+
+  /** Build an empty supporting-character FormGroup. */
+  private createSupportingCharacterGroup(character?: { name?: string; role?: string; notes?: string }): FormGroup {
+    return this.fb.group({
+      name: [character?.name ?? '', Validators.required],
+      role: [character?.role ?? 'Other', Validators.required],
+      notes: [character?.notes ?? ''],
+    });
+  }
+
+  /** Add a new empty supporting-character row to the form. */
+  addSupportingCharacter(): void {
+    this.supportingCharactersForm.push(this.createSupportingCharacterGroup());
+  }
+
+  /**
+   * Drop a supporting character at `index`. The FormArray's
+   * `removeAt` re-emits the array, which Angular picks up via the
+   * `formArrayName` binding and re-renders the list.
+   */
+  removeSupportingCharacter(index: number): void {
+    if (index < 0 || index >= this.supportingCharactersForm.length) return;
+    this.supportingCharactersForm.removeAt(index);
+  }
+
+  /**
+   * TrackBy for the supporting-character FormArray. Using the index
+   * is safe because the FormGroup is the identity; Angular only
+   * re-renders rows when the array actually changes (add/remove).
+   */
+  trackBySupportingCharacter(index: number): number {
+    return index;
+  }
+
+  /**
+   * Convert a supporting-character form row into a full
+   * `CharacterProfile` for storage / prompts. The stripped form
+   * doesn't expose age, motivations, flaws, or arc — those are
+   * filled with safe defaults so downstream consumers can still
+   * rely on the `CharacterProfile` shape.
+   */
+  private supportingCharacterToProfile(group: FormGroup): CharacterProfile {
+    const v = group.value as { name: string; role: string; notes: string };
+    return {
+      name: (v.name ?? '').trim(),
+      role: v.role || 'Other',
+      age: 0,
+      background: v.notes ?? '',
+      motivations: [],
+      flaws: [],
+      arc: '',
+    };
+  }
+
   // Get selected model ID
   getSelectedModel(): string {
     return this.providerService.getSelectedModel() || this.apiService.getDefaultModel().id;
@@ -458,7 +568,15 @@ export class ConfigComponent implements OnInit {
           this.configForm.get('targetLength')?.value &&
           this.configForm.get('chapterLength')?.value);
       case 1: // Characters
-        return this.protagonistForm?.valid && this.antagonistForm?.valid;
+        // Supporting characters are optional, but every row that has a
+        // name filled in must be valid. Empty rows (the user just hit
+        // "Add" but didn't fill anything) are tolerated.
+        const supportingValid = this.supportingCharactersForm.controls
+          .every(g => {
+            const nameEmpty = !g.get('name')?.value;
+            return nameEmpty || g.valid;
+          });
+        return this.protagonistForm?.valid && this.antagonistForm?.valid && supportingValid;
       case 2: // Structure
         return !!(this.configForm.get('plotArchetype')?.value &&
           this.configForm.get('actStructure')?.value);
@@ -592,6 +710,29 @@ export class ConfigComponent implements OnInit {
         arc: randomFromArray(randomArcs)
       }
     });
+
+    // 50% chance of adding 1–2 supporting characters. Paper bots use
+    // fillRandom(); seeding the array here means the new field is
+    // actually exercised end-to-end (architect prompt + chapter drafts)
+    // without requiring the user to click the Add button manually.
+    if (Math.random() < 0.5) {
+      this.hydrateSupportingCharacters([]);
+      const count = Math.random() < 0.5 ? 1 : 2;
+      const used = new Set([protagonistName, antagonistName]);
+      for (let i = 0; i < count; i++) {
+        const pool = randomNames.filter(n => !used.has(n));
+        if (pool.length === 0) break;
+        const name = randomFromArray(pool);
+        used.add(name);
+        this.supportingCharactersForm.push(this.createSupportingCharacterGroup({
+          name,
+          role: randomFromArray(this.supportingCharacterRoles),
+          notes: randomFromArray(randomBackgrounds),
+        }));
+      }
+    } else {
+      this.hydrateSupportingCharacters([]);
+    }
 
     // Step 2: Structure - NO prologue/epilogue to minimize chapters
     this.configForm.patchValue({

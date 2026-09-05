@@ -116,7 +116,18 @@ ${
 
 **Characters:**
 - Protagonist: ${config.protagonist.name} (${config.protagonist.background})
-- Antagonist: ${config.antagonist.name} (${config.antagonist.background})
+- Antagonist: ${config.antagonist.name} (${config.antagonist.background})${
+  Array.isArray(config.supportingCharacters) && config.supportingCharacters.length > 0
+    ? '\n' + config.supportingCharacters
+        .filter(c => c?.name)
+        .map(c => {
+          const note = c.background ? ` — ${c.background}` : '';
+          const role = c.role && c.role !== 'Supporting' ? `${c.role} ` : '';
+          return `- Supporting (${role}${c.name})${note}`;
+        })
+        .join('\n')
+    : ''
+}
 
 **Themes:** ${config.themes.join(', ')}
 
