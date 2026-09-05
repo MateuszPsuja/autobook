@@ -18,6 +18,7 @@
     "@angular/platform-browser": "^20.0.0",
     "@angular/router": "^20.0.0",
     "canvg": "^4.0.3",
+    "docx": "^9.7.1",
     "jspdf": "^2.5.1",
     "pdfmake": "0.2.7",
     "rxjs": "~7.8.0",

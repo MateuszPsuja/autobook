@@ -227,4 +227,57 @@ describe('ExportComponent', () => {
       expect(illSpy).not.toHaveBeenCalled();
     });
   });
+
+  describe('DOCX export', () => {
+    it('calls illustrationService.generateAll$ when DOCX + includeIllustrations + minimax', async () => {
+      const illSpy = spyOn(mockIllustration as any, 'generateAll$').and.callThrough();
+
+      chaptersSubject.next([{ id: 'c1', number: 1, title: 'A', content: 'A' }]);
+      component.selectedFormat = 'docx';
+      component.exportOptions.includeIllustrations = true;
+
+      spyOn(window.URL, 'createObjectURL').and.returnValue('blob:mock');
+      spyOn(document.body, 'appendChild').and.stub();
+      spyOn(document.body, 'removeChild').and.stub();
+      spyOn(HTMLAnchorElement.prototype, 'click').and.stub();
+
+      await component.exportBook();
+      expect(illSpy).toHaveBeenCalled();
+    });
+
+    it('produces a real DOCX Blob (PK header + correct MIME)', async () => {
+      chaptersSubject.next([{ id: 'c1', number: 1, title: 'A', content: 'A' }]);
+      component.selectedFormat = 'docx';
+      component.exportOptions.includeIllustrations = false;
+      spyOn(window.URL, 'createObjectURL').and.returnValue('blob:mock');
+      spyOn(document.body, 'appendChild').and.stub();
+      spyOn(document.body, 'removeChild').and.stub();
+      spyOn(HTMLAnchorElement.prototype, 'click').and.stub();
+      const blob = await (component as any).generateDOCX(
+        [{ id: 'c1', number: 1, title: 'A', content: 'A' }],
+        undefined,
+        undefined,
+      );
+      expect(blob).toBeInstanceOf(Blob);
+      expect(blob.type).toBe('application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+      const buf = new Uint8Array(await blob.arrayBuffer());
+      expect(buf[0]).toBe(0x50);
+      expect(buf[1]).toBe(0x4b);
+      expect(buf[2]).toBe(0x03);
+      expect(buf[3]).toBe(0x04);
+    });
+
+    it('does NOT call illustrationService when includeIllustrations is off (even if minimax)', async () => {
+      const illSpy = spyOn(mockIllustration as any, 'generateAll$').and.callThrough();
+      chaptersSubject.next([{ id: 'c1', number: 1, title: 'A', content: 'A' }]);
+      component.selectedFormat = 'docx';
+      component.exportOptions.includeIllustrations = false;
+      spyOn(window.URL, 'createObjectURL').and.returnValue('blob:mock');
+      spyOn(document.body, 'appendChild').and.stub();
+      spyOn(document.body, 'removeChild').and.stub();
+      spyOn(HTMLAnchorElement.prototype, 'click').and.stub();
+      await component.exportBook();
+      expect(illSpy).not.toHaveBeenCalled();
+    });
+  });
 });

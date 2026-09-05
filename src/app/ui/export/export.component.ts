@@ -17,6 +17,7 @@ import { buildPdfDocument, PdfExportOptions } from './pdf-renderer';
 import { stripRunningWordCount } from '../../shared/utils/chapter-cleanup';
 import { ExportLanguage, EXPORT_LANGUAGES, getExportLabels, ExportLabels } from '../../i18n/export-labels';
 import { buildEpubBlob } from './epub-builder';
+import { buildDocxBlob } from './docx-builder';
 
 // Initialize pdfMake with virtual file system
 (pdfMake as any).vfs = (pdfFonts as any).pdfMake?.vfs || (pdfFonts as any).vfs;
@@ -272,7 +273,7 @@ export class ExportComponent implements OnInit {
       let chapterIllustrations: Map<string, ChapterIllustration> | undefined;
       let coverArt: BookCoverArt | undefined;
       let backCoverArt: BookCoverArt | undefined;
-      if ((this.selectedFormat === 'pdf' || this.selectedFormat === 'epub') &&
+      if ((this.selectedFormat === 'pdf' || this.selectedFormat === 'epub' || this.selectedFormat === 'docx') &&
           this.exportOptions.includeIllustrations &&
           this.providerService.getActiveProviderId() === 'minimax') {
         this.ngZone.run(() => {
@@ -362,7 +363,11 @@ export class ExportComponent implements OnInit {
           filename = 'book-export.epub';
           break;
         case 'docx':
-          content = this.generateDOCX(chapters, config);
+          content = await this.generateDOCX(chapters, config, {
+            chapterIllustrations,
+            coverArt,
+            backCoverArt,
+          });
           filename = 'book-export.docx';
           break;
         case 'markdown':
@@ -465,9 +470,30 @@ export class ExportComponent implements OnInit {
     });
   }
 
-  private generateDOCX(chapters: Chapter[], translatedConfig?: any): Blob {
-    const content = this.buildBookContent(chapters, translatedConfig);
-    return new Blob([content], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+  private async generateDOCX(
+    chapters: Chapter[],
+    translatedConfig?: any,
+    illustrationCtx?: {
+      chapterIllustrations?: Map<string, ChapterIllustration>;
+      coverArt?: BookCoverArt;
+      backCoverArt?: BookCoverArt;
+    },
+  ): Promise<Blob> {
+    // If a translated config was provided, swap it into a copy of
+    // the state so the DOCX builder reads the localised title /
+    // genre / themes / protagonist name from the cover, back
+    // cover, and title page. Otherwise it falls through to the
+    // English state.config (the default for 'en' exports).
+    const baseState = this.bookStateService.getState();
+    const config = translatedConfig ?? baseState.config;
+    const labels = getExportLabels(this.exportLanguage);
+    return await buildDocxBlob({
+      chapters,
+      config,
+      labels,
+      bookAuthor: this.getEffectiveAuthor(),
+      illustrationCtx,
+    });
   }
 
   private generateMarkdown(chapters: Chapter[], translatedConfig?: any): Blob {
