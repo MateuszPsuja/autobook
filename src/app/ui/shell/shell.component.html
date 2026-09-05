@@ -1,186 +1,150 @@
-<div class="flex h-screen bg-gray-50 dark:bg-gray-950 overflow-hidden">
-  <!-- Sidebar -->
-  <aside class="w-[260px] flex-shrink-0 border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-lg">
-    <div class="flex flex-col h-full">
-      <!-- Logo/Header -->
-      <div class="h-[100px] px-8 border-b border-gray-100 dark:border-gray-800 flex justify-center items-center">
-        <button
-          (click)="navigateToConfig()"
-          class="hover:opacity-80 transition-opacity">
-          <img 
-            src="assets/autobook_trans.png" 
-            alt="Autobook Logo" 
-            class="w-full max-w-[180px] h-[80px] object-contain">
-        </button>
-      </div>
+<div class="relative flex h-screen overflow-hidden">
 
-      <!-- Navigation -->
-      <nav class="flex-1 p-4 space-y-1.5">
+  <!-- ============ SIDEBAR ============ -->
+  <aside class="glass w-[260px] flex-shrink-0 flex flex-col z-20">
+    <!-- Logo block. Just the logo — no wordmark, no accent line. -->
+    <div class="px-6 pt-7 pb-6 flex justify-center">
+      <button
+        (click)="navigateToConfig()"
+        class="group relative w-full flex justify-center items-center transition-transform hover:scale-[1.02] active:scale-[0.99]"
+        aria-label="Go to home">
+        <img
+          src="assets/autobook_trans.png"
+          alt="Autobook"
+          class="w-full max-w-[180px] h-[64px] object-contain">
+      </button>
+    </div>
+
+    <!-- Nav section. Each row is a button; the active one gets a left
+         rail, a tinted background, and orange icon/text. Inactive rows
+         still have a clear hover state. -->
+    <nav class="flex-1 px-3 py-2 space-y-1">
+      @for (item of navItems; track item.path) {
+        @let active = router.isActive(item.path, true);
         <button
-          (click)="navigateToConfig()"
-          class="relative w-full flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl transition-all duration-200"
-          [class]="router.isActive('/config', true)
-            ? 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white shadow-sm'
-            : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'">
-          @if (router.isActive('/config', true)) {
-            <div class="absolute left-0 top-2 bottom-2 w-1 rounded-r-full bg-accent-500"></div>
+          (click)="navigateTo(item.path)"
+          class="relative w-full flex items-center gap-3 px-3.5 py-2.5 text-sm font-medium rounded-xl transition-all duration-200"
+          [class]="active
+            ? 'bg-accent-500/10 text-accent-600 dark:text-accent-300'
+            : 'text-surface-strong/80 hover:bg-surface-sunken hover:text-surface-strong'">
+          @if (active) {
+            <span class="active-rail"></span>
           }
-          <div class="w-8 h-8 rounded-lg flex items-center justify-center"
-            [class]="router.isActive('/config', true) ? 'bg-gray-200 dark:bg-gray-700 text-accent-600 dark:text-accent-300' : 'bg-gray-100 dark:bg-gray-800'">
+          <span class="w-8 h-8 rounded-lg flex items-center justify-center transition-colors"
+            [class]="active
+              ? 'bg-accent-500/15 text-accent-600 dark:text-accent-300'
+              : 'bg-surface-sunken text-surface-subtle'">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path>
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" [attr.d]="item.icon"></path>
             </svg>
-          </div>
-          {{ t('nav.configure') }}
+          </span>
+          <span class="truncate">{{ item.label }}</span>
         </button>
+      }
+    </nav>
 
-        <button
-          (click)="navigateToGenerator()"
-          class="relative w-full flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl transition-all duration-200"
-          [class]="router.isActive('/generator', true)
-            ? 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white shadow-sm'
-            : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'">
-          @if (router.isActive('/generator', true)) {
-            <div class="absolute left-0 top-2 bottom-2 w-1 rounded-r-full bg-accent-500"></div>
-          }
-          <div class="w-8 h-8 rounded-lg flex items-center justify-center"
-            [class]="router.isActive('/generator', true) ? 'bg-gray-200 dark:bg-gray-700 text-accent-600 dark:text-accent-300' : 'bg-gray-100 dark:bg-gray-800'">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path>
-            </svg>
-          </div>
-          {{ t('nav.generate') }}
-        </button>
+    <!-- Footer: connection status + model + theme toggle. Each is a
+         small, dense card so the bottom of the sidebar reads as
+         "instrumentation", not a separate app. -->
+    <div class="px-3 pb-3 pt-2 space-y-2 border-t border-surface-border/60">
 
-        <button
-          (click)="navigateToViewer()"
-          class="relative w-full flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl transition-all duration-200"
-          [class]="router.isActive('/viewer', true)
-            ? 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white shadow-sm'
-            : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'">
-          @if (router.isActive('/viewer', true)) {
-            <div class="absolute left-0 top-2 bottom-2 w-1 rounded-r-full bg-accent-500"></div>
-          }
-          <div class="w-8 h-8 rounded-lg flex items-center justify-center"
-            [class]="router.isActive('/viewer', true) ? 'bg-gray-200 dark:bg-gray-700 text-accent-600 dark:text-accent-300' : 'bg-gray-100 dark:bg-gray-800'">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path>
-            </svg>
-          </div>
-          {{ t('nav.view') }}
-        </button>
-
-        <button
-          (click)="navigateToExport()"
-          class="relative w-full flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl transition-all duration-200"
-          [class]="router.isActive('/export', true)
-            ? 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white shadow-sm'
-            : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'">
-          @if (router.isActive('/export', true)) {
-            <div class="absolute left-0 top-2 bottom-2 w-1 rounded-r-full bg-accent-500"></div>
-          }
-          <div class="w-8 h-8 rounded-lg flex items-center justify-center"
-            [class]="router.isActive('/export', true) ? 'bg-gray-200 dark:bg-gray-700 text-accent-600 dark:text-accent-300' : 'bg-gray-100 dark:bg-gray-800'">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path>
-            </svg>
-          </div>
-          {{ t('nav.export') }}
-        </button>
-      </nav>
-
-      <!-- Bottom Section -->
-      <div class="border-t border-gray-100 dark:border-gray-800">
-        <!-- Status Indicator with Model and Settings -->
-        <div class="p-4 space-y-3">
-          <div class="flex items-center justify-between">
-            <div class="flex items-center gap-2">
-              <div class="relative w-2.5 h-2.5">
-                <div class="absolute inset-0 rounded-full bg-accent-500 animate-ping opacity-60"
-                  [class.hidden]="!isConfigured()"></div>
-                <div class="relative w-2.5 h-2.5 rounded-full ring-2 ring-white dark:ring-gray-900"
-                  [class]="isConfigured() ? 'bg-accent-500' : 'bg-red-500'"></div>
-              </div>
-              <span class="text-xs font-medium text-gray-600 dark:text-gray-400">
-                {{ isConfigured() ? t('shell.connected') : t('shell.notConnected') }}
-              </span>
-            </div>
-            <button
-              (click)="navigateToSettings()"
-              class="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-              [title]="t('nav.settings')">
-              <svg class="w-4 h-4 text-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-              </svg>
-            </button>
-          </div>
-          <div class="flex items-center gap-2 px-3 py-2 bg-gray-50 dark:bg-gray-800 rounded-lg">
-            <svg class="w-4 h-4 text-accent-500 dark:text-accent-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
-            </svg>
-            <span class="text-xs font-medium text-gray-500 dark:text-gray-400">{{ t('shell.model') }}:</span>
-            <span class="text-sm font-medium text-gray-700 dark:text-gray-300 truncate">
-              {{ getModelName() }}
+      <!-- Status row: dot + label + settings cog. -->
+      <div class="flex items-center justify-between px-2 py-1.5">
+        <div class="flex items-center gap-2.5">
+          <span class="status-dot" aria-hidden="true">
+            <span></span>
+          </span>
+          <div class="flex flex-col leading-tight">
+            <span class="text-[10px] font-semibold uppercase tracking-[0.14em] text-surface-subtle">
+              {{ isConfigured() ? t('shell.status') : t('shell.status') }}
+            </span>
+            <span class="text-xs font-medium text-surface-strong">
+              {{ isConfigured() ? t('shell.connected') : t('shell.notConnected') }}
             </span>
           </div>
         </div>
-
-        <!-- Theme Toggle -->
-        <div class="p-4 border-t border-gray-100 dark:border-gray-800">
-          <button
-            (click)="toggleTheme()"
-            class="w-full flex items-center justify-between px-4 py-2.5 text-sm font-medium text-gray-700 dark:text-gray-300 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition-all duration-200">
-            <div class="flex items-center gap-3">
-              @if (isDarkMode) {
-                <svg class="w-5 h-5 text-accent-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path>
-                </svg>
-                <span>{{ t('shell.darkMode') }}</span>
-              } @else {
-                <svg class="w-5 h-5 text-accent-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path>
-                </svg>
-                <span>{{ t('shell.lightMode') }}</span>
-              }
-            </div>
-            <div class="w-10 h-5 rounded-full relative transition-colors"
-              [class]="isDarkMode ? 'bg-gray-700 ring-1 ring-accent-500/40' : 'bg-gray-200 dark:bg-gray-700'">
-              <div class="w-4 h-4 bg-white rounded-full absolute top-0.5 transition-transform shadow-sm"
-                [class.translate-x-5]="isDarkMode"
-                [class.translate-x-0.5]="!isDarkMode">
-              </div>
-            </div>
-          </button>
-        </div>
+        <button
+          (click)="navigateToSettings()"
+          class="p-1.5 rounded-lg text-surface-subtle hover:text-surface-strong hover:bg-surface-sunken transition-colors"
+          [title]="t('nav.settings')">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
+              d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 010 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 010-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.281z">
+            </path>
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+          </svg>
+        </button>
       </div>
+
+      <!-- Model chip: monospace, orange accent. -->
+      <div class="flex items-center gap-2 px-2.5 py-2 rounded-lg bg-surface-sunken border border-surface-border/60">
+        <svg class="w-3.5 h-3.5 text-accent-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
+            d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+        </svg>
+        <span class="eyebrow flex-shrink-0">{{ t('shell.model') }}</span>
+        <span class="font-mono text-[11px] text-surface-strong truncate" [title]="getModelName()">
+          {{ getModelName() }}
+        </span>
+      </div>
+
+      <!-- Theme toggle. The track itself tints orange in dark mode. -->
+      <button
+        (click)="toggleTheme()"
+        class="w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-sm font-medium text-surface-strong hover:bg-surface-sunken transition-colors">
+        <div class="flex items-center gap-2.5">
+          @if (isDarkMode) {
+            <svg class="w-4 h-4 text-accent-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
+                d="M21.752 15.002A9.718 9.718 0 0118 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 003 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 009.002-5.998z"></path>
+            </svg>
+            <span>{{ t('shell.darkMode') }}</span>
+          } @else {
+            <svg class="w-4 h-4 text-accent-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
+                d="M12 3v2.25m6.364.386l-1.591 1.591M21 12h-2.25m-.386 6.364l-1.591-1.591M12 18.75V21m-4.773-4.227l-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z"></path>
+            </svg>
+            <span>{{ t('shell.lightMode') }}</span>
+          }
+        </div>
+        <!-- Pill toggle. Off = gray, on = orange-tinted. -->
+        <span class="relative w-9 h-5 rounded-full transition-colors"
+          [class]="isDarkMode ? 'bg-accent-500/30 ring-1 ring-accent-500/50' : 'bg-surface-border'">
+          <span class="absolute top-0.5 w-4 h-4 bg-white rounded-full shadow-sm transition-all"
+            [class.left-0.5]="!isDarkMode"
+            [class.left-4]="isDarkMode"></span>
+        </span>
+      </button>
     </div>
   </aside>
 
-  <!-- Main Content -->
-  <main class="flex-1 flex flex-col overflow-hidden">
-    <!-- Topbar -->
-    <div class="flex items-center justify-between px-8 py-5 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm">
+  <!-- ============ MAIN ============ -->
+  <main class="flex-1 flex flex-col overflow-hidden relative">
+
+    <!-- Topbar. Uses a glass surface in dark for the same reason as the
+         sidebar: the aurora wash should bleed through. In light mode we
+         use a solid surface for legibility. -->
+    <header class="glass flex-shrink-0 flex items-center justify-between px-8 py-4 border-b border-surface-border z-10">
       <div>
-        <h2 class="text-xl font-semibold text-gray-900 dark:text-white">
+        <h1 class="text-xl font-semibold tracking-tight text-surface-strong">
           {{ getActivePageTitle() }}
-        </h2>
-        <p class="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+        </h1>
+        <p class="text-sm text-surface-subtle mt-0.5">
           {{ getActivePageSubtitle() }}
         </p>
       </div>
-      
-      <div class="flex items-center gap-4">
-        <!-- Topbar reserved for future global actions. -->
+      <div class="flex items-center gap-3">
+        <!-- Future global actions slot. Intentionally empty. -->
       </div>
-    </div>
+    </header>
 
-    <!-- Page Content -->
-    <div class="flex-1 overflow-y-auto p-8 bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-950 dark:to-gray-900">
+    <!-- Page content. The shell paints the background; the page paints
+         itself on top. p-8 is the standard page padding. -->
+    <div class="flex-1 overflow-y-auto p-8">
       <router-outlet></router-outlet>
     </div>
   </main>
 
-  <!-- Global dialog host (overlays the entire shell) -->
+  <!-- Global dialog host. Sits above everything. -->
   <app-dialog-host></app-dialog-host>
 </div>

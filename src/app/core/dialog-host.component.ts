@@ -23,7 +23,7 @@ import { DialogService, DialogVariant } from './dialog.service';
           role="dialog"
           aria-modal="true"
           [attr.aria-labelledby]="titleId()"
-          class="w-full max-w-md bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden"
+          class="w-full max-w-md bg-surface-card rounded-2xl shadow-2xl border border-surface-border overflow-hidden"
           (click)="$event.stopPropagation()">
           <div class="px-6 pt-5 pb-2 flex items-start gap-3">
             <div [class]="iconWrapClass()">
@@ -45,20 +45,20 @@ import { DialogService, DialogVariant } from './dialog.service';
               </svg>
             </div>
             <div class="flex-1 min-w-0">
-              <h3 [id]="titleId()" class="text-base font-semibold text-gray-900 dark:text-white">
+              <h3 [id]="titleId()" class="text-base font-semibold text-surface-strong">
                 {{ title() }}
               </h3>
-              <p class="mt-1.5 text-sm text-gray-600 dark:text-gray-300 whitespace-pre-line">
+              <p class="mt-1.5 text-sm text-surface-subtle whitespace-pre-line">
                 {{ message() }}
               </p>
             </div>
           </div>
-          <div class="px-6 py-4 flex justify-end gap-2 bg-gray-50 dark:bg-gray-900/40">
+          <div class="px-6 py-4 flex justify-end gap-2 bg-surface-sunken">
             @if (state().kind === 'confirm') {
               <button
                 type="button"
                 (click)="onCancel()"
-                class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors">
+                class="btn btn-secondary">
                 {{ cancelText() }}
               </button>
             }

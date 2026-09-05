@@ -1,149 +1,133 @@
-<div class="space-y-6">
-  <!-- Header -->
-  <div class="flex items-center justify-between">
+<div class="max-w-6xl mx-auto space-y-5">
+
+  <!-- ===== Page header ===== -->
+  <div class="flex items-end justify-between gap-4 flex-wrap">
     <div>
-      <h1 class="text-2xl font-bold text-gray-900 dark:text-white">{{ t('pages.viewer.title') }}</h1>
-      <p class="text-sm text-gray-600 dark:text-gray-400">{{ t('pages.viewer.readChapters') }}</p>
+      <span class="eyebrow">Library</span>
+      <h1 class="mt-1 text-2xl font-bold tracking-tight text-surface-strong">
+        {{ t('pages.viewer.title') }}
+      </h1>
+      <p class="text-sm text-surface-subtle mt-0.5">{{ t('pages.viewer.readChapters') }}</p>
     </div>
-    
-    <div class="flex items-center gap-4">
-      <span class="text-sm text-gray-500 dark:text-gray-400">
-        {{ (chapters$ | async)?.length || 0 }} {{ t('viewer.chapterCount') }}
-      </span>
+    <div class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-surface-card border border-surface-border text-sm">
+      <span class="w-1.5 h-1.5 rounded-full bg-accent-500 shadow-glow-accent"></span>
+      <span class="text-surface-subtle">{{ (chapters$ | async)?.length || 0 }}</span>
+      <span class="font-medium text-surface-strong">{{ t('viewer.chapterCount') }}</span>
     </div>
   </div>
 
-  <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
-    <!-- Left Column: Chapter List -->
-    <div class="lg:col-span-1">
-      <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">{{ t('viewer.chaptersList') }}</h3>
-      
-      <div class="chapter-list">
-        <div 
-          *ngFor="let chapter of (chapters$ | async) || []; let i = index"
-          (click)="selectChapter(chapter, i)"
-          class="chapter-item"
-          [class.active]="selectedChapter?.id === chapter.id">
-          
-          <div class="chapter-item-header">
-            <span class="chapter-number">{{ t('viewer.chapter') }} {{ chapter.number }}</span>
+  <div class="grid grid-cols-1 lg:grid-cols-4 gap-5">
+
+    <!-- ===== Chapter list (left rail) ===== -->
+    <aside class="lg:col-span-1">
+      <div class="card p-4">
+        <div class="flex items-center justify-between mb-3">
+          <h3 class="text-sm font-semibold text-surface-strong">{{ t('viewer.chaptersList') }}</h3>
+          <span class="eyebrow">{{ (chapters$ | async)?.length || 0 }}</span>
+        </div>
+
+        <div class="space-y-1 -mx-1">
+          @for (chapter of (chapters$ | async) || []; track chapter.id; let i = $index) {
+            @let active = selectedChapter?.id === chapter.id;
+            <button
+              type="button"
+              (click)="selectChapter(chapter, i)"
+              class="relative w-full text-left px-3 py-2.5 rounded-lg transition-colors"
+              [class]="active
+                ? 'bg-accent-500/10 text-surface-strong'
+                : 'hover:bg-surface-sunken text-surface-strong/80'">
+              @if (active) {
+                <span class="active-rail" style="top: 0.5rem; bottom: 0.5rem;"></span>
+              }
+              <div class="flex items-center gap-2 mb-1">
+                <span class="font-mono text-[10px] uppercase tracking-wider"
+                  [class]="active ? 'text-accent-600 dark:text-accent-300' : 'text-surface-subtle'">
+                  {{ t('viewer.chapter') }} {{ chapter.number }}
+                </span>
+              </div>
+              <h4 class="text-sm font-medium leading-snug line-clamp-2">{{ chapter.title }}</h4>
+              <div class="mt-2 flex items-center gap-2 text-[11px] font-mono text-surface-subtle">
+                <span class="status-badge status-{{ chapter.status }}">{{ t('status.' + chapter.status) }}</span>
+                @if (getChapterScore(chapter) !== null) {
+                  <span class="chapter-score {{ getScoreColor(getChapterScore(chapter)) }}">
+                    ★ {{ formatScore(getChapterScore(chapter)) }}
+                  </span>
+                }
+                <span>{{ chapter.wordCount }}w</span>
+              </div>
+            </button>
+          }
+        </div>
+      </div>
+    </aside>
+
+    <!-- ===== Reading panel (right) ===== -->
+    <section class="lg:col-span-3 space-y-4">
+
+      @if (selectedChapter) {
+        <!-- Chapter header card. -->
+        <div class="card p-6">
+          <div class="flex items-start justify-between gap-4 mb-5">
+            <div>
+              <span class="eyebrow">Chapter {{ selectedChapter.number }}</span>
+              <h2 class="mt-1 text-2xl font-bold tracking-tight text-surface-strong">
+                {{ selectedChapter.title }}
+              </h2>
+              <p class="text-sm text-surface-subtle mt-1 font-mono">
+                {{ selectedChapter.wordCount }} {{ t('viewer.words') }} · {{ t('status.' + selectedChapter.status) }} · {{ selectedChapter.createdAt | date:'medium' }}
+              </p>
+            </div>
+
+            <div class="text-right">
+              <div class="text-2xl font-bold font-mono {{ getScoreColor(getChapterScore(selectedChapter)) }}">
+                {{ formatScore(getChapterScore(selectedChapter)) }}<span class="text-sm text-surface-subtle">★</span>
+              </div>
+              <p class="text-[10px] uppercase tracking-wider text-surface-subtle mt-0.5">
+                {{ t('viewer.overallScore') }}
+              </p>
+            </div>
           </div>
-          
-          <h4 class="chapter-title">{{ chapter.title }}</h4>
-          
-          <div class="chapter-item-footer">
-            <span class="status-badge status-{{ chapter.status }}">
-              {{ t('status.' + chapter.status) }}
+
+          <!-- Chapter nav (prev/next) sits inside the card with a soft divider. -->
+          <div class="flex items-center justify-between pt-4 border-t border-surface-border">
+            <button (click)="prevChapter()" [disabled]="selectedChapterIndex === 0" class="btn btn-ghost">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+              </svg>
+              {{ t('viewer.previousChapter') }}
+            </button>
+
+            <span class="text-xs font-mono text-surface-subtle tabular-nums">
+              {{ selectedChapterIndex + 1 }} / {{ (chapters$ | async)?.length || 0 }}
             </span>
-            <span class="chapter-score {{ getScoreColor(getChapterScore(chapter)) }}">
-              ★ {{ formatScore(getChapterScore(chapter)) }}
-            </span>
-            <span class="word-count">{{ chapter.wordCount }} {{ t('viewer.words') }}</span>
-          </div>
-        </div>
-      </div>
-    </div>
 
-    <!-- Right Column: Reading Panel -->
-    <div class="lg:col-span-3 space-y-4">
-      <!-- Chapter Header -->
-      <div *ngIf="selectedChapter" class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
-        <div class="flex items-center justify-between mb-4">
-          <div>
-            <h2 class="text-3xl font-bold text-gray-900 dark:text-white">
-              {{ t('viewer.chapter') }} {{ selectedChapter.number }}: {{ selectedChapter.title }}
-            </h2>
-            <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">
-              {{ selectedChapter.wordCount }} {{ t('viewer.words') }} · {{ t('status.' + selectedChapter.status) }} · 
-              {{ selectedChapter.createdAt | date:'medium' }}
-            </p>
-          </div>
-          
-          <div class="text-right">
-            <div class="text-2xl font-bold {{ getScoreColor(getChapterScore(selectedChapter)) }}">
-              {{ formatScore(getChapterScore(selectedChapter)) }} ★
-            </div>
-            <p class="text-xs text-gray-500 dark:text-gray-400">{{ t('viewer.overallScore') }}</p>
+            <button (click)="nextChapter()" [disabled]="selectedChapterIndex === ((chapters$ | async)?.length || 1) - 1" class="btn btn-ghost">
+              {{ t('viewer.nextChapter') }}
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+              </svg>
+            </button>
           </div>
         </div>
 
-        <!-- Navigation -->
-        <div class="flex items-center justify-between border-t border-gray-200 dark:border-gray-700 pt-4">
-          <button
-            (click)="prevChapter()"
-            [disabled]="selectedChapterIndex === 0"
-            class="px-4 py-2 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-            [class.opacity-50]="selectedChapterIndex === 0">
-            {{ t('viewer.previousChapter') }}
-          </button>
-          
-          <span class="text-sm text-gray-500 dark:text-gray-400">
-            {{ selectedChapterIndex + 1 }} {{ t('viewer.of') }} {{ (chapters$ | async)?.length || 0 }}
-          </span>
-          
-          <button
-            (click)="nextChapter()"
-            [disabled]="selectedChapterIndex === ((chapters$ | async)?.length || 1) - 1"
-            class="px-4 py-2 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-            [class.opacity-50]="selectedChapterIndex === ((chapters$ | async)?.length || 1) - 1">
-            {{ t('viewer.nextChapter') }}
-          </button>
-        </div>
-      </div>
-
-      <!-- Critique Report -->
-      <div *ngIf="hasCritique()" class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
-        <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">{{ t('viewer.critiqueReport') }}</h3>
-
-        @if (isCritiqueUnavailable()) {
-          <div class="flex items-start gap-3 p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
-            <svg class="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M5.07 19h13.86c1.54 0 2.5-1.67 1.73-3L13.73 4c-.77-1.33-2.69-1.33-3.46 0L3.34 16c-.77 1.33.19 3 1.73 3z"></path>
-            </svg>
-            <p class="text-sm text-amber-800 dark:text-amber-200">{{ getCritiqueUnavailableReason() }}</p>
-          </div>
-        } @else {
-          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
-            <div class="text-center p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
-              <div class="text-2xl font-bold text-green-600 dark:text-green-400">
-                {{ getProseScore() }}/10
-              </div>
-              <div class="text-sm text-gray-600 dark:text-gray-400">{{ t('generator.prose') }}</div>
-            </div>
-
-            <div class="text-center p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
-              <div class="text-2xl font-bold text-blue-600 dark:text-blue-400">
-                {{ getPacingScore() }}/10
-              </div>
-              <div class="text-sm text-gray-600 dark:text-gray-400">{{ t('generator.pacing') }}</div>
-            </div>
-
-            <div class="text-center p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
-              <div class="text-2xl font-bold text-purple-600 dark:text-purple-400">
-                {{ getDialogueScore() }}/10
-              </div>
-              <div class="text-sm text-gray-600 dark:text-gray-400">{{ t('generator.dialogue') }}</div>
-            </div>
-          </div>
-        }
-      </div>
-
-      <!-- Chapter Content -->
-      <div *ngIf="selectedChapter" class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
-        <div class="prose prose-lg dark:prose-invert max-w-none font-serif">
-          <div class="whitespace-pre-wrap">
+        <!-- Chapter content — the reading surface. Serif body, generous
+             line height, soft cream-tinted card in both modes. -->
+        <article class="card p-8 lg:p-10">
+          <div class="chapter-prose">
             {{ getDisplayContent() }}
           </div>
+        </article>
+      } @else {
+        <div class="card p-16 text-center">
+          <div class="w-14 h-14 mx-auto rounded-xl bg-accent-500/15 text-accent-500 flex items-center justify-center mb-4">
+            <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path>
+            </svg>
+          </div>
+          <p class="text-base font-medium text-surface-strong mb-1">{{ t('viewer.noChapters') }}</p>
+          <p class="text-sm text-surface-subtle">{{ t('viewer.startGenerating') }}</p>
         </div>
-      </div>
-
-      <!-- Empty State -->
-      <div *ngIf="!(chapters$ | async)?.length" class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-12 text-center">
-        <div class="text-gray-500 dark:text-gray-400">
-          <p class="text-lg font-medium mb-2">{{ t('viewer.noChapters') }}</p>
-          <p class="text-sm">{{ t('viewer.startGenerating') }}</p>
-        </div>
-      </div>
-    </div>
+      }
+    </section>
   </div>
 </div>

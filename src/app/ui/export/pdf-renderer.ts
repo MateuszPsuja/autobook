@@ -31,8 +31,8 @@ const MARGIN_OUTER = 48;
 // ---- Typography -----------------------------------------------------------
 const BODY_FONT = 'Roboto';
 const DISPLAY_FONT = 'Roboto';
-const BODY_SIZE = 11;
-const BODY_LEADING = 1.4;
+const BODY_SIZE = 10.5;
+const BODY_LEADING = 1.55;
 
 // ---- Public types ---------------------------------------------------------
 export interface PdfExportOptions {
@@ -396,32 +396,32 @@ function buildDropCapParagraph(text: string): DocContent {
     return { text, style: 'bodyParagraph' };
   }
   const [, leading, firstChar, rest] = match;
-  // The drop cap is a single character in its own column. The body
-  // text in the next column uses `bodyNoIndent` (fontSize 11,
-  // lineHeight 1.4 → ~15.4 pt per line). To span roughly 3 lines of
-  // body text the cap needs to be ~46 pt tall, so we use fontSize 48
-  // with lineHeight 1 and no top margin — the previous 4 pt top
-  // margin was pushing the cap below the body text's first baseline
-  // and the 0.9 lineHeight was making it shorter than 3 body lines.
+  // Drop cap with its baseline aligned to the body's first-line
+  // baseline. The cap is 22 pt and the body is 10.5 pt; pulling the
+  // cap column up by ~7 pt makes the cap's baseline (~15.8 pt from
+  // its own top) sit on the body's first-line baseline (~8.4 pt from
+  // the body column's top). The cap now visually rises out of the
+  // first body line instead of sitting as a separate block above it,
+  // and the body's first letter reads on the same baseline as the
+  // cap's foot.
   return {
     columns: [
       {
-        width: 40,
+        width: 16,
         text: firstChar.toUpperCase(),
-        fontSize: 48,
+        fontSize: 22,
         bold: false,
         font: DISPLAY_FONT,
         lineHeight: 1,
-        margin: [0, 0, 0, 0],
+        margin: [0, -7, 0, 0],
         alignment: 'left',
       },
       {
         text: leading + rest,
         style: 'bodyNoIndent',
-        alignment: 'justify',
       },
     ],
-    columnGap: 6,
+    columnGap: 4,
     margin: [0, 0, 0, 0],
   };
 }
@@ -581,36 +581,38 @@ export function buildPdfDocument(
     },
     chapterEyebrow: {
       font: BODY_FONT,
-      fontSize: 11,
+      fontSize: 9,
       alignment: 'center',
       // The localised chapter word ("ROZDZIAŁ", "CAPÍTULO", "KAPITEL",
       // "ГЛАВА") is up to 8 letters — a `characterSpacing` of 8 pt would
       // push the trailing roman numeral off the right margin on narrower
-      // pages. 2 pt gives a clean, even breath without breaking the line.
-      characterSpacing: 2,
+      // pages. 1.5 pt gives a clean, even breath without breaking the line.
+      characterSpacing: 1.5,
       color: '#666',
-      margin: [0, 56, 0, 10],
+      margin: [0, 56, 0, 8],
     },
     chapterTitle: {
       font: DISPLAY_FONT,
-      fontSize: 30,
+      fontSize: 22,
       bold: true,
       alignment: 'center',
-      margin: [0, 0, 0, 6],
+      // A small tracking-out gives a title-page feel without screaming.
+      characterSpacing: 0.5,
+      margin: [0, 0, 0, 4],
     },
     chapterOrnament: {
       font: BODY_FONT,
-      fontSize: 12,
+      fontSize: 11,
       alignment: 'center',
-      characterSpacing: 6,
+      characterSpacing: 4,
       color: '#888',
       margin: [0, 2, 0, 22],
     },
     sceneBreak: {
       font: BODY_FONT,
-      fontSize: 14,
+      fontSize: 12,
       alignment: 'center',
-      characterSpacing: 6,
+      characterSpacing: 4,
       color: '#999',
       margin: [0, 18, 0, 18],
     },
@@ -618,13 +620,17 @@ export function buildPdfDocument(
       font: BODY_FONT,
       fontSize: BODY_SIZE,
       lineHeight: BODY_LEADING,
+      // Left-aligned reading — justified text creates "rivers" in a
+      // single-column prose page and reads worse than ragged-right on
+      // a screen-or-paper page this width.
+      alignment: 'left',
     },
     bodyParagraph: {
       font: BODY_FONT,
       fontSize: BODY_SIZE,
       lineHeight: BODY_LEADING,
-      alignment: 'justify',
-      firstLineIndent: 18,
+      alignment: 'left',
+      firstLineIndent: 14,
     },
     tocTitle: {
       font: DISPLAY_FONT,
@@ -653,14 +659,16 @@ export function buildPdfDocument(
     headerText: {
       font: BODY_FONT,
       fontSize: 8,
-      color: '#777',
-      characterSpacing: 2,
+      italics: true,
+      color: '#888',
+      characterSpacing: 0.3,
     },
     pageNumber: {
       font: BODY_FONT,
       fontSize: 9,
-      color: '#333',
+      color: '#555',
       alignment: 'center',
+      characterSpacing: 0.5,
     },
     illustrationCaption: {
       font: BODY_FONT,
@@ -739,7 +747,10 @@ export function buildPdfDocument(
     return {
       columns: [
         {
-          text: bookTitle.toUpperCase(),
+          // Book title as a quiet running head — italics, not ALL
+          // CAPS. A screaming "RISE OF THE PHOENIX" header was
+          // fighting the prose for attention.
+          text: bookTitle,
           style: 'headerText',
           alignment: isVerso ? 'right' : 'left',
         },

@@ -11,6 +11,7 @@
     "export": "Export"
   },
   "shell": {
+    "status": "Status",
     "connected": "Connected",
     "notConnected": "Not Connected",
     "model": "Model",

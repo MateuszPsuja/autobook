@@ -268,6 +268,16 @@ export class ConfigComponent implements OnInit {
     }
   }
 
+  /** Template-friendly alias. */
+  previousStep(): void {
+    this.prevStep();
+  }
+
+  /** Current step's display label, used by the topbar's "now in: …" eyebrow. */
+  getCurrentStepLabel(): string {
+    return this.steps[this.currentStep]?.label ?? '';
+  }
+
   goToStep(stepNumber: number): void {
     const stepIndex = stepNumber - 1;
     // Can only go to completed steps or the current step
@@ -282,14 +292,16 @@ export class ConfigComponent implements OnInit {
 
   getStepClass(stepNumber: number): string {
     if (stepNumber < this.currentStep || this.completedSteps.includes(stepNumber)) {
-      // Completed step: gray disc, orange border, high-contrast text.
-      return 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white border-2 border-accent-500';
+      // Completed: orange-tinted disc, thin orange ring, check icon visible.
+      return 'bg-accent-500/15 text-accent-600 dark:text-accent-300 border-2 border-accent-500/40';
     } else if (stepNumber === this.currentStep) {
-      // Current step: gray disc, orange border, high-contrast text, halo to draw the eye.
-      return 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white border-2 border-accent-500 ring-4 ring-accent-500/20 shadow-lg shadow-accent-500/30';
+      // Current: solid orange disc with a static glow. No animation —
+      // the user asked to keep this steady so it doesn't read as
+      // a notification ping.
+      return 'bg-accent-500 text-white border-2 border-accent-500 shadow-glow-accent';
     } else {
-      // Future step: gray disc, gray border, high-contrast text.
-      return 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white border-2 border-gray-200 dark:border-gray-700';
+      // Future: sunken disc, faint border, muted text.
+      return 'bg-surface-sunken text-surface-subtle border-2 border-surface-border';
     }
   }
 

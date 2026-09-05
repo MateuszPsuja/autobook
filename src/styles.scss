@@ -1,4 +1,4 @@
-/* DejaVu Sans (embedded) */
+/* DejaVu Sans (embedded) — used by the export pipeline for PDF rendering. */
 @font-face {
   font-family: 'DejaVu Sans';
   src: url('assets/DejaVuSans.ttf') format('truetype');
@@ -11,60 +11,359 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Global styles */
+/* =========================================================================
+   THEME TOKENS
+   Every value that changes between light and dark lives here. Components
+   reach for the semantic names (`bg-surface-card`, `border-surface-border`)
+   instead of raw `bg-white` / `bg-gray-900`, so they inherit the right
+   material in each mode without conditionals.
+   ========================================================================= */
+:root,
+:root.light {
+  /* Light — warm paper. Slight cream in canvas so the orange logo stops
+     feeling like a sticker on a gray wall. */
+  --surface-canvas:    247 246 243;   /* ink-50  */
+  --surface-panel:     255 255 255;
+  --surface-card:      255 255 255;
+  --surface-cardhover: 250 248 244;
+  --surface-sunken:    242 240 234;
+  --surface-border:    226 220 207;
+  --surface-strong:    31 30 27;      /* ink-800-ish */
+  --surface-subtle:    110 105 95;    /* ink-500-ish */
+
+  color-scheme: light;
+}
+
+:root.dark {
+  /* Dark — technical, near-black canvas with cool ink, not gray. The
+     panel has a tiny lift so cards sit on a real surface, not on
+     transparent nothing. */
+  --surface-canvas:     10 11 14;
+  --surface-panel:      17 19 23;
+  --surface-card:       22 24 29;
+  --surface-cardhover:  28 31 38;
+  --surface-sunken:      7  8 11;
+  --surface-border:     38 41 49;
+  --surface-strong:    240 238 232;   /* ink-50-ish  */
+  --surface-subtle:    145 140 130;   /* ink-300-ish */
+
+  color-scheme: dark;
+}
+
+/* =========================================================================
+   BASE
+   ========================================================================= */
 html, body {
   height: 100%;
 }
 
 body {
-  @apply bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100;
-  font-family: 'DejaVu Sans', Inter Variable, system-ui, sans-serif;
+  @apply text-surface-strong font-sans antialiased;
+  /* font-family set inline so DejaVu falls back correctly inside the
+     export pipeline; the actual UI uses Inter. */
+  font-family: 'Inter Variable', 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  /* The canvas itself paints the background so the grid/paper pattern
+     and the aurora wash can be layered *under* the content. */
+  background-color: rgb(var(--surface-canvas));
+  /* Subtle features-character: Inter's `ss01`/`cv11` make the lowercase
+     `a` and `g` more readable. Falls back to default if not installed. */
+  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11', 'ss01';
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
-/* Custom scrollbar */
+/* The page background grid + wash. We put it on `body` so every page
+   inherits it for free. In light mode the grid is almost invisible; in
+   dark mode it's a tactile technical grid. */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background-image: theme('backgroundImage.grid-soft');
+  background-size: 32px 32px;
+}
+:root.dark body::before {
+  background-image: theme('backgroundImage.grid-faint');
+  background-size: 32px 32px;
+}
+/* Aurora wash in dark, paper wash in light. Sits above the grid. */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background-image: theme('backgroundImage.paper-light');
+  background-attachment: fixed;
+}
+:root.dark body::after {
+  background-image: theme('backgroundImage.aurora-dark');
+  background-attachment: fixed;
+}
+
+/* Make sure the actual app sits on top of the layered backgrounds. */
+app-root {
+  position: relative;
+  z-index: 1;
+  display: block;
+  height: 100%;
+}
+
+/* =========================================================================
+   TYPOGRAPHY
+   Heading rhythm: page titles get a tighter, slightly heavier treatment
+   so they look like the start of a section, not just "bigger text".
+   ========================================================================= */
+h1, h2, h3, h4 {
+  @apply text-surface-strong;
+  letter-spacing: -0.012em;
+}
+h1 { @apply text-2xl font-bold tracking-tight; }
+h2 { @apply text-xl font-semibold tracking-tight; }
+h3 { @apply text-lg font-semibold; }
+h4 { @apply text-base font-semibold; }
+
+/* Subdued body copy. Tailwind's `text-gray-*` maps to a cooler gray than
+   we want — use `text-surface-subtle` everywhere it appears in prose. */
+.text-subtle { @apply text-surface-subtle; }
+
+/* =========================================================================
+   FOCUS STATES
+   One accent ring, always. Don't let any component ship without it.
+   ========================================================================= */
+:focus-visible {
+  outline: 2px solid #e87848;
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+/* Form controls: thicker ring that hugs the element instead of an
+   offset outline, so it reads as part of the control. */
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+button:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px rgb(var(--surface-canvas)),
+    0 0 0 4px #e87848;
+}
+
+/* =========================================================================
+   SCROLLBAR
+   Slim, soft, and doesn't fight the dark canvas.
+   ========================================================================= */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 10px;
+  height: 10px;
 }
-
 ::-webkit-scrollbar-track {
-  @apply bg-gray-100 dark:bg-gray-800;
+  background: transparent;
 }
-
 ::-webkit-scrollbar-thumb {
-  @apply bg-gray-300 dark:bg-gray-600 rounded-full;
+  background: rgb(var(--surface-border));
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
 }
-
 ::-webkit-scrollbar-thumb:hover {
-  @apply bg-gray-400 dark:bg-gray-500;
+  background: rgb(var(--surface-subtle) / 0.6);
+  background-clip: padding-box;
+  border: 2px solid transparent;
 }
 
-/* Typography classes for book content */
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(var(--surface-border)) transparent;
+}
+
+/* =========================================================================
+   CARDS
+   Reusable card surface. In dark mode the border + inner highlight +
+   subtle shadow make cards feel like glass panels. In light mode the
+   same recipe reads as a soft elevated card.
+   ========================================================================= */
+.card {
+  @apply bg-surface-card border border-surface-border rounded-2xl;
+  box-shadow: theme('boxShadow.card');
+}
+:root.dark .card {
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.04),
+    0 1px 0 rgb(0 0 0 / 0.4),
+    0 12px 32px -16px rgb(0 0 0 / 0.6);
+}
+.card-lg {
+  @apply bg-surface-card border border-surface-border rounded-2xl;
+  box-shadow: theme('boxShadow.card-lg');
+}
+:root.dark .card-lg {
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.05),
+    0 1px 0 rgb(0 0 0 / 0.4),
+    0 20px 48px -20px rgb(0 0 0 / 0.7);
+}
+
+/* Smaller, more compact card variant for inline groupings (e.g. agent
+   cards in the generator pipeline). Same surface, no big shadow. */
+.card-sm {
+  @apply bg-surface-card border border-surface-border rounded-xl;
+}
+
+/* =========================================================================
+   FORM FIELDS
+   The shared look of every input, select, and textarea. Components
+   apply `field` instead of repeating these classes.
+   ========================================================================= */
+.field {
+  @apply w-full px-3.5 py-2.5 text-sm border border-surface-border rounded-lg
+         bg-surface-sunken text-surface-strong placeholder:text-surface-subtle/70
+         transition-all duration-150;
+}
+.field:hover:not(:focus) {
+  @apply border-surface-strong/20;
+}
+
+/* Select chevron — drawn with a CSS background so we don't have to ship
+   an icon inside every <option>. */
+select.field {
+  appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%238c8576' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'></polyline></svg>");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  background-size: 14px 14px;
+  padding-right: 2.25rem;
+}
+:root.dark select.field {
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23b9b3a5' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'></polyline></svg>");
+}
+
+/* =========================================================================
+   BUTTONS
+   Three sizes, two variants, one focus ring.
+   ========================================================================= */
+.btn {
+  @apply inline-flex items-center justify-center gap-2 px-3.5 py-2
+         text-sm font-medium rounded-lg transition-all duration-150
+         border border-transparent cursor-pointer
+         disabled:opacity-50 disabled:cursor-not-allowed;
+}
+.btn-primary {
+  @apply bg-accent-500 text-white;
+  box-shadow: 0 1px 0 rgb(0 0 0 / 0.05), 0 6px 16px -6px rgb(232 120 72 / 0.55);
+}
+.btn-primary:hover:not(:disabled) {
+  @apply bg-accent-600;
+  box-shadow: 0 1px 0 rgb(0 0 0 / 0.05), 0 10px 24px -8px rgb(232 120 72 / 0.65);
+}
+.btn-secondary {
+  @apply bg-surface-card border border-surface-border text-surface-strong;
+}
+.btn-secondary:hover:not(:disabled) {
+  @apply bg-surface-cardhover border-surface-strong/20;
+}
+.btn-ghost {
+  @apply text-surface-strong;
+}
+.btn-ghost:hover:not(:disabled) {
+  @apply bg-surface-sunken;
+}
+
+/* =========================================================================
+   LABELS & EYEBROWS
+   The "All caps tiny label above a section" pattern. Used in shell,
+   settings cards, generator stats.
+   ========================================================================= */
+.eyebrow {
+  @apply text-[10px] font-semibold uppercase tracking-[0.14em] text-surface-subtle;
+}
+
+/* =========================================================================
+   PROSE OVERRIDES (book reading view)
+   ========================================================================= */
 .prose {
   max-width: none;
 }
-
-.prose-lg :where(p):not(:first-child) {
-  margin-top: 1rem;
-}
-
-.prose-lg :where(h1):not(:first-child) {
-  margin-top: 2rem;
-}
-
-.prose-lg :where(h2):not(:first-child) {
-  margin-top: 1.5rem;
-}
-
-.prose-lg :where(h3):not(:first-child) {
-  margin-top: 1.25rem;
-}
-
+.prose-lg :where(p):not(:first-child) { margin-top: 1rem; }
+.prose-lg :where(h1):not(:first-child) { margin-top: 2rem; }
+.prose-lg :where(h2):not(:first-child) { margin-top: 1.5rem; }
+.prose-lg :where(h3):not(:first-child) { margin-top: 1.25rem; }
 .prose-lg :where(ul):not(:first-child),
-.prose-lg :where(ol):not(:first-child) {
-  margin-top: 1rem;
+.prose-lg :where(ol):not(:first-child) { margin-top: 1rem; }
+.prose-lg :where(li):not(:first-child) { margin-top: 0.5rem; }
+
+/* Chapter text — slightly looser, serif, never full-bleed. */
+.chapter-prose {
+  @apply font-serif text-[17px] leading-[1.75] text-surface-strong;
 }
 
-.prose-lg :where(li):not(:first-child) {
-  margin-top: 0.5rem;
+/* =========================================================================
+   TINY UTILITIES
+   Things we use in 3+ components — keep them here, not duplicated.
+   ========================================================================= */
+/* Glass surface used by the dark sidebar / topbar — translucent over the
+   aurora so the orange wash bleeds through subtly. */
+.glass {
+  @apply bg-surface-panel/85 backdrop-blur-xl border-r border-surface-border;
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+}
+:root:not(.dark) .glass {
+  @apply bg-surface-panel/95;
+}
+
+/* The "currently selected" marker — a 2px orange bar that sits on the
+   left edge of a nav row. */
+.active-rail {
+  position: absolute;
+  left: 0;
+  top: 0.5rem;
+  bottom: 0.5rem;
+  width: 2px;
+  border-radius: 0 2px 2px 0;
+  background: #e87848;
+  box-shadow: 0 0 8px 1px rgb(232 120 72 / 0.5);
+}
+
+/* Status dot — used in the shell connection indicator. 8px glowing
+   point, animated ping halo. */
+.status-dot {
+  position: relative;
+  width: 0.5rem;
+  height: 0.5rem;
+}
+.status-dot::before {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 999px;
+  background: #e87848;
+  opacity: 0.45;
+  animation: halo 2.4s ease-in-out infinite;
+}
+.status-dot > span {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: #e87848;
+  box-shadow: 0 0 8px 1px rgb(232 120 72 / 0.6);
+}
+
+/* Progress fill — used by every progress bar in the app. Orange with
+   a soft glow + a slow sheen that says "live". */
+.progress-track {
+  @apply w-full bg-surface-sunken rounded-full overflow-hidden;
+}
+.progress-fill {
+  @apply h-full rounded-full;
+  background: linear-gradient(90deg, #e87848 0%, #eea578 100%);
+  box-shadow: 0 0 12px 0 rgb(232 120 72 / 0.45);
+  transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.progress-fill.is-animated {
+  background-size: 200% 100%;
+  background-image: linear-gradient(90deg, #e87848 0%, #eea578 40%, #e87848 80%, #e87848 100%);
+  animation: sheen 2.5s linear infinite;
 }

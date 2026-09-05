@@ -44,6 +44,13 @@ export class GeneratorComponent implements OnInit, OnDestroy {
   elapsedSeconds = 0;
   isCompleted = false;
 
+  // Ordered list of agents in the pipeline. Single source of truth for
+  // the horizontal agent cards in the template, so reordering happens in
+  // one place and the connector arrow logic just walks the array.
+  pipelineAgents: AgentType[] = [
+    'architect', 'author', 'critic', 'reviser', 'character', 'continuity'
+  ];
+
   // Agent states for UI
   agentStates = {
     architect: { status: 'idle', active: false },
@@ -202,7 +209,7 @@ export class GeneratorComponent implements OnInit, OnDestroy {
     // shown as done with a green check — otherwise the pipeline
     // looks like the agents never worked. The orchestrator never
     // explicitly clears `activeAgent` on completion, so the
-    // previous "reset all then set the active one" logic would
+    // "reset all then set the active one" logic below would
     // leave 5 of 6 agents stuck on idle after a successful run.
     if (status === 'completed') {
       Object.keys(this.agentStates).forEach(key => {
@@ -211,17 +218,25 @@ export class GeneratorComponent implements OnInit, OnDestroy {
       return;
     }
 
-    // Reset all agent states
-    Object.keys(this.agentStates).forEach(key => {
-      this.agentStates[key as AgentType] = { status: 'idle', active: false };
-    });
-
-    // Set active agent state
+    // While the run is in progress, the *currently* active agent is
+    // the only one that's running. Earlier agents should already
+    // show as 'done' from previous ticks, and later ones are still
+    // 'idle'. We only need to (a) promote the new active agent to
+    // 'running' and (b) demote any *other* agent that was running
+    // last tick to 'done', because the orchestrator doesn't emit
+    // an explicit "agent X just finished" event — it just sets the
+    // next activeAgent. The previous branch handles the
+    // status==='completed' flush; here we just do a soft update so
+    // we don't lose the 'done' state of agents that already ran.
     if (activeAgent) {
-      this.agentStates[activeAgent] = { 
-        status: status === 'writing' ? 'running' : 'done', 
-        active: true 
-      };
+      // Demote anyone who was previously active — they finished.
+      Object.keys(this.agentStates).forEach(key => {
+        const k = key as AgentType;
+        if (k !== activeAgent && this.agentStates[k].active) {
+          this.agentStates[k] = { status: 'done', active: false };
+        }
+      });
+      this.agentStates[activeAgent] = { status: 'running', active: true };
     }
   }
 
