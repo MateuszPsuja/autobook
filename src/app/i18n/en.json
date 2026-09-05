@@ -152,6 +152,7 @@
     "next": "Next",
     "generating": "Generating...",
     "startGeneration": "Start Generation",
+    "continueToGenerate": "Continue to Generate",
     "contextWindow": "Context window",
     "notSpecified": "Not specified",
     "notSelected": "Not selected",

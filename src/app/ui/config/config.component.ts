@@ -22,7 +22,6 @@ export class ConfigComponent implements OnInit {
 
   configForm: FormGroup;
   currentStep = 0;
-  isSubmitting = false;
 
   // Form data
   bookConfig: BookConfig = {} as BookConfig;
@@ -122,13 +121,29 @@ export class ConfigComponent implements OnInit {
       return;
     }
 
-    // Handle step query parameter (passed from generator page)
+    // Handle step query parameter (passed from generator page).
+    // - step present and in range → jump to that step and mark all
+    //   prior steps as completed (the user reached the generator,
+    //   so the wizard was already finished).
+    // - step absent → canonical entry point (e.g. sidebar menu).
+    //   Reset to the first step so the menu always opens the
+    //   wizard from the top, regardless of the step the user was
+    //   on when they navigated away.
     this.route.queryParams.subscribe(params => {
-      if (params['step']) {
-        const stepNumber = parseInt(params['step'], 10);
+      const stepParam = params['step'];
+      if (stepParam) {
+        const stepNumber = parseInt(stepParam, 10);
         if (stepNumber >= 1 && stepNumber <= this.steps.length) {
           this.currentStep = stepNumber - 1; // Convert to 0-based index
+          for (let i = 1; i <= stepNumber; i++) {
+            if (!this.completedSteps.includes(i)) {
+              this.completedSteps.push(i);
+            }
+          }
         }
+      } else {
+        this.currentStep = 0;
+        this.completedSteps = [];
       }
     });
 
@@ -349,19 +364,19 @@ export class ConfigComponent implements OnInit {
   // Form submission
   onSubmit(): void {
     if (this.configForm.valid) {
-      this.isSubmitting = true;
-      
       // Get form values
       const formValue = this.configForm.value;
-      
+
       // Translate and save config
       this.saveConfigToStorage(formValue);
 
-      // Navigate to generator
-      setTimeout(() => {
-        this.isSubmitting = false;
-        this.router.navigate(['/generator']);
-      }, 1000);
+      // Navigate to generator. The form data is local-only at this
+      // point (localStorage write + in-memory translation), so
+      // there's nothing async to wait for — earlier revisions
+      // wrapped the navigation in a 1s setTimeout "for loading
+      // state", but `isSubmitting` was never read by the template
+      // and the delay just made the button feel sluggish.
+      this.router.navigate(['/generator']);
     }
   }
 

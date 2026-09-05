@@ -188,8 +188,12 @@ export class GeneratorComponent implements OnInit, OnDestroy {
   }
 
   navigateBack(): void {
-    // Navigate to config page
-    this.router.navigate(['/config']);
+    // Go back to the last step of the config (Review). The user
+    // reached the generator by completing the full wizard, so
+    // dropping them on step 1 would force them to re-walk all four
+    // steps just to tweak something. The config page reads the
+    // `step` query param and jumps directly there.
+    this.router.navigate(['/config'], { queryParams: { step: 4 } });
   }
 
   navigateNext(): void {

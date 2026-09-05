@@ -20,7 +20,7 @@
          still have a clear hover state. -->
     <nav class="flex-1 px-3 py-2 space-y-1">
       @for (item of navItems; track item.path) {
-        @let active = router.isActive(item.path, true);
+        @let active = router.isActive(item.path, false);
         <button
           (click)="navigateTo(item.path)"
           class="relative w-full flex items-center gap-3 px-3.5 py-2.5 text-sm font-medium rounded-xl transition-all duration-200"
