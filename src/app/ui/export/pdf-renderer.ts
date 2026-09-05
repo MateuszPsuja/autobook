@@ -396,13 +396,14 @@ function buildDropCapParagraph(text: string): DocContent {
     return { text, style: 'bodyParagraph' };
   }
   const [, leading, firstChar, rest] = match;
-  // A modest drop cap that spans ~2 lines of body text. Body is
-  // fontSize 10.5, lineHeight 1.55 → ~16.3 pt per line, so a 2-line
-  // cap needs to be ~33 pt tall. We use fontSize 22 (about 1.4 lines)
-  // for a quiet, bookish feel — the previous 30pt bold treatment read
-  // as a block-letter poster, not as a drop cap. The cap keeps the
-  // same regular weight as the body so the two sit on the same
-  // typographic baseline; only the size separates them.
+  // Drop cap with its baseline aligned to the body's first-line
+  // baseline. The cap is 22 pt and the body is 10.5 pt; pulling the
+  // cap column up by ~7 pt makes the cap's baseline (~15.8 pt from
+  // its own top) sit on the body's first-line baseline (~8.4 pt from
+  // the body column's top). The cap now visually rises out of the
+  // first body line instead of sitting as a separate block above it,
+  // and the body's first letter reads on the same baseline as the
+  // cap's foot.
   return {
     columns: [
       {
@@ -412,7 +413,7 @@ function buildDropCapParagraph(text: string): DocContent {
         bold: false,
         font: DISPLAY_FONT,
         lineHeight: 1,
-        margin: [0, 2, 0, 0],
+        margin: [0, -7, 0, 0],
         alignment: 'left',
       },
       {
