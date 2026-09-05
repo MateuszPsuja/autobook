@@ -6,6 +6,9 @@ import { ExportComponent } from './export.component';
 import { BookStateService } from '../../book/state/book-state.service';
 import { PersistenceService } from '../../core/persistence.service';
 import { TranslationService } from '../../i18n/translation.service';
+import { IllustrationService } from '../../core/providers/illustration.service';
+import { ProviderService } from '../../core/providers/provider.service';
+import { BookCoverArt, ChapterIllustration } from '../../core/providers/illustration.types';
 
 describe('ExportComponent', () => {
   let component: ExportComponent;
@@ -28,15 +31,27 @@ describe('ExportComponent', () => {
       };
       return map[key] ?? key;
     },
-    // The real TranslationService exposes a `Signal<ExportLanguage>`
-    // here. Tests read it through component.exportLanguage directly
-    // (which the component seeds from the signal in ngOnInit), or
-    // they override the per-test mock field below.
     exportLanguage: (() => 'en') as any,
     setExportLanguage: () => {},
     translateBookTo$: (chapters: any[]) => of(chapters),
     translateBookMetadataTo$: (config: any) => of(config)
   } as unknown as Partial<TranslationService>;
+
+  const mockIllustration = {
+    generateAll$: (_req: any) => of({
+      chapterIllustrations: new Map<string, ChapterIllustration>(),
+      coverArt: undefined as BookCoverArt | undefined,
+      backCoverArt: undefined as BookCoverArt | undefined,
+      totalCalls: 0,
+      completedCalls: 0,
+    }),
+  } as Partial<IllustrationService>;
+
+  const mockProvider = {
+    getActiveProviderId: () => 'minimax',
+    getApiKey: () => 'sk-test',
+    getBaseUrl: () => 'https://api.example.com/v1',
+  } as Partial<ProviderService>;
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
@@ -44,8 +59,10 @@ describe('ExportComponent', () => {
       providers: [
         { provide: BookStateService, useValue: mockBookState },
         { provide: PersistenceService, useValue: mockPersistence },
-        { provide: TranslationService, useValue: mockTranslation }
-      ]
+        { provide: TranslationService, useValue: mockTranslation },
+        { provide: IllustrationService, useValue: mockIllustration },
+        { provide: ProviderService, useValue: mockProvider },
+      ],
     }).compileComponents();
 
     fixture = TestBed.createComponent(ExportComponent);
@@ -94,14 +111,6 @@ describe('ExportComponent', () => {
   });
 
   describe('Multi-language export', () => {
-    // The export translates the book into the target language
-    // before generating the file. We assert that:
-    //   - the export calls translateBookTo$ when target !== 'en'
-    //   - it skips the translation step when target === 'en'
-    // by capturing the markdown body the component ships to the
-    // download (it goes through generateMarkdown ->
-    // buildBookContent).
-
     it('skips the LLM translation pass entirely when target is English', async () => {
       (mockTranslation as any).exportLanguage = () => 'en';
       component.exportLanguage = 'en';
@@ -109,11 +118,7 @@ describe('ExportComponent', () => {
         .and.callFake((chapters: any[]) => of(chapters));
 
       chaptersSubject.next([
-        {
-          number: 1,
-          title: 'Chapter 1: The Beginning',
-          content: 'Original English body.'
-        }
+        { number: 1, title: 'Chapter 1: The Beginning', content: 'Original English body.' }
       ]);
       fixture.detectChanges();
 
@@ -132,9 +137,7 @@ describe('ExportComponent', () => {
       (mockTranslation as any).exportLanguage = () => 'pl';
       component.exportLanguage = 'pl';
       const translated = [{
-        number: 1,
-        title: 'Rozdział 1: Początek',
-        content: 'Przetłumaczona treść.'
+        number: 1, title: 'Rozdział 1: Początek', content: 'Przetłumaczona treść.'
       }];
       const translateBookSpy = spyOn(mockTranslation as any, 'translateBookTo$')
         .and.callFake(() => of(translated));
@@ -158,21 +161,70 @@ describe('ExportComponent', () => {
       component.setFormat('markdown');
       await component.exportBook();
 
-      // The translation helper was invoked with the user's target
-      // language and the source chapters.
       expect(translateBookSpy).toHaveBeenCalledTimes(1);
       const [passedChapters, passedTarget, passedWord] = translateBookSpy.calls.mostRecent().args as [any[], string, string];
       expect(passedChapters[0].number).toBe(1);
       expect(passedTarget).toBe('pl');
-      // The localised "Chapter" word for the target language is
-      // passed so the title translator can rebuild the
-      // "Rozdział N: …" header.
       expect(passedWord).toBe('Rozdział');
-      // The exported body contains the Polish title, not the
-      // English original.
       expect(capturedBody).toContain('Rozdział 1: Początek');
       expect(capturedBody).toContain('Przetłumaczona treść.');
       expect(capturedBody).not.toContain('Chapter 1: The Beginning');
+    });
+  });
+
+  describe('EPUB export', () => {
+    it('calls illustrationService.generateAll$ when EPUB + includeIllustrations + minimax', async () => {
+      const illSpy = spyOn(mockIllustration as any, 'generateAll$').and.callThrough();
+
+      chaptersSubject.next([{ id: 'c1', number: 1, title: 'A', content: 'A' }]);
+      component.selectedFormat = 'epub';
+      component.exportOptions.includeIllustrations = true;
+
+      spyOn(window.URL, 'createObjectURL').and.returnValue('blob:mock');
+      spyOn(document.body, 'appendChild').and.stub();
+      spyOn(document.body, 'removeChild').and.stub();
+      spyOn(HTMLAnchorElement.prototype, 'click').and.stub();
+
+      await component.exportBook();
+      expect(illSpy).toHaveBeenCalled();
+    });
+
+    it('produces a Blob with type application/epub+zip from the new builder', async () => {
+      chaptersSubject.next([{ id: 'c1', number: 1, title: 'A', content: 'A' }]);
+      component.selectedFormat = 'epub';
+      component.exportOptions.includeIllustrations = false;
+      spyOn(window.URL, 'createObjectURL').and.returnValue('blob:mock');
+      spyOn(document.body, 'appendChild').and.stub();
+      spyOn(document.body, 'removeChild').and.stub();
+      spyOn(HTMLAnchorElement.prototype, 'click').and.stub();
+      const blob = await (component as any).generateEPUB(
+        [{ id: 'c1', number: 1, title: 'A', content: 'A' }],
+        undefined,
+        undefined,
+      );
+      expect(blob).toBeInstanceOf(Blob);
+      expect(blob.type).toBe('application/epub+zip');
+      // The first 4 bytes are "PK\x03\x04" — the ZIP local file
+      // header signature. Confirms this is a real ZIP, not just a
+      // Blob with a misleading MIME type.
+      const buf = new Uint8Array(await blob.arrayBuffer());
+      expect(buf[0]).toBe(0x50);
+      expect(buf[1]).toBe(0x4b);
+      expect(buf[2]).toBe(0x03);
+      expect(buf[3]).toBe(0x04);
+    });
+
+    it('does NOT call illustrationService when includeIllustrations is off (even if minimax)', async () => {
+      const illSpy = spyOn(mockIllustration as any, 'generateAll$').and.callThrough();
+      chaptersSubject.next([{ id: 'c1', number: 1, title: 'A', content: 'A' }]);
+      component.selectedFormat = 'epub';
+      component.exportOptions.includeIllustrations = false;
+      spyOn(window.URL, 'createObjectURL').and.returnValue('blob:mock');
+      spyOn(document.body, 'appendChild').and.stub();
+      spyOn(document.body, 'removeChild').and.stub();
+      spyOn(HTMLAnchorElement.prototype, 'click').and.stub();
+      await component.exportBook();
+      expect(illSpy).not.toHaveBeenCalled();
     });
   });
 });

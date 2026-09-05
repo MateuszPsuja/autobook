@@ -4,6 +4,7 @@ import { catchError, map } from 'rxjs/operators';
 import { ProviderService } from './provider.service';
 import { ApiService } from '../api.service';
 import { getProvider } from './providers';
+import { sniffImageFormat } from '../../shared/utils/image-bytes';
 
 export interface MinimaxImageResult {
   base64: string;
@@ -143,22 +144,12 @@ export class MinimaxImageService {
 }
 
 /**
- * Sniff the actual image format from the leading bytes of a base64
- * payload. The MiniMax image-01 docs say "image" but the binary format
- * is undocumented; in practice we've seen both JPEG and PNG. The base64
- * magic prefixes are stable:
- *   JPEG  : `/9j/`            (FFD8FFE0…)
- *   PNG   : `iVBORw0KGgo`     (89504E47…)
- *   WebP  : `UklGR`           (RIFF…WEBP)
- *   GIF   : `R0lGOD`          (47494638…)
- * Anything else falls back to JPEG.
+ * pdfmake 0.2.7 has poor support for WebP and GIF, so the PDF path
+ * collapses both to PNG/JPEG via the shared sniffer. The EPUB path
+ * calls `sniffImageFormat` directly so it gets the real format.
  */
 function detectImageMime(b64: string): MinimaxImageResult['mimeType'] {
-  if (!b64) return 'image/jpeg';
-  const head = b64.slice(0, 12);
-  if (head.startsWith('/9j/') || head.startsWith('/9j/4')) return 'image/jpeg';
-  if (head.startsWith('iVBORw')) return 'image/png';
-  if (head.startsWith('UklGR')) return 'image/png'; // pdfmake 0.2.7 has poor WebP support
-  if (head.startsWith('R0lGOD')) return 'image/png'; // ditto for GIF
-  return 'image/jpeg';
+  const { mime } = sniffImageFormat(b64);
+  if (mime === 'image/webp' || mime === 'image/gif') return 'image/jpeg';
+  return mime;
 }

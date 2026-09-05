@@ -16,6 +16,7 @@ import pdfFonts from 'pdfmake/build/vfs_fonts';
 import { buildPdfDocument, PdfExportOptions } from './pdf-renderer';
 import { stripRunningWordCount } from '../../shared/utils/chapter-cleanup';
 import { ExportLanguage, EXPORT_LANGUAGES, getExportLabels, ExportLabels } from '../../i18n/export-labels';
+import { buildEpubBlob } from './epub-builder';
 
 // Initialize pdfMake with virtual file system
 (pdfMake as any).vfs = (pdfFonts as any).pdfMake?.vfs || (pdfFonts as any).vfs;
@@ -257,15 +258,21 @@ export class ExportComponent implements OnInit {
         });
       }
 
-      // PDF illustration pass (minimax-only). Runs in the try block
-      // so any rejection falls into the existing `catch (error)`
+      // Illustration pass (minimax-only). Runs in the try block so
+      // any rejection falls into the existing `catch (error)`
       // handler. Failure here is non-fatal: a `null` result or a
-      // missing illustration just means the chapter ships without
-      // art, but the export still completes.
+      // missing illustration just means the chapter / cover ships
+      // without art, but the export still completes.
+      //
+      // The PDF and EPUB paths both consume the same illustration
+      // payload; DOCX and Markdown don't (DOCX is out of scope for
+      // the EPUB rebuild, Markdown is plain text). The DOCX branch
+      // currently has the same "markdown with wrong MIME" bug as
+      // the old EPUB branch but that's a follow-up plan.
       let chapterIllustrations: Map<string, ChapterIllustration> | undefined;
       let coverArt: BookCoverArt | undefined;
       let backCoverArt: BookCoverArt | undefined;
-      if (this.selectedFormat === 'pdf' &&
+      if ((this.selectedFormat === 'pdf' || this.selectedFormat === 'epub') &&
           this.exportOptions.includeIllustrations &&
           this.providerService.getActiveProviderId() === 'minimax') {
         this.ngZone.run(() => {
@@ -347,7 +354,11 @@ export class ExportComponent implements OnInit {
           filename = 'book-export.pdf';
           break;
         case 'epub':
-          content = this.generateEPUB(chapters, config);
+          content = await this.generateEPUB(chapters, config, {
+            chapterIllustrations,
+            coverArt,
+            backCoverArt,
+          });
           filename = 'book-export.epub';
           break;
         case 'docx':
@@ -428,9 +439,30 @@ export class ExportComponent implements OnInit {
     });
   }
 
-  private generateEPUB(chapters: Chapter[], translatedConfig?: any): Blob {
-    const content = this.buildBookContent(chapters, translatedConfig);
-    return new Blob([content], { type: 'application/epub+zip' });
+  private async generateEPUB(
+    chapters: Chapter[],
+    translatedConfig?: any,
+    illustrationCtx?: {
+      chapterIllustrations?: Map<string, ChapterIllustration>;
+      coverArt?: BookCoverArt;
+      backCoverArt?: BookCoverArt;
+    },
+  ): Promise<Blob> {
+    // If a translated config was provided, swap it into a copy of
+    // the state so the EPUB builder reads the localised title /
+    // genre / themes / protagonist name from the cover, back
+    // cover, and title page. Otherwise it falls through to the
+    // English state.config (the default for 'en' exports).
+    const baseState = this.bookStateService.getState();
+    const config = translatedConfig ?? baseState.config;
+    const labels = getExportLabels(this.exportLanguage);
+    return buildEpubBlob({
+      chapters,
+      config,
+      labels,
+      bookAuthor: this.getEffectiveAuthor(),
+      illustrationCtx,
+    });
   }
 
   private generateDOCX(chapters: Chapter[], translatedConfig?: any): Blob {
