@@ -62,6 +62,73 @@ function parseJsonInMarkers(raw: string | null | undefined): any | null {
 }
 
 /**
+ * Lenient fallback for LLM responses that aren't valid JSON. The
+ * translation prompt asks for `{"title": "...", "content": "..."}`
+ * wrapped in [T]…[/T], but LLMs commonly produce responses that
+ * fail `JSON.parse` (unescaped inner quotes, raw newlines inside
+ * string values, trailing commas, missing closing brace on
+ * truncation-adjacent responses). Without this fallback, those
+ * chapters silently fell back to their English copy in the PDF —
+ * "half the chapters not translated" was the user-visible symptom.
+ *
+ * Strategy: hunt for the `"title"` and `"content"` keys, then
+ * grab everything from the opening quote to the next unescaped
+ * quote (or, if quoting is broken too, to the next JSON-ish
+ * delimiter). The goal is "good enough Polish" rather than
+ * "perfect JSON parse" — a slightly garbled translation is still
+ * far better than shipping the English chapter.
+ */
+function parseTitleContentLenient(raw: string | null | undefined): { title?: string; content?: string } | null {
+  if (!raw || typeof raw !== 'string') return null;
+  const text = raw.trim();
+  if (!text) return null;
+
+  const extractField = (key: 'title' | 'content'): string | undefined => {
+    // Find "key": ... — accept either a proper JSON string value
+    // or anything up to a comma / closing brace (which is what
+    // broken JSON typically looks like).
+    const re = new RegExp(`"${key}"\\s*:\\s*"`, 'i');
+    const match = re.exec(text);
+    if (!match) return undefined;
+    const start = match.index + match[0].length;
+    let result = '';
+    let i = start;
+    while (i < text.length) {
+      const ch = text[i];
+      // Unescaped quote ends a well-formed string value.
+      if (ch === '"') break;
+      // A newline inside a JSON string is invalid, but the LLM
+      // sometimes emits one anyway. Treat it as a hard stop —
+      // we'd rather take what's there than swallow the rest of
+      // the document.
+      if (ch === '\n' || ch === '\r') break;
+      // Honor a backslash escape, but pass through unknown
+      // escapes (some LLMs emit `\"` mid-string).
+      if (ch === '\\' && i + 1 < text.length) {
+        const next = text[i + 1];
+        if (next === 'n') result += '\n';
+        else if (next === 't') result += '\t';
+        else if (next === 'r') result += '\r';
+        else if (next === '"') result += '"';
+        else if (next === '\\') result += '\\';
+        else if (next === '/') result += '/';
+        else { result += ch; i++; continue; }
+        i += 2;
+        continue;
+      }
+      result += ch;
+      i++;
+    }
+    return result.trim() || undefined;
+  };
+
+  const title = extractField('title');
+  const content = extractField('content');
+  if (!title && !content) return null;
+  return { title, content };
+}
+
+/**
  * Merge a (possibly partial) JSON critique object returned by
  * the LLM into the source `CritiqueReport`. Every field falls
  * back to the English original when the LLM response is
@@ -371,6 +438,20 @@ export class TranslationService {
               return;
             }
 
+            // Length-truncated responses are the failure mode where
+            // the model ran out of max_tokens mid-output. The
+            // cleaned string is usually short / missing a closing
+            // [/T] marker so the existing empty-cleanup retry path
+            // catches it, but a warning here makes the root cause
+            // visible in the console — previously, "half the
+            // chapters not translated" surfaced only as silently
+            // English chapters in the PDF.
+            if (finishReason === 'length' && attempt === 1) {
+              console.warn(
+                `Translation attempt hit max_tokens (response was truncated). The chapter will likely fall back to its English copy. Consider a model with a larger context window or shorter chapter length.`
+              );
+            }
+
             const cleaned = TranslationService.cleanTranslation(content || '');
 
             if (cleaned) {
@@ -559,6 +640,65 @@ export class TranslationService {
   }
 
   /**
+   * Compute a safe `max_tokens` budget for a chat completion given
+   * the input + system prompt length and the active model's
+   * context window. Translation output for languages like Polish
+   * runs ~30-40% longer than the English source, so the budget
+   * has to leave room for the full translated chapter — a flat
+   * 12000 was truncating longer chapters mid-JSON, which then
+   * failed to parse and fell back to the English copy. A 7000-word
+   * English chapter is ~14000 tokens of Polish output, so the
+   * flat 12000 was the cliff.
+   *
+   * Token estimate uses a conservative 3 chars/token (English,
+   * JSON-escaped) and a 1.4x expansion for the output side.
+   * If the model has no known context window (e.g. `openrouter/auto`
+   * routes dynamically), fall back to 16k — high enough for
+   * typical chapters, low enough that no real model rejects it.
+   */
+  private computeMaxTokens(input: string, systemPrompt: string): number {
+    const INPUT_CHARS_PER_TOKEN = 3;
+    const POLISH_EXPANSION = 1.4;
+    const SAFETY_BUFFER = 500;
+
+    const inputTokens = Math.ceil((input.length + systemPrompt.length) / INPUT_CHARS_PER_TOKEN);
+    // Output is the translated content (1.4x the English content
+    // length) plus a title and JSON wrapper. We add headroom so
+    // the model can finish on a sentence boundary, not a hard cut.
+    const contentChars = (() => {
+      try {
+        const parsed = JSON.parse(input);
+        return typeof parsed.content === 'string' ? parsed.content.length : 0;
+      } catch {
+        return 0;
+      }
+    })();
+    const expectedOutputTokens = Math.ceil(
+      (contentChars * POLISH_EXPANSION) / INPUT_CHARS_PER_TOKEN
+    ) + 200;
+
+    const selectedModelId = this.providerService.getSelectedModel() || this.apiService.getDefaultModel().id;
+    const modelInfo = this.apiService.getModelById(selectedModelId);
+    const contextWindow = modelInfo?.contextWindowNum ?? 0;
+
+    if (contextWindow > 0) {
+      // Fit the output within (context - input - buffer), with a
+      // hard cap of 64k. Always request at least 1.5x the expected
+      // output so the model has slack to land on a natural break
+      // rather than a truncation cut.
+      const available = contextWindow - inputTokens - SAFETY_BUFFER;
+      const desired = Math.ceil(expectedOutputTokens * 1.5);
+      return Math.max(4000, Math.min(64000, Math.min(available, desired)));
+    }
+
+    // Unknown context (e.g. openrouter/auto): 16k handles ~8k-word
+    // chapters. If a chapter is longer than that, the user will
+    // see the truncation warning in the console and can switch to
+    // a model with a known larger context.
+    return 16000;
+  }
+
+  /**
    * Translate a full chapter (title + content) in ONE LLM call.
    * The model receives a JSON payload with the source fields and
    * returns a JSON object with the translated fields, wrapped in
@@ -608,11 +748,33 @@ export class TranslationService {
       `Do not include any preamble, explanation, or the original text inside or outside the markers. ` +
       `Preserve paragraph breaks in the content.`;
 
-    return this.translateWithRetry(JSON.stringify(payload), systemPrompt, 12000).pipe(
+    const inputJson = JSON.stringify(payload);
+    const maxTokens = this.computeMaxTokens(inputJson, systemPrompt);
+
+    return this.translateWithRetry(inputJson, systemPrompt, maxTokens).pipe(
       map(cleaned => {
-        const parsed = parseJsonInMarkers(cleaned);
+        // Strict JSON first — it's the contract the prompt
+        // advertises. Fall back to the lenient regex parser when
+        // the LLM produces a response that fails `JSON.parse`
+        // (very common: unescaped inner quotes, raw newlines in
+        // string values, trailing commas, missing closing brace on
+        // a near-truncation response). Without this, a single
+        // broken chapter silently falls back to its English copy
+        // — the "half the chapters not translated" symptom.
+        let parsed = parseJsonInMarkers(cleaned);
         if (!parsed || typeof parsed !== 'object') {
-          return chapter;
+          const lenient = parseTitleContentLenient(cleaned);
+          if (lenient && (lenient.title || lenient.content)) {
+            parsed = lenient;
+            console.warn(
+              `Chapter ${chapter.number} ("${chapter.title}") LLM response failed strict JSON parse; recovered with lenient regex parser. (Response length: ${cleaned?.length ?? 0} chars.)`
+            );
+          } else {
+            console.warn(
+              `Chapter ${chapter.number} ("${chapter.title}") translation produced no parseable title/content; falling back to English copy. Raw response (first 500 chars): ${(cleaned || '').slice(0, 500)}`
+            );
+            return chapter;
+          }
         }
         return {
           ...chapter,
