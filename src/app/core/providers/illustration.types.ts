@@ -5,7 +5,8 @@ import { Blueprint } from '../../models/book-state.model';
 
 export type IllustrationStyle =
   | 'auto' | 'photorealistic' | 'watercolor' | 'oil-painting'
-  | 'digital-art' | 'pencil-sketch' | 'anime' | 'comic';
+  | 'digital-art' | 'pencil-sketch' | 'pen-and-ink' | 'line-art'
+  | 'engraving' | 'stipple' | 'anime' | 'comic';
 
 export interface ChapterIllustration {
   base64: string;

@@ -29,6 +29,10 @@ const STYLE_PROMPTS: Record<IllustrationStyle, string> = {
   'oil-painting': 'oil painting, rich impasto, classical composition',
   'digital-art': 'digital art, vibrant colors, sharp details',
   'pencil-sketch': 'pencil sketch, crosshatching, monochrome',
+  'pen-and-ink': 'pen and ink drawing, bold black linework on white background, cross-hatching, no color, no grayscale washes, high contrast',
+  'line-art': 'clean line art, black outlines on white background, minimal shading, no fills, no color, no gradients',
+  'engraving': '19th-century engraving, fine etched linework, hatching and cross-hatching, black ink on white paper, no color, classical book illustration style',
+  'stipple': 'stipple illustration, pure black dots on white background, pointillism line art, no color, no grayscale, high contrast',
   'anime': 'anime style, cel-shaded, expressive',
   // "comic" is ambiguous by itself: the model often defaults to B&W
   // ink art (Sin City / manga) when it sees "comic book panel, bold
@@ -51,12 +55,12 @@ const STYLE_PROMPTS: Record<IllustrationStyle, string> = {
 function resolveAutoStyle(genre: string, tone: string): IllustrationStyle {
   const g = (genre || '').toLowerCase();
   const t = (tone || '').toLowerCase();
-  if (g.includes('fantasy') || g.includes('historical')) return 'oil-painting';
+  if (g.includes('fantasy') || g.includes('historical')) return 'engraving';
   if (g.includes('science fiction') || g.includes('sci-fi')) return 'digital-art';
-  if (g.includes('mystery') || g.includes('thriller') || t.includes('dark') || t.includes('suspenseful')) return 'watercolor';
+  if (g.includes('mystery') || g.includes('thriller') || t.includes('dark') || t.includes('suspenseful')) return 'pen-and-ink';
   if (g.includes('romance')) return 'watercolor';
-  if (g.includes('horror')) return 'pencil-sketch';
-  if (g.includes('literary')) return 'oil-painting';
+  if (g.includes('horror')) return 'pen-and-ink';
+  if (g.includes('literary')) return 'engraving';
   if (g.includes('young adult')) return 'digital-art';
   if (g.includes('non-fiction') || g.includes('biography')) return 'photorealistic';
   return 'digital-art';
