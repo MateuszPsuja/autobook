@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, inject, effect, computed } from '@angular/core';
+import { Component, OnInit, OnDestroy, inject, effect, untracked } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ApiService, OpenRouterModel } from '../../core/api.service';
@@ -53,9 +53,12 @@ export class SettingsComponent implements OnInit, OnDestroy {
 
   constructor() {
     // Re-pull active provider / model state whenever the user switches.
+    // Wrapped in `untracked` so config-save signals (apiKey, baseUrl,
+    // selectedModel) don't re-trigger this effect and wipe the loaded
+    // `models` array every time a field is saved.
     effect(() => {
       this.activeProvider = this.providerService.activeProvider();
-      this.refreshFromStorage();
+      untracked(() => this.refreshFromStorage());
     });
   }
 
