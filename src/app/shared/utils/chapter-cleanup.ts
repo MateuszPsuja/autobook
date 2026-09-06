@@ -50,6 +50,14 @@ export function stripRunningWordCount(text: string): string {
   // orchestrator's empty-content check will then trigger a retry.
   let result = stripReasoningPreamble(text);
 
+  // Strip any XML-style reasoning blocks (<think>...</think>,
+  // <|thinking|>...<|/thinking|>, <reasoning>...</reasoning>, etc.)
+  // and stray `think>` / `reasoning>` blocks that some reasoning
+  // models emit mid-stream. These can appear anywhere, not just at
+  // the start, so we run this as a global pass after the preamble
+  // strip.
+  result = stripThinkingBlocks(result);
+
   const hasCountPrefix = PREFIX_RE.test(result);
   const hasWordsSuffix = SUFFIX_WORDS_RE.test(result.trim());
   if (!hasCountPrefix && !hasWordsSuffix) return result;
@@ -96,7 +104,28 @@ export function stripRunningWordCount(text: string): string {
  * that legitimately contains the phrase "let me think about it" in
  * dialogue is not a reasoning preamble.
  */
-const REASONING_PREAMBLE_RE = /^\s*(?:\*\*)?(?:here(?:'s| is)\s+(?:a|my)\s+thinking\s+process[:.]?|thinking\s+process[:.]?|thinking[:.]?|let\s+me\s+(?:think|plan|analyze|consider|outline|draft)[:.]?|my\s+(?:approach|plan|outline)[:.]?|step\s+1\b|first[,]?\s*let\s+me\s+(?:think|plan|analyze|consider))/i;
+const REASONING_PREAMBLE_RE = /^\s*(?:\*\*)?(?:here(?:'s| is)\s+(?:a|my)\s+thinking\s+process[:.]?|thinking\s+process[:.]?|thinking[:.]?|think[>]|let\s+me\s+(?:think|plan|analyze|consider|outline|draft)[:.]?|my\s+(?:approach|plan|outline)[:.]?|step\s+1\b|first[,]?\s*let\s+me\s+(?:think|plan|analyze|consider))/i;
+
+/**
+ * XML-style reasoning block tags. Different reasoning models wrap
+ * their chain-of-thought in different tags (DeepSeek/QwQ use
+ * `<think>...</think>`, Anthropic-style adapters on some OpenRouter
+ * routes use `<|thinking|>...<|/thinking|>`, others use
+ * `<reasoning>...</reasoning>`). All of them leak into `chapter.content`
+ * when the provider surfaces reasoning in the main `content` field
+ * instead of a separate `reasoning_content` channel. The pattern is
+ * deliberately permissive on the tag name and treats `<|` and `|` as
+ * optional brackets.
+ */
+const THINKING_BLOCK_RE = /<\s*(?:\|\s*)?(?:think(?:ing)?|reasoning|thought|chain_of_thought|reflection)\s*(?:\|\s*)?>[\s\S]*?<\s*(?:\|\s*)?\/\s*(?:\|\s*)?(?:think(?:ing)?|reasoning|thought|chain_of_thought|reflection)\s*(?:\|\s*)?>/gi;
+
+/**
+ * Strip reasoning that some models emit as a `think>` / `reasoning>`
+ * block without ever closing it. We only strip these at the start of
+ * the content (preamble case) — the structured-line walker in
+ * `stripReasoningPreamble` takes over once the marker is detected.
+ */
+const LONE_THINK_PREAMBLE_RE = /^\s*(?:\*\*)?(?:think|reasoning|thought|plan)>/i;
 
 /**
  * Lines that look like structured reasoning (numbered list, bulleted
@@ -113,14 +142,23 @@ const STRUCTURED_LINE_RE = /^\s*(?:\d+[.)]\s+|[-*+]\s+|#+\s+|>\s+|\*\*[^*]|Step\
  */
 export function stripReasoningPreamble(text: string): string {
   if (!text) return text;
-  if (!REASONING_PREAMBLE_RE.test(text)) return text.trim();
+  // The preamble regex only matches the structured English-style
+  // markers (e.g. "Here's a thinking process:"). For the simpler
+  // `think> ...` / `reasoning> ...` style — used by some reasoning
+  // models when they leak their chain-of-thought into the main
+  // content field — we additionally check for a lone `think>`-style
+  // opener at the start and treat it as a preamble.
+  const hasPreamble = REASONING_PREAMBLE_RE.test(text) || LONE_THINK_PREAMBLE_RE.test(text);
+  if (!hasPreamble) return text.trim();
 
   const lines = text.split('\n');
 
   // Skip the preamble-marker line itself (and any blank lines that
   // immediately follow it).
   let i = 0;
-  while (i < lines.length && (REASONING_PREAMBLE_RE.test(lines[i]) || lines[i].trim() === '')) {
+  const isMarkerLine = (line: string) =>
+    REASONING_PREAMBLE_RE.test(line) || LONE_THINK_PREAMBLE_RE.test(line);
+  while (i < lines.length && (isMarkerLine(lines[i]) || lines[i].trim() === '')) {
     i++;
   }
 
@@ -167,4 +205,22 @@ export function stripReasoningPreamble(text: string): string {
   // is reasoning. Return empty so the orchestrator's empty-content
   // check triggers a retry.
   return '';
+}
+
+/**
+ * Remove any XML-style reasoning blocks (`<think>...</think>`,
+ * `<|thinking|>...<|/thinking|>`, `<reasoning>...</reasoning>`,
+ * etc.) from anywhere in the content. These can appear mid-stream
+ * when a reasoning model surfaces its chain-of-thought in the main
+ * `content` field instead of a separate `reasoning_content` channel.
+ *
+ * Returns the input unchanged when no block is found, so it's safe
+ * to call unconditionally.
+ */
+export function stripThinkingBlocks(text: string): string {
+  if (!text) return text;
+  THINKING_BLOCK_RE.lastIndex = 0;
+  if (!THINKING_BLOCK_RE.test(text)) return text;
+  THINKING_BLOCK_RE.lastIndex = 0;
+  return text.replace(THINKING_BLOCK_RE, '').replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
 }

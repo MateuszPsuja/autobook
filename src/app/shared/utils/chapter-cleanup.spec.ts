@@ -1,4 +1,4 @@
-import { stripReasoningPreamble, stripRunningWordCount } from './chapter-cleanup';
+import { stripReasoningPreamble, stripRunningWordCount, stripThinkingBlocks } from './chapter-cleanup';
 
 describe('stripReasoningPreamble', () => {
   it('returns the input unchanged when there is no preamble', () => {
@@ -115,6 +115,55 @@ describe('stripReasoningPreamble', () => {
     const result = stripReasoningPreamble(input);
     expect(result).toContain('Phoenix pressed');
   });
+
+  it('strips a lone "think> ..." preamble (DeepSeek/QwQ-style leak)', () => {
+    const input = [
+      'think> The user wants me to write Chapter 1 of a novel called "The Weight You Carry."',
+      'Let me analyze the requirements:',
+      '- need a hook',
+      '- need the protagonist',
+      '',
+      'The morning sun cracked the horizon. Mara was already walking.'
+    ].join('\n');
+
+    const result = stripReasoningPreamble(input);
+    expect(result.startsWith('The morning sun')).toBe(true);
+    expect(result).not.toContain('analyze the requirements');
+  });
+});
+
+describe('stripThinkingBlocks', () => {
+  it('returns the input unchanged when there is no thinking block', () => {
+    const prose = 'Phoenix knelt in the dust and pressed her palm to the shard.';
+    expect(stripThinkingBlocks(prose)).toBe(prose);
+  });
+
+  it('strips a <think>...</think> block at the start', () => {
+    const input = '<think>The user wants a chapter opening with a strong hook. Let me draft.</think>\n\nPhoenix knelt in the dust and pressed her palm to the shard.';
+    const result = stripThinkingBlocks(input);
+    expect(result.startsWith('Phoenix')).toBe(true);
+    expect(result).not.toContain('strong hook');
+  });
+
+  it('strips a <think>...</think> block in the middle', () => {
+    const input = 'The first paragraph.\n\n<think>internal reasoning here</think>\n\nThe second paragraph.';
+    const result = stripThinkingBlocks(input);
+    expect(result).toContain('first paragraph');
+    expect(result).toContain('second paragraph');
+    expect(result).not.toContain('internal reasoning');
+  });
+
+  it('strips an Anthropic-style <|thinking|>...<|/thinking|> block', () => {
+    const input = '<|thinking|>drafting a hook<|/thinking|>Phoenix knelt in the dust.';
+    const result = stripThinkingBlocks(input);
+    expect(result).toBe('Phoenix knelt in the dust.');
+  });
+
+  it('strips a <reasoning>...</reasoning> block', () => {
+    const input = '<reasoning>plan out chapter beats</reasoning>\n\nThe wind shifted.';
+    const result = stripThinkingBlocks(input);
+    expect(result).toBe('The wind shifted.');
+  });
 });
 
 describe('stripRunningWordCount', () => {
@@ -183,5 +232,16 @@ describe('stripRunningWordCount', () => {
     expect(result.startsWith('Phoenix')).toBe(true);
     expect(result).not.toContain('thinking process');
     expect(result).not.toMatch(/10 words\.\s*$/);
+  });
+
+  it('strips a mid-stream <think> block that escaped the preamble detector', () => {
+    // Some providers surface reasoning in the main content field
+    // without a leading English marker line, so the preamble detector
+    // misses it. The stripThinkingBlocks pass catches it.
+    const input = '<think>The user wants me to write Chapter 1.\nLet me analyze.\n- hook\n- body</think>\n\nPhoenix knelt in the dust and pressed her palm to the shard. It was warm.';
+    const result = stripRunningWordCount(input);
+    expect(result.startsWith('Phoenix')).toBe(true);
+    expect(result).not.toContain('analyze');
+    expect(result).not.toContain('strong hook');
   });
 });
