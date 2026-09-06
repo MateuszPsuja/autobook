@@ -8,6 +8,12 @@ import { TranslationService } from '../../i18n/translation.service';
 import { stripRunningWordCount } from '../../shared/utils/chapter-cleanup';
 import { CritiqueReport } from '../../models/critique.model';
 
+type ChapterBlock =
+  | { kind: 'p'; text: string; first: boolean }
+  | { kind: 'ornament' };
+
+const ORNAMENT_RE = /^\s*(\*\s*\*\s*\*|—{3,}|\*{3,}|•\s*•\s*•)\s*$/;
+
 @Component({
   selector: 'app-chapter-view',
   templateUrl: './chapter-view.component.html',
@@ -142,6 +148,35 @@ export class ChapterViewComponent implements OnInit {
    */
   getDisplayContent(): string {
     return stripRunningWordCount(this.selectedChapter?.content || '');
+  }
+
+  /**
+   * Split the cleaned chapter content into paragraph and ornament
+   * blocks so the template can render real `<p>` elements (browsers
+   * collapse `\n` inside text interpolation, so the prose was being
+   * squashed into one wall of text). Section-break markers like
+   * `* * *`, `***`, `---`, `—`, and `• • •` are surfaced as their own
+   * block so the CSS can render them as a centered asterism.
+   */
+  paragraphs(): ChapterBlock[] {
+    const raw = this.getDisplayContent();
+    if (!raw) return [];
+    const blocks = raw
+      .replace(/\r\n/g, '\n')
+      .split(/\n{2,}/)
+      .map(b => b.trim())
+      .filter(b => b.length > 0);
+    const out: ChapterBlock[] = [];
+    let firstSeen = false;
+    for (const block of blocks) {
+      if (ORNAMENT_RE.test(block)) {
+        out.push({ kind: 'ornament' });
+        continue;
+      }
+      out.push({ kind: 'p', text: block, first: !firstSeen });
+      firstSeen = true;
+    }
+    return out;
   }
 
   // Translation helper

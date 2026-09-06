@@ -72,7 +72,7 @@ module.exports = {
       },
       fontFamily: {
         sans:  ['Inter Variable', 'Inter', 'system-ui', 'sans-serif'],
-        serif: ['Lora', 'Georgia', 'serif'],
+        serif: ['Georgia', 'Cambria', 'Times New Roman', 'serif'],
         // Used for: model name, status codes, chapter numbers, file names.
         mono:  ['JetBrains Mono', 'ui-monospace', 'SFMono-Regular', 'monospace'],
       },

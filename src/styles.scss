@@ -213,6 +213,39 @@ button:focus-visible {
   @apply bg-surface-card border border-surface-border rounded-xl;
 }
 
+/* Paper-grain card for long-form reading surfaces (the viewer chapter).
+   Adds a faint horizontal laid-paper texture and a deeper shadow stack
+   on top of the base `.card` so the page reads as a real book leaf. */
+.card-paper {
+  position: relative;
+  background-color: rgb(var(--surface-card));
+  background-image:
+    repeating-linear-gradient(
+      180deg,
+      transparent 0 31px,
+      rgb(var(--surface-border) / 0.18) 31px 32px
+    );
+  border: 1px solid rgb(var(--surface-border));
+  border-radius: 1rem;
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 0.4),
+    0 1px 0 rgb(0 0 0 / 0.04),
+    0 8px 24px -12px rgb(0 0 0 / 0.12),
+    0 24px 64px -32px rgb(0 0 0 / 0.10);
+}
+:root.dark .card-paper {
+  background-image:
+    repeating-linear-gradient(
+      180deg,
+      transparent 0 31px,
+      rgb(255 255 255 / 0.025) 31px 32px
+    );
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.04),
+    0 1px 0 rgb(0 0 0 / 0.4),
+    0 16px 40px -20px rgb(0 0 0 / 0.7);
+}
+
 /* =========================================================================
    FORM FIELDS
    The shared look of every input, select, and textarea. Components
@@ -295,9 +328,58 @@ select.field {
 .prose-lg :where(ol):not(:first-child) { margin-top: 1rem; }
 .prose-lg :where(li):not(:first-child) { margin-top: 0.5rem; }
 
-/* Chapter text — slightly looser, serif, never full-bleed. */
+/* Chapter text — book treatment: sans-serif body (matches the rest of
+   the app), justified, narrow measure, hyphenation, drop cap on the
+   opening paragraph, ornament section breaks. The component template
+   emits real <p> elements (so paragraph breaks survive whitespace-
+   collapsing); the rules below style them. */
 .chapter-prose {
-  @apply font-serif text-[17px] leading-[1.75] text-surface-strong;
+  @apply font-sans text-surface-strong;
+  font-size: 1.0625rem;          /* 17px */
+  line-height: 1.8;
+  max-width: 65ch;
+  margin-inline: auto;
+  text-align: justify;
+  hyphens: auto;
+  -webkit-hyphens: auto;
+  text-wrap: pretty;
+  font-feature-settings: 'kern' 1, 'liga' 1, 'onum' 1;
+  font-variant-ligatures: common-ligatures;
+}
+.chapter-prose p {
+  margin: 0 0 0.7em;
+  text-indent: 1.5em;
+}
+.chapter-prose p.first {
+  text-indent: 0;
+}
+.chapter-prose p.first::first-letter {
+  font-family: inherit;
+  font-weight: 700;
+  font-size: 3.4em;
+  line-height: 0.85;
+  float: left;
+  padding: 0.05em 0.08em 0 0;
+  margin: 0.05em 0.04em 0 0;
+  color: #e87848;                 /* accent-500 */
+  text-indent: 0;
+}
+:root.dark .chapter-prose p.first::first-letter {
+  color: #eea578;                /* accent-300 for dark contrast */
+}
+
+/* Section-break ornament — drawn with pure CSS so source text can
+   just be "* * *" / "***" / "—". We hide the literal characters in the
+   template and render the asterism via ::before. */
+.chapter-prose .asterism {
+  text-align: center;
+  margin: 1.6em 0;
+  letter-spacing: 1em;
+  color: rgb(var(--surface-subtle));
+  font-size: 0.9em;
+}
+.chapter-prose .asterism::before {
+  content: '* * *';
 }
 
 /* =========================================================================

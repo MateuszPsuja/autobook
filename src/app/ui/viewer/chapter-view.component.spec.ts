@@ -312,4 +312,37 @@ describe('ChapterViewComponent', () => {
       expect(translationServiceSpy.get).toHaveBeenCalledWith('test.key');
     });
   });
+
+  describe('paragraphs', () => {
+    it('splits content on blank lines and marks the first paragraph', () => {
+      component.selectedChapter = {
+        ...mockChapters[1],
+        content: 'First paragraph opens the chapter.\n\nSecond paragraph follows.\n\nThird one closes it.'
+      };
+
+      const blocks = component.paragraphs();
+      expect(blocks.length).toBe(3);
+      expect(blocks[0]).toEqual({ kind: 'p', text: 'First paragraph opens the chapter.', first: true });
+      expect(blocks[1]).toEqual({ kind: 'p', text: 'Second paragraph follows.', first: false });
+      expect(blocks[2]).toEqual({ kind: 'p', text: 'Third one closes it.', first: false });
+    });
+
+    it('treats "***" as a section-break ornament block', () => {
+      component.selectedChapter = {
+        ...mockChapters[1],
+        content: 'Before the break.\n\n***\n\nAfter the break.'
+      };
+
+      const blocks = component.paragraphs();
+      expect(blocks.length).toBe(3);
+      expect(blocks[0]).toEqual({ kind: 'p', text: 'Before the break.', first: true });
+      expect(blocks[1]).toEqual({ kind: 'ornament' });
+      expect(blocks[2]).toEqual({ kind: 'p', text: 'After the break.', first: false });
+    });
+
+    it('returns an empty array when content is empty', () => {
+      component.selectedChapter = { ...mockChapters[1], content: '' };
+      expect(component.paragraphs()).toEqual([]);
+    });
+  });
 });

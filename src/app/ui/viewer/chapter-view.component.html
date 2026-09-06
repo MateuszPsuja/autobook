@@ -110,11 +110,21 @@
           </div>
         </div>
 
-        <!-- Chapter content — the reading surface. Serif body, generous
-             line height, soft cream-tinted card in both modes. -->
-        <article class="card p-8 lg:p-10">
+        <!-- Chapter content — the reading surface. Real <p> elements
+             (so paragraph breaks survive whitespace-collapsing), narrower
+             measure, justified text with hyphenation, drop cap on the
+             opening paragraph, ornament section breaks. -->
+        <article class="card card-paper p-8 lg:p-10">
           <div class="chapter-prose">
-            {{ getDisplayContent() }}
+            @for (block of paragraphs(); track $index) {
+              @if (block.kind === 'ornament') {
+                <div class="asterism" aria-hidden="true"></div>
+              } @else {
+                <p [class.first]="block.first">{{ block.text }}</p>
+              }
+            } @empty {
+              <p class="text-surface-subtle italic">{{ t('viewer.noContent') }}</p>
+            }
           </div>
         </article>
       } @else {

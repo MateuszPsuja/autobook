@@ -242,6 +242,7 @@
     "suggestions": "Suggestions",
     "noChapters": "No chapters yet",
     "startGenerating": "Start generating your book in the Generation tab",
+    "noContent": "This chapter has no content yet.",
     "overallScore": "Overall Score",
     "of": "of"
   },
