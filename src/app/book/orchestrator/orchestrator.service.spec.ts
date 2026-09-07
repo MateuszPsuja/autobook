@@ -158,7 +158,7 @@ describe('OrchestratorService', () => {
       'setConfig', 'setChapters', 'setCurrentDraft', 'setCritique',
       'setRevisionCount', 'setStatus', 'setActiveAgent', 'setError',
       'setBlueprint', 'getState', 'setCharacterStore', 'setContinuityFlags',
-      'setSkippedChapters',
+      'setSkippedChapters', 'setCurrentChapter',
       'resetStats', 'startGenerationTimer', 'endGenerationTimer',
       'recordAgentUsage', 'updateTotalWords'
     ]);
@@ -176,6 +176,7 @@ describe('OrchestratorService', () => {
       error: null,
       continuityFlags: [],
       skippedChapters: [],
+      currentChapterNumber: null,
       stats: createInitialStats()
     });
 
@@ -400,6 +401,7 @@ describe('OrchestratorService', () => {
           error: null,
           continuityFlags: [],
           skippedChapters: [],
+          currentChapterNumber: null,
           stats: createInitialStats()
         });
 

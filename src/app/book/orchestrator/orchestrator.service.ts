@@ -81,6 +81,7 @@ export class OrchestratorService {
       this.bookStateService.setRevisionCount(0);
       this.bookStateService.setStatus('configuring');
       this.bookStateService.setActiveAgent(null);
+      this.bookStateService.setCurrentChapter(null);
 
       // Start with architect
       this.bookStateService.setActiveAgent('architect');
@@ -205,6 +206,12 @@ export class OrchestratorService {
    */
   private processChapter(brief: ChapterBrief, config: BookConfig, chapterNumber: number): Observable<any> {
     return new Observable(subscriber => {
+      // Stamp the chapter number before any agent fires so the UI's
+      // pipeline-card reset observes the boundary *before* it sees
+      // `activeAgent = 'author'` for the new chapter. Otherwise the
+      // reset would land mid-tick and the author card could briefly
+      // flip done → running within a single render frame.
+      this.bookStateService.setCurrentChapter(chapterNumber);
       this.writeChapterWithRetry(brief, config, 3).subscribe({
         next: (result) => {
           const { draft, usage } = result;

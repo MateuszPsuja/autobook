@@ -31,6 +31,13 @@ export class GeneratorComponent implements OnInit, OnDestroy {
   private savedConfig: BookConfig | null = null;
   private elapsedTimeInterval: any;
 
+  // Last chapter number observed in the bookState$ subscription. The
+  // component compares the incoming `currentChapterNumber` against
+  // this on every tick; when it changes (null → 1, 1 → 2, …) the
+  // pipeline cards reset to idle so a finished chapter's green
+  // borders don't mask the next chapter's progress.
+  private lastSeenChapterNumber: number | null = null;
+
   // UI State
   isGenerating = false;
   showStopButton = false;
@@ -141,6 +148,12 @@ export class GeneratorComponent implements OnInit, OnDestroy {
     this.showStopButton = true;
     this.isCompleted = false;
     this.elapsedSeconds = 0;
+    // Re-arm the chapter-boundary detector for a fresh run. Without
+    // this, a re-run that starts on chapter 1 wouldn't see `null → 1`
+    // as a change (lastSeenChapterNumber would still be 1 from the
+    // previous run's last tick) and the pipeline cards wouldn't
+    // reset before chapter 1 starts.
+    this.lastSeenChapterNumber = null;
 
     // Start elapsed time counter
     this.startElapsedTimer();
@@ -165,6 +178,29 @@ export class GeneratorComponent implements OnInit, OnDestroy {
     // Subscribe to state changes for UI updates
     this.subscription.add(
       this.bookState$.subscribe(state => {
+        // Detect a chapter boundary before any per-agent update so
+        // the new active agent (typically 'author') lands on a clean
+        // `running` slot instead of a stale `done` from the previous
+        // chapter. The reset itself is a no-op for the very first
+        // chapter (cards already start idle), but we run it anyway
+        // to keep the logic uniform — only the number matters.
+        if (state.currentChapterNumber !== this.lastSeenChapterNumber) {
+          this.resetAgentStatesForNewChapter();
+          this.lastSeenChapterNumber = state.currentChapterNumber;
+          // The `activeAgent` in this tick is still the *previous*
+          // chapter's last-running agent (e.g. 'continuity' from
+          // chapter 1) — the orchestrator hasn't fired its
+          // `setActiveAgent('author')` for the new chapter yet; that
+          // arrives on the very next emission, synchronously after
+          // `setCurrentChapter`. If we ran `updateAgentStates` here,
+          // the stale agent would be briefly promoted to `running`
+          // (and then immediately demoted to `done` on the next
+          // tick), making the row flicker for a frame. Skip the
+          // per-agent update on this tick — the next one will set
+          // the right agent. Progress still advances.
+          this.updateProgress(state);
+          return;
+        }
         this.updateAgentStates(state.activeAgent, state.status);
         this.updateProgress(state);
       })
@@ -206,6 +242,34 @@ export class GeneratorComponent implements OnInit, OnDestroy {
     const status = this.currentStatus;
     const hasChapters = this.chaptersCount > 0;
     return status === 'completed' && hasChapters;
+  }
+
+  /**
+   * Wipe every per-chapter pipeline card back to its idle visual
+   * state. Called from the bookState$ subscription when
+   * `currentChapterNumber` changes — the chapter-boundary signal
+   * from the orchestrator. After this returns the very same tick
+   * would normally promote the new active agent to `running` via
+   * `updateAgentStates`, but the caller now skips that on the
+   * boundary tick (the `activeAgent` in that emission is still the
+   * previous chapter's last agent, not the new one — the orchestrator
+   * fires its `setActiveAgent('author')` for the new chapter on the
+   * next emission).
+   *
+   * `architect` is intentionally preserved: it only ever runs once,
+   * during the blueprint pass before chapter 1. Resetting it on
+   * every boundary would un-green the card between chapters and
+   * suggest the agent still has work to do. New object literals
+   * (not in-place mutation) match the existing pattern in
+   * `updateAgentStates` and let Angular's change detection see the
+   * change even without zone microtask interleaving.
+   */
+  private resetAgentStatesForNewChapter(): void {
+    Object.keys(this.agentStates).forEach(key => {
+      const k = key as AgentType;
+      if (k === 'architect') return;
+      this.agentStates[k] = { status: 'idle', active: false };
+    });
   }
 
   private updateAgentStates(activeAgent: AgentType | null, status: GenerationStatus): void {

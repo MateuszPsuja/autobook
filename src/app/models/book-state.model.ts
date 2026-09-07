@@ -61,6 +61,14 @@ export interface BookState {
    * the orchestrator should retry these specifically.
    */
   skippedChapters: number[];
+  /**
+   * 1-based chapter number the orchestrator is currently working on,
+   * or `null` before any chapter has started / after a reset. The UI
+   * watches this to detect chapter boundaries and reset its pipeline
+   * card row — without it, agents from a finished chapter stay
+   * visually "done" and mask the next chapter's progress.
+   */
+  currentChapterNumber: number | null;
   stats: GenerationStats;
 }
 
