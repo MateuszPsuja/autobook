@@ -53,33 +53,39 @@
     </div>
   </div>
 
-  <!-- ===== Chapter progress ===== -->
-  <div class="card p-5">
-    <div class="flex items-center justify-between mb-3">
-      <div class="flex items-center gap-3">
-        <div class="w-8 h-8 rounded-lg bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z"></path>
-          </svg>
+  <!-- ===== Chapter progress =====
+       Runtime indicator — hidden once generation is complete. The
+       final word count + per-agent token breakdown live in the
+       "Generation stats" card further down, which only appears
+       when isCompleted && generationStats. -->
+  @if (!isCompleted) {
+    <div class="card p-5">
+      <div class="flex items-center justify-between mb-3">
+        <div class="flex items-center gap-3">
+          <div class="w-8 h-8 rounded-lg bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z"></path>
+            </svg>
+          </div>
+          <div>
+            <h3 class="text-sm font-semibold text-surface-strong">{{ t('generator.chapterProgress') }}</h3>
+            <span class="text-xs text-surface-subtle font-mono">
+              {{ (chapters$ | async)?.length || 0 }} / {{ (bookState$ | async)?.blueprint?.chapters?.length || 1 }} {{ t('viewer.chapterCount') }}
+            </span>
+          </div>
         </div>
-        <div>
-          <h3 class="text-sm font-semibold text-surface-strong">{{ t('generator.chapterProgress') }}</h3>
-          <span class="text-xs text-surface-subtle font-mono">
-            {{ (chapters$ | async)?.length || 0 }} / {{ (bookState$ | async)?.blueprint?.chapters?.length || 1 }} {{ t('viewer.chapterCount') }}
-          </span>
+        <span class="text-2xl font-bold font-mono text-accent-600 dark:text-accent-300 tabular-nums">
+          {{ currentChapterProgress }}<span class="text-sm text-surface-subtle">%</span>
+        </span>
+      </div>
+      <div class="progress-track h-2.5">
+        <div class="progress-fill"
+             [class.is-animated]="isGenerating"
+             [style.width.%]="currentChapterProgress">
         </div>
       </div>
-      <span class="text-2xl font-bold font-mono text-accent-600 dark:text-accent-300 tabular-nums">
-        {{ currentChapterProgress }}<span class="text-sm text-surface-subtle">%</span>
-      </span>
     </div>
-    <div class="progress-track h-2.5">
-      <div class="progress-fill"
-           [class.is-animated]="isGenerating"
-           [style.width.%]="currentChapterProgress">
-      </div>
-    </div>
-  </div>
+  }
 
   <!-- ===== Live stream =====
        Visible while a prose-emitting agent (author / reviser) is
@@ -166,64 +172,71 @@
   <!-- ===== Agent pipeline =====
        A horizontal sequence of cards. Each card has an icon, a name, and
        a state (idle / running / done). The connector arrow visually
-       chains them, and the active one has the orange halo. -->
-  <div class="card p-5">
-    <div class="flex items-center gap-2 mb-4">
-      <div class="w-8 h-8 rounded-lg bg-accent-500/15 text-accent-600 dark:text-accent-300 flex items-center justify-center">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
-        </svg>
-      </div>
-      <h3 class="text-sm font-semibold text-surface-strong">{{ t('generator.agentPipeline') }}</h3>
-    </div>
+       chains them, and the active one has the orange halo.
 
-    <div class="flex items-center gap-2 overflow-x-auto pb-1">
-      @for (agent of pipelineAgents; track agent; let last = $last) {
-        <div class="flex items-center gap-2 flex-shrink-0">
-          <!-- Single class binding drives the whole card so the active
-               state can't get drowned out by .card-sm's background.
-               Active = solid orange + static glow. Done = green chip.
-               Idle = sunken gray. No pulsing/ping — the user asked
-               to keep the active state steady. -->
-          <div class="relative flex items-center gap-2.5 pl-3 pr-3.5 py-2 rounded-xl border-2 transition-all duration-200"
-               [class]="isAgentActive(agent)
-                 ? 'bg-accent-500 text-white border-accent-500 shadow-glow-accent'
-                 : getAgentStatus(agent) === 'done'
-                   ? 'bg-surface-card text-surface-strong border-emerald-500/40'
-                   : 'bg-surface-card text-surface-subtle border-surface-border'">
-            <div class="w-6 h-6 rounded-md flex items-center justify-center"
-              [class]="isAgentActive(agent)
-                ? 'bg-white/20 text-white'
-                : getAgentStatus(agent) === 'done'
-                  ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
-                  : 'bg-surface-sunken text-surface-subtle'">
-              @if (getAgentStatus(agent) === 'done') {
-                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"></path>
-                </svg>
-              } @else if (isAgentActive(agent)) {
-                <svg class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
-                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-              } @else {
-                <span class="w-1.5 h-1.5 rounded-full bg-current opacity-50"></span>
-              }
-            </div>
-            <span class="text-xs font-semibold whitespace-nowrap">{{ getAgentDisplayName(agent) }}</span>
-          </div>
-
-          @if (!last) {
-            <svg class="w-4 h-4 text-surface-subtle flex-shrink-0 transition-colors"
-                 [class]="isAgentActive(agent) || getAgentStatus(agent) === 'done' ? 'text-accent-500' : 'text-surface-subtle'"
-                 fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 5l7 7-7 7"></path>
-            </svg>
-          }
+       Hidden once generation is complete — the per-agent token
+       breakdown in the "Generation stats" card is the post-run
+       recap; the inline cards lose their purpose once every agent
+       is in the "done" state. -->
+  @if (!isCompleted) {
+    <div class="card p-5">
+      <div class="flex items-center gap-2 mb-4">
+        <div class="w-8 h-8 rounded-lg bg-accent-500/15 text-accent-600 dark:text-accent-300 flex items-center justify-center">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+          </svg>
         </div>
-      }
+        <h3 class="text-sm font-semibold text-surface-strong">{{ t('generator.agentPipeline') }}</h3>
+      </div>
+
+      <div class="flex items-center gap-2 overflow-x-auto pb-1">
+        @for (agent of pipelineAgents; track agent; let last = $last) {
+          <div class="flex items-center gap-2 flex-shrink-0">
+            <!-- Single class binding drives the whole card so the active
+                 state can't get drowned out by .card-sm's background.
+                 Active = solid orange + static glow. Done = green chip.
+                 Idle = sunken gray. No pulsing/ping — the user asked
+                 to keep the active state steady. -->
+            <div class="relative flex items-center gap-2.5 pl-3 pr-3.5 py-2 rounded-xl border-2 transition-all duration-200"
+                 [class]="isAgentActive(agent)
+                   ? 'bg-accent-500 text-white border-accent-500 shadow-glow-accent'
+                   : getAgentStatus(agent) === 'done'
+                     ? 'bg-surface-card text-surface-strong border-emerald-500/40'
+                     : 'bg-surface-card text-surface-subtle border-surface-border'">
+              <div class="w-6 h-6 rounded-md flex items-center justify-center"
+                [class]="isAgentActive(agent)
+                  ? 'bg-white/20 text-white'
+                  : getAgentStatus(agent) === 'done'
+                    ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                    : 'bg-surface-sunken text-surface-subtle'">
+                @if (getAgentStatus(agent) === 'done') {
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"></path>
+                  </svg>
+                } @else if (isAgentActive(agent)) {
+                  <svg class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                } @else {
+                  <span class="w-1.5 h-1.5 rounded-full bg-current opacity-50"></span>
+                }
+              </div>
+              <span class="text-xs font-semibold whitespace-nowrap">{{ getAgentDisplayName(agent) }}</span>
+            </div>
+
+            @if (!last) {
+              <svg class="w-4 h-4 text-surface-subtle flex-shrink-0 transition-colors"
+                   [class]="isAgentActive(agent) || getAgentStatus(agent) === 'done' ? 'text-accent-500' : 'text-surface-subtle'"
+                   fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 5l7 7-7 7"></path>
+              </svg>
+            }
+          </div>
+        }
+      </div>
     </div>
-  </div>
+  }
 
   <!-- ===== Skipped chapters banner =====
        Visible whenever state.skippedChapters has at least one entry
