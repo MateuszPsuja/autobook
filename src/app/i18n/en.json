@@ -276,8 +276,6 @@
     "includeChapterTitlesDesc": "Add chapter headings to export",
     "includeToc": "Include Table of Contents",
     "includeTocDesc": "Add TOC at the beginning",
-    "includeCharacters": "Include Character Profiles",
-    "includeCharactersDesc": "Add character information",
     "includeIllustrations": "Add illustrations",
     "illustrationStyle": "Style",
     "illustrationStyleAuto": "Auto (from book genre)",

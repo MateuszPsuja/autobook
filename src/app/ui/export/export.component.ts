@@ -59,7 +59,6 @@ export class ExportComponent implements OnInit {
   exportOptions: PdfExportOptions = {
     includeTitles: true,
     includeTOC: true,
-    includeCharacters: false,
     includeIllustrations: false,
     illustrationStyle: 'auto'
   };

@@ -38,7 +38,6 @@ const BODY_LEADING = 1.55;
 export interface PdfExportOptions {
   includeTitles: boolean;
   includeTOC: boolean;
-  includeCharacters: boolean;
   includeIllustrations: boolean;
   illustrationStyle: IllustrationStyle;
 }

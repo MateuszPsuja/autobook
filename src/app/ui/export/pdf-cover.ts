@@ -37,7 +37,7 @@ const CONTENT_AREA_HEIGHT = 480;
 // the cover layout instead of overflowing the page or being
 // cropped to a thin strip. The aspect ratio request is the
 // preferred path; the fit is the fallback.
-const COVER_FIT: [number, number] = [210, 280]; // max width × max height, pt
+const COVER_FIT: [number, number] = [200, 240]; // max width × max height, pt
 // Back cover image is smaller because the back cover also has a
 // multi-line blurb and author bio that need vertical room.
 const BACK_COVER_FIT: [number, number] = [150, 200]; // max width × max height, pt
@@ -49,12 +49,13 @@ const BACK_COVER_FIT: [number, number] = [150, 200]; // max width × max height,
  *
  * Layout budget — must fit inside CONTENT_AREA_HEIGHT (480pt) on a
  * single page. Sizing is now:
- *   - top rule + genre + title (1 line) + spacer  ≈  60pt
- *   - image (`fit: [210, 280]`, 3:4 portrait)    ≈ 280pt max
- *   - image margins + "a novel" + author + rule ≈  80pt
+ *   - top rule + genre + title (1 line) + spacer  ≈  50pt
+ *   - image (`fit: [200, 240]`, 3:4 portrait)    ≈ 240pt max
+ *   - image margins + "a novel" + author + rule ≈  62pt
  *   - 2-line title allowance                    ≈  36pt
- *   - safety margin                             ≈  24pt
- * The total is ~480pt, so a 2-line title still fits.
+ *   - safety margin                             ≈  92pt
+ * The total is ~480pt, so a 2-line title still fits and the author
+ * byline stays on the same page as the title.
  */
 export function buildCoverPage(
   art: BookCoverArt,
@@ -81,7 +82,7 @@ export function buildCoverPage(
     out.push({
       text: eyebrow.toUpperCase(),
       style: 'coverEyebrow',
-      margin: [0, 10, 0, 0],
+      margin: [0, 4, 0, 0],
     });
   }
 
@@ -89,7 +90,7 @@ export function buildCoverPage(
   out.push({
     text: bookTitle.toUpperCase(),
     style: 'coverTitle',
-    margin: [0, 6, 0, 0],
+    margin: [0, 0, 0, 0],
   });
 
   // Decorative dot under title
@@ -108,7 +109,7 @@ export function buildCoverPage(
       image: `data:${art.mimeType};base64,${art.base64}`,
       fit: COVER_FIT,
       alignment: 'center',
-      margin: [0, 16, 0, 12],
+      margin: [0, 10, 0, 8],
     });
   }
 
@@ -116,16 +117,16 @@ export function buildCoverPage(
   out.push({
     text: labels.aBookLabel,
     style: 'aNovel',
-    margin: [0, 16, 0, 0],
+    margin: [0, 10, 0, 0],
   });
 
   // Author name — same page, close to the bottom rule. The previous
-  // 96pt top margin pushed the author off the page; 24pt gives the
+  // 96pt top margin pushed the author off the page; 14pt gives the
   // visual separation we need without overflow.
   out.push({
     text: bookAuthor.toUpperCase(),
     style: 'bookAuthor',
-    margin: [0, 24, 0, 0],
+    margin: [0, 14, 0, 0],
   });
 
   // Bottom decorative rule to frame the cover
@@ -135,7 +136,7 @@ export function buildCoverPage(
       x1: 0, y1: 0, x2: CONTENT_WIDTH, y2: 0,
       lineWidth: 0.5, lineColor: '#888',
     }],
-    margin: [0, 10, 0, 0],
+    margin: [0, 6, 0, 0],
   });
 
   return out;

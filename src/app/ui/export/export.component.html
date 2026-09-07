@@ -153,17 +153,6 @@
           <span class="text-sm text-surface-strong">{{ t('export.includeToc') }}</span>
         </label>
 
-        <label class="flex items-center gap-2.5 px-3 py-2.5 rounded-lg border border-surface-border hover:bg-surface-sunken cursor-pointer transition-colors">
-          <span class="relative inline-flex">
-            <input type="checkbox" [(ngModel)]="exportOptions.includeCharacters"
-              class="peer w-4 h-4 rounded border-surface-border text-accent-500 focus:ring-accent-500 bg-surface-sunken">
-            <svg class="absolute inset-0 w-4 h-4 text-white pointer-events-none opacity-0 peer-checked:opacity-100 transition-opacity" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="3">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"></path>
-            </svg>
-          </span>
-          <span class="text-sm text-surface-strong">{{ t('export.includeCharacters') }}</span>
-        </label>
-
         @if (providerService.getActiveProviderId() === 'minimax') {
           <label class="flex items-center gap-2.5 px-3 py-2.5 rounded-lg border border-surface-border hover:bg-surface-sunken cursor-pointer transition-colors">
             <span class="relative inline-flex">

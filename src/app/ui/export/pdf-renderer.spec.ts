@@ -7,7 +7,6 @@ describe('buildPdfDocument', () => {
   const baseOptions: PdfExportOptions = {
     includeTitles: true,
     includeTOC: true,
-    includeCharacters: false,
     includeIllustrations: false,
     illustrationStyle: 'auto',
   };
