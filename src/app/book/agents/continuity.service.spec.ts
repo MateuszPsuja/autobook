@@ -2,9 +2,10 @@ import { TestBed } from '@angular/core/testing';
 import { ContinuityService, ContinuityResult, ContinuityFlagsResult } from './continuity.service';
 import { ApiService } from '../../core/api.service';
 import { JsonParserService } from '../../shared/utils/json-parser.service';
+import { BookStateService } from '../state/book-state.service';
 import { ChapterBrief, Issue } from '../../models/book-state.model';
 import { Chapter } from '../../models/chapter.model';
-import { of, throwError } from 'rxjs';
+import { of, throwError, Subject } from 'rxjs';
 
 describe('ContinuityService', () => {
   let service: ContinuityService;
@@ -47,7 +48,7 @@ describe('ContinuityService', () => {
   };
 
   beforeEach(() => {
-    const apiSpy = jasmine.createSpyObj('ApiService', ['chatCompletion']);
+    const apiSpy = jasmine.createSpyObj('ApiService', ['chatCompletion', 'chatCompletionStream']);
     const jsonSpy = jasmine.createSpyObj('JsonParserService', ['parse']);
 
     // Default: return successful response for chatCompletion
@@ -68,7 +69,8 @@ describe('ContinuityService', () => {
       providers: [
         ContinuityService,
         { provide: ApiService, useValue: apiSpy },
-        { provide: JsonParserService, useValue: jsonSpy }
+        { provide: JsonParserService, useValue: jsonSpy },
+        { provide: BookStateService, useValue: { appendStream$: () => {} } }
       ]
     });
 
@@ -333,6 +335,101 @@ describe('ContinuityService', () => {
           done();
         },
         error: done.fail
+      });
+    });
+  });
+
+  describe('checkContinuityStreamingWithUsage', () => {
+    // The streaming sibling pushes every delta into the live preview
+    // buffer, then runs the same JSON parse + chapter-stamping as
+    // the non-streaming sibling. On empty/parse-failure it emits the
+    // same fallback (`issues: []`, `overallContinuity: 'Fair'`) so
+    // the orchestrator's "continue with empty continuity" path keeps
+    // working unchanged.
+    it('calls chatCompletionStream (not chatCompletion) with stream:true', (done) => {
+      const stream = new Subject<string>();
+      apiServiceSpy.chatCompletionStream.and.returnValue(stream.asObservable());
+      jsonParserSpy.parse.and.callFake((raw: string) => JSON.parse(raw));
+
+      service.checkContinuityStreamingWithUsage('Test content', mockBrief, [], 'test/model').subscribe({
+        next: () => {},
+        complete: () => {
+          expect(apiServiceSpy.chatCompletionStream).toHaveBeenCalled();
+          const args = apiServiceSpy.chatCompletionStream.calls.mostRecent().args[0];
+          expect(args.stream).toBe(true);
+          expect(args.model).toBe('test/model');
+          expect(apiServiceSpy.chatCompletion).not.toHaveBeenCalled();
+          done();
+        }
+      });
+
+      stream.next(JSON.stringify(mockAnalysisResponse));
+      stream.complete();
+    });
+
+    it('parses a fully streamed JSON response', (done) => {
+      const stream = new Subject<string>();
+      apiServiceSpy.chatCompletionStream.and.returnValue(stream.asObservable());
+      jsonParserSpy.parse.and.callFake((raw: string) => JSON.parse(raw));
+
+      service.checkContinuityStreamingWithUsage('Test content', mockBrief, [], 'test/model').subscribe({
+        next: (res) => {
+          expect(res.data.issues).toEqual([]);
+          expect(res.data.overallContinuity).toBe('Good');
+          expect(res.usage.promptTokens).toBe(0);
+          expect(res.usage.completionTokens).toBeGreaterThan(0);
+          done();
+        },
+        error: done.fail
+      });
+
+      stream.next(JSON.stringify(mockAnalysisResponse));
+      stream.complete();
+    });
+
+    it('returns the empty fallback on empty streamed content', (done) => {
+      const stream = new Subject<string>();
+      apiServiceSpy.chatCompletionStream.and.returnValue(stream.asObservable());
+
+      service.checkContinuityStreamingWithUsage('Test content', mockBrief, [], 'test/model').subscribe({
+        next: (res) => {
+          expect(res.data.issues).toEqual([]);
+          expect(res.data.overallContinuity).toBe('Fair');
+          done();
+        },
+        error: done.fail
+      });
+
+      stream.complete();
+    });
+
+    it('returns the empty fallback on unparseable streamed content', (done) => {
+      const stream = new Subject<string>();
+      apiServiceSpy.chatCompletionStream.and.returnValue(stream.asObservable());
+      jsonParserSpy.parse.and.callFake((raw: string) => JSON.parse(raw));
+
+      service.checkContinuityStreamingWithUsage('Test content', mockBrief, [], 'test/model').subscribe({
+        next: (res) => {
+          expect(res.data.issues).toEqual([]);
+          expect(res.data.overallContinuity).toBe('Fair');
+          done();
+        },
+        error: done.fail
+      });
+
+      stream.next('not JSON');
+      stream.complete();
+    });
+
+    it('forwards stream errors', (done) => {
+      apiServiceSpy.chatCompletionStream.and.returnValue(throwError(() => new Error('stream down')));
+
+      service.checkContinuityStreamingWithUsage('Test content', mockBrief, [], 'test/model').subscribe({
+        next: () => done.fail('Should have errored'),
+        error: (err) => {
+          expect(err.message).toBe('stream down');
+          done();
+        }
       });
     });
   });

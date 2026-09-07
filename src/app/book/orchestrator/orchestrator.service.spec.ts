@@ -190,10 +190,14 @@ describe('OrchestratorService', () => {
       liveTokensApprox: 0
     });
 
-    architectServiceSpy = jasmine.createSpyObj('ArchitectService', ['generateBlueprintWithUsage']);
+    architectServiceSpy = jasmine.createSpyObj('ArchitectService', ['generateBlueprintWithUsage', 'generateBlueprintStreamingWithUsage']);
     architectServiceSpy.generateBlueprintWithUsage.and.returnValue(of({
       data: mockBlueprint,
       usage: { promptTokens: 100, completionTokens: 200, totalTokens: 300 }
+    }));
+    architectServiceSpy.generateBlueprintStreamingWithUsage.and.returnValue(of({
+      data: mockBlueprint,
+      usage: { promptTokens: 0, completionTokens: 50, totalTokens: 50 }
     }));
 
     authorServiceSpy = jasmine.createSpyObj('AuthorService', [
@@ -220,26 +224,41 @@ describe('OrchestratorService', () => {
       usage: { promptTokens: 100, completionTokens: 200, totalTokens: 300 }
     }));
 
-    criticServiceSpy = jasmine.createSpyObj('CriticService', ['evaluateChapterWithUsage']);
+    criticServiceSpy = jasmine.createSpyObj('CriticService', ['evaluateChapterWithUsage', 'evaluateChapterStreamingWithUsage']);
     criticServiceSpy.evaluateChapterWithUsage.and.returnValue(of({
       data: mockCritique,
       usage: { promptTokens: 100, completionTokens: 200, totalTokens: 300 }
     }));
+    criticServiceSpy.evaluateChapterStreamingWithUsage.and.returnValue(of({
+      data: mockCritique,
+      usage: { promptTokens: 0, completionTokens: 50, totalTokens: 50 }
+    }));
 
-    characterServiceSpy = jasmine.createSpyObj('CharacterService', ['checkCharacterConsistencyWithUsage', 'updateCharacterStatesWithUsage']);
+    characterServiceSpy = jasmine.createSpyObj('CharacterService', [
+      'checkCharacterConsistencyWithUsage', 'checkCharacterConsistencyStreamingWithUsage',
+      'updateCharacterStatesWithUsage'
+    ]);
     characterServiceSpy.checkCharacterConsistencyWithUsage.and.returnValue(of({
       data: { violations: [], suggestions: [] },
       usage: { promptTokens: 50, completionTokens: 50, totalTokens: 100 }
+    }));
+    characterServiceSpy.checkCharacterConsistencyStreamingWithUsage.and.returnValue(of({
+      data: { violations: [], suggestions: [] },
+      usage: { promptTokens: 0, completionTokens: 50, totalTokens: 50 }
     }));
     characterServiceSpy.updateCharacterStatesWithUsage.and.returnValue(of({
       data: { Hero: mockCharacterState },
       usage: { promptTokens: 50, completionTokens: 50, totalTokens: 100 }
     }));
 
-    continuityServiceSpy = jasmine.createSpyObj('ContinuityService', ['checkContinuityWithUsage']);
+    continuityServiceSpy = jasmine.createSpyObj('ContinuityService', ['checkContinuityWithUsage', 'checkContinuityStreamingWithUsage']);
     continuityServiceSpy.checkContinuityWithUsage.and.returnValue(of({
       data: { issues: [], overallContinuity: 'Good' },
       usage: { promptTokens: 50, completionTokens: 50, totalTokens: 100 }
+    }));
+    continuityServiceSpy.checkContinuityStreamingWithUsage.and.returnValue(of({
+      data: { issues: [], overallContinuity: 'Good' },
+      usage: { promptTokens: 0, completionTokens: 50, totalTokens: 50 }
     }));
 
     persistenceServiceSpy = jasmine.createSpyObj('PersistenceService', ['saveCheckpoint']);
@@ -294,7 +313,10 @@ describe('OrchestratorService', () => {
     it('should call architect to generate blueprint', (done) => {
       service.orchestrate(mockConfig).subscribe({
         complete: () => {
-          expect(architectServiceSpy.generateBlueprintWithUsage).toHaveBeenCalledWith(mockConfig);
+          // The orchestrator routes the architect call through the
+          // streaming sibling so the Live Output card shows the
+          // blueprint JSON as it arrives.
+          expect(architectServiceSpy.generateBlueprintStreamingWithUsage).toHaveBeenCalledWith(mockConfig);
           done();
         }
       });
@@ -330,12 +352,13 @@ describe('OrchestratorService', () => {
     it('should process all chapters from blueprint', (done) => {
       service.orchestrate(mockConfig).subscribe({
         complete: () => {
-          // Orchestrator uses the streaming siblings for author /
-          // reviser so the live-preview card can show prose as it
-          // arrives; the non-streaming variants stay available as
-          // fallback / for unit tests that explicitly verify them.
+          // Orchestrator uses the streaming siblings for every agent
+          // (architect / author / critic / reviser / character /
+          // continuity) so the Live Output card shows prose and JSON
+          // as it arrives. The non-streaming variants stay available
+          // as fallback / for unit tests that explicitly verify them.
           expect(authorServiceSpy.writeChapterStreamingWithUsage).toHaveBeenCalled();
-          expect(criticServiceSpy.evaluateChapterWithUsage).toHaveBeenCalled();
+          expect(criticServiceSpy.evaluateChapterStreamingWithUsage).toHaveBeenCalled();
           done();
         }
       });
@@ -370,9 +393,9 @@ describe('OrchestratorService', () => {
           hookType: 'The door creaks open behind them — and no one is there',
           targetWordCount: 2000,
         };
-        architectServiceSpy.generateBlueprintWithUsage.and.returnValue(of({
+        architectServiceSpy.generateBlueprintStreamingWithUsage.and.returnValue(of({
           data: { ...mockBlueprint, prologue: prologueBrief },
-          usage: { promptTokens: 100, completionTokens: 200, totalTokens: 300 }
+          usage: { promptTokens: 0, completionTokens: 50, totalTokens: 50 }
         }));
 
         service.orchestrate({ ...mockConfig, hasPrologue: true }).subscribe({
@@ -380,7 +403,7 @@ describe('OrchestratorService', () => {
             // The prologue runs through the same author + critic
             // + character + continuity chain as a numbered chapter.
             expect(authorServiceSpy.writeChapterStreamingWithUsage).toHaveBeenCalled();
-            expect(criticServiceSpy.evaluateChapterWithUsage).toHaveBeenCalled();
+            expect(criticServiceSpy.evaluateChapterStreamingWithUsage).toHaveBeenCalled();
             // The approved draft lands on `setPrologue`, not on the
             // numbered chapters list.
             expect(bookStateServiceSpy.setPrologue).toHaveBeenCalled();
@@ -403,9 +426,9 @@ describe('OrchestratorService', () => {
           hookType: 'The wind catches the last page',
           targetWordCount: 2000,
         };
-        architectServiceSpy.generateBlueprintWithUsage.and.returnValue(of({
+        architectServiceSpy.generateBlueprintStreamingWithUsage.and.returnValue(of({
           data: { ...mockBlueprint, epilogue: epilogueBrief },
-          usage: { promptTokens: 100, completionTokens: 200, totalTokens: 300 }
+          usage: { promptTokens: 0, completionTokens: 50, totalTokens: 50 }
         }));
 
         service.orchestrate({ ...mockConfig, hasEpilogue: true }).subscribe({
@@ -439,7 +462,7 @@ describe('OrchestratorService', () => {
           number: 0, title: 'Epilogue', plotBeat: 'Z', povCharacter: 'Mara',
           emotionalState: 'r', location: 'L', keyEvents: ['k'], hookType: 'h', targetWordCount: 1000,
         };
-        architectServiceSpy.generateBlueprintWithUsage.and.returnValue(of({
+        architectServiceSpy.generateBlueprintStreamingWithUsage.and.returnValue(of({
           data: { ...mockBlueprint, prologue: prologueBrief, epilogue: epilogueBrief },
           usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 }
         }));
@@ -458,7 +481,7 @@ describe('OrchestratorService', () => {
       });
 
       it('skips the prologue when blueprint.prologue is absent', (done) => {
-        architectServiceSpy.generateBlueprintWithUsage.and.returnValue(of({
+        architectServiceSpy.generateBlueprintStreamingWithUsage.and.returnValue(of({
           data: { ...mockBlueprint }, // no prologue
           usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 }
         }));
@@ -478,7 +501,7 @@ describe('OrchestratorService', () => {
       });
 
       it('skips the epilogue when blueprint.epilogue is absent', (done) => {
-        architectServiceSpy.generateBlueprintWithUsage.and.returnValue(of({
+        architectServiceSpy.generateBlueprintStreamingWithUsage.and.returnValue(of({
           data: { ...mockBlueprint }, // no epilogue
           usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 }
         }));
@@ -501,7 +524,7 @@ describe('OrchestratorService', () => {
           number: 0, title: 'Prologue', plotBeat: 'A', povCharacter: 'the stranger',
           emotionalState: 'p', location: 'L', keyEvents: ['k'], hookType: 'h', targetWordCount: 1000,
         };
-        architectServiceSpy.generateBlueprintWithUsage.and.returnValue(of({
+        architectServiceSpy.generateBlueprintStreamingWithUsage.and.returnValue(of({
           data: { ...mockBlueprint, prologue: prologueBrief },
           usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 }
         }));
@@ -554,7 +577,7 @@ describe('OrchestratorService', () => {
           number: 0, title: 'Prologue', plotBeat: 'A stranger leaves a map.', povCharacter: 'the stranger',
           emotionalState: 'purposeful', location: 'A doorstep', keyEvents: ['k'], hookType: 'h', targetWordCount: 1000,
         };
-        architectServiceSpy.generateBlueprintWithUsage.and.returnValue(of({
+        architectServiceSpy.generateBlueprintStreamingWithUsage.and.returnValue(of({
           data: { ...mockBlueprint, prologue: prologueBrief },
           usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 }
         }));
@@ -609,7 +632,7 @@ describe('OrchestratorService', () => {
           number: 0, title: 'Prologue', plotBeat: 'A', povCharacter: 'the stranger',
           emotionalState: 'p', location: 'L', keyEvents: ['k'], hookType: 'h', targetWordCount: 1000,
         };
-        architectServiceSpy.generateBlueprintWithUsage.and.returnValue(of({
+        architectServiceSpy.generateBlueprintStreamingWithUsage.and.returnValue(of({
           data: { ...mockBlueprint, prologue: prologueBrief },
           usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 }
         }));
@@ -636,7 +659,7 @@ describe('OrchestratorService', () => {
     });
 
     it('should handle architect errors', (done) => {
-      architectServiceSpy.generateBlueprintWithUsage.and.returnValue(throwError(() => new Error('Blueprint error')));
+      architectServiceSpy.generateBlueprintStreamingWithUsage.and.returnValue(throwError(() => new Error('Blueprint error')));
 
       service.orchestrate(mockConfig).subscribe({
         error: (error) => {
@@ -668,8 +691,8 @@ describe('OrchestratorService', () => {
     it('should pass model parameter to character service', (done) => {
       service.orchestrate(mockConfig).subscribe({
         complete: () => {
-          expect(characterServiceSpy.checkCharacterConsistencyWithUsage).toHaveBeenCalled();
-          const callArgs = characterServiceSpy.checkCharacterConsistencyWithUsage.calls.mostRecent().args;
+          expect(characterServiceSpy.checkCharacterConsistencyStreamingWithUsage).toHaveBeenCalled();
+          const callArgs = characterServiceSpy.checkCharacterConsistencyStreamingWithUsage.calls.mostRecent().args;
           expect(callArgs[3]).toBe('test/model'); // model parameter
           done();
         }
@@ -679,8 +702,8 @@ describe('OrchestratorService', () => {
     it('should pass model parameter to continuity service', (done) => {
       service.orchestrate(mockConfig).subscribe({
         complete: () => {
-          expect(continuityServiceSpy.checkContinuityWithUsage).toHaveBeenCalled();
-          const callArgs = continuityServiceSpy.checkContinuityWithUsage.calls.mostRecent().args;
+          expect(continuityServiceSpy.checkContinuityStreamingWithUsage).toHaveBeenCalled();
+          const callArgs = continuityServiceSpy.checkContinuityStreamingWithUsage.calls.mostRecent().args;
           expect(callArgs[3]).toBe('test/model'); // model parameter
           done();
         }
@@ -1016,6 +1039,68 @@ describe('OrchestratorService', () => {
     });
   });
 
+  describe('live-stream buffer wiring', () => {
+    // The 6-agent pipeline (architect / author / critic / reviser /
+    // character / continuity) must all open a stream window via
+    // `beginStream$` and close it via `endStream$` so the Live
+    // Output card shows prose or JSON as each agent emits deltas.
+    // The orchestrator opens the architect window synchronously at
+    // the top of `orchestrate()`; the others are wrapped in
+    // `finalize()` so `endStream$` fires whether the agent succeeded
+    // or errored.
+    it('opens and closes the live-stream window for every pipeline agent', (done) => {
+      service.orchestrate(mockConfig).subscribe({
+        complete: () => {
+          // The architect pipe's `finalize(() => endStream$())`
+          // runs AFTER the consumer's complete callback in RxJS 7+,
+          // so on the same tick the spy only reflects the calls
+          // that fired during the inner subscribe chain. Schedule
+          // the assertion on a microtask so the architect finalize
+          // has a chance to run before we read the count.
+          setTimeout(() => {
+            const beginCalls = (bookStateServiceSpy.beginStream$ as jasmine.Spy).calls.allArgs()
+              .map(c => c[0]);
+            const endCalls = (bookStateServiceSpy.endStream$ as jasmine.Spy).calls.count();
+
+            // architect / author / critic / reviser / character /
+            // continuity — each appears at least once in the begin
+            // calls. reviser only opens a window when a revision is
+            // needed (critic score < 7 + revisionCount < 3), but the
+            // mock critique has overallScore = 8 so it does NOT run.
+            // The begin-stream count for the other 5 is non-zero;
+            // reviser appears 0 times here.
+            expect(beginCalls).toContain('architect');
+            expect(beginCalls).toContain('author');
+            expect(beginCalls).toContain('critic');
+            expect(beginCalls).toContain('character');
+            expect(beginCalls).toContain('continuity');
+            // endStream$ fires once per agent that opened a window
+            // (finalize on the architect pipe) plus once per agent
+            // run that opened its own window (critic / character /
+            // continuity). On a clean run with no revision that is
+            // 1 (architect finalize) + 1 (author success) + 1
+            // (critic) + 1 (character) + 1 (continuity) = 5.
+            expect(endCalls).toBeGreaterThanOrEqual(4);
+            done();
+          }, 0);
+        }
+      });
+    });
+
+    it('clears the live-stream buffer when orchestrate() is called (regenerate-clears-buffer)', () => {
+      // The Regenerate button kicks off a fresh orchestrate() call.
+      // Stale text from the previous run must be wiped synchronously
+      // (inside the subscriber function) before any new agent starts.
+      // We assert via the spy — the real BookStateService has its own
+      // behaviour covered in book-state.service.spec.ts.
+      service.orchestrate(mockConfig).subscribe();
+
+      // clearLiveStreamBuffer is called inside the subscriber body,
+      // which runs synchronously when .subscribe() is invoked.
+      expect(bookStateServiceSpy.clearLiveStreamBuffer).toHaveBeenCalled();
+    });
+  });
+
   describe('error and retry counters', () => {
     // The orchestrator increments `errorCount` once per agent
     // failure and `retryCount` once per scheduled retry. A clean
@@ -1032,7 +1117,7 @@ describe('OrchestratorService', () => {
     });
 
     it('increments the error counter when the architect blueprint call fails', (done) => {
-      architectServiceSpy.generateBlueprintWithUsage.and.returnValue(throwError(() => new Error('blueprint down')));
+      architectServiceSpy.generateBlueprintStreamingWithUsage.and.returnValue(throwError(() => new Error('blueprint down')));
 
       service.orchestrate(mockConfig).subscribe({
         error: () => {

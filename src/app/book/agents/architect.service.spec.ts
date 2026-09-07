@@ -2,9 +2,10 @@ import { TestBed } from '@angular/core/testing';
 import { ArchitectService } from './architect.service';
 import { ApiService } from '../../core/api.service';
 import { JsonParserService } from '../../shared/utils/json-parser.service';
+import { BookStateService } from '../state/book-state.service';
 import { BookConfig, Genre, WritingStyle, Tone, PointOfView, Tense, Audience, PlotArchetype, ActStructure, WorldType, BookLength, ChapterLength } from '../../models/book-config.model';
 import { Blueprint } from '../../models/book-state.model';
-import { of, throwError } from 'rxjs';
+import { of, throwError, Subject } from 'rxjs';
 
 describe('ArchitectService', () => {
   let service: ArchitectService;
@@ -90,7 +91,8 @@ describe('ArchitectService', () => {
       providers: [
         ArchitectService,
         JsonParserService,
-        { provide: ApiService, useValue: spy }
+        { provide: ApiService, useValue: spy },
+        { provide: BookStateService, useValue: { appendStream$: () => {} } }
       ]
     });
 
@@ -519,6 +521,103 @@ describe('ArchitectService', () => {
           },
           error: done.fail
         });
+      });
+    });
+  });
+
+  describe('generateBlueprintStreamingWithUsage', () => {
+    // The streaming sibling pushes every delta into the live preview
+    // buffer, then runs the same parse + sanitiser chain as the
+    // non-streaming sibling. `usage.promptTokens` is unknown from
+    // SSE deltas (recorded as 0); `completionTokens` is approximated
+    // via `chars / 4` so the per-agent stats card stays in the same
+    // shape as the other streamed agents.
+    it('calls chatCompletionStream (not chatCompletion) with stream:true', (done) => {
+      const stream = new Subject<string>();
+      apiServiceSpy.chatCompletionStream.and.returnValue(stream.asObservable());
+
+      service.generateBlueprintStreamingWithUsage(mockConfig).subscribe({
+        next: () => {},
+        complete: () => {
+          expect(apiServiceSpy.chatCompletionStream).toHaveBeenCalled();
+          const args = apiServiceSpy.chatCompletionStream.calls.mostRecent().args[0];
+          expect(args.stream).toBe(true);
+          expect(args.model).toBe(mockConfig.model);
+          expect(args.messages.length).toBe(2);
+          expect(apiServiceSpy.chatCompletion).not.toHaveBeenCalled();
+          done();
+        }
+      });
+
+      stream.next('{"chapters":[]}');
+      stream.complete();
+    });
+
+    it('parses a fully streamed JSON response into a Blueprint', (done) => {
+      const stream = new Subject<string>();
+      apiServiceSpy.chatCompletionStream.and.returnValue(stream.asObservable());
+
+      service.generateBlueprintStreamingWithUsage(mockConfig).subscribe({
+        next: (res) => {
+          expect(res.data).toBeDefined();
+          expect(res.data.chapters).toEqual(mockBlueprint.chapters);
+          expect(res.usage.promptTokens).toBe(0);
+          expect(res.usage.completionTokens).toBeGreaterThan(0);
+          done();
+        },
+        error: done.fail
+      });
+
+      const fullJson = JSON.stringify(mockBlueprint);
+      const half = Math.floor(fullJson.length / 2);
+      stream.next(fullJson.slice(0, half));
+      stream.next(fullJson.slice(half));
+      stream.complete();
+    });
+
+    it('falls back to a minimal blueprint when the streamed content is unparseable JSON', (done) => {
+      const stream = new Subject<string>();
+      apiServiceSpy.chatCompletionStream.and.returnValue(stream.asObservable());
+
+      service.generateBlueprintStreamingWithUsage(mockConfig).subscribe({
+        next: (res) => {
+          expect(res.data).toBeDefined();
+          expect(Array.isArray(res.data.chapters)).toBe(true);
+          expect(res.data.chapters.length).toBeGreaterThan(0);
+          done();
+        },
+        error: done.fail
+      });
+
+      stream.next('this is not JSON at all');
+      stream.complete();
+    });
+
+    it('falls back when the streamed content is empty', (done) => {
+      const stream = new Subject<string>();
+      apiServiceSpy.chatCompletionStream.and.returnValue(stream.asObservable());
+
+      service.generateBlueprintStreamingWithUsage(mockConfig).subscribe({
+        next: (res) => {
+          expect(res.data).toBeDefined();
+          expect(Array.isArray(res.data.chapters)).toBe(true);
+          done();
+        },
+        error: done.fail
+      });
+
+      stream.complete();
+    });
+
+    it('forwards stream errors', (done) => {
+      apiServiceSpy.chatCompletionStream.and.returnValue(throwError(() => new Error('stream down')));
+
+      service.generateBlueprintStreamingWithUsage(mockConfig).subscribe({
+        next: () => done.fail('Should have errored'),
+        error: (err) => {
+          expect(err.message).toBe('stream down');
+          done();
+        }
       });
     });
   });

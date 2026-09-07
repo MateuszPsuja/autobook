@@ -1,12 +1,13 @@
 import { Injectable } from '@angular/core';
-import { Observable, of, throwError } from 'rxjs';
+import { Observable, of, throwError, Subject } from 'rxjs';
 import { map, catchError, switchMap } from 'rxjs/operators';
-import { ApiService } from '../../core/api.service';
+import { ApiService, TokenUsage } from '../../core/api.service';
 import { JsonParserService } from '../../shared/utils/json-parser.service';
 import { ChapterBrief, CriticContext } from '../../models/book-state.model';
 import { CritiqueReport } from '../../models/critique.model';
 import { criticSystemPrompt, criticChapterPrompt, criticRevisionPrompt } from '../prompts/critic.prompts';
 import { ApiResult, extractUsage, defaultUsage } from '../../shared/utils/api-result.util';
+import { BookStateService } from '../state/book-state.service';
 
 export interface CriticResult extends ApiResult<CritiqueReport> {}
 
@@ -51,7 +52,8 @@ export class CriticService {
 
   constructor(
     private apiService: ApiService,
-    private jsonParser: JsonParserService
+    private jsonParser: JsonParserService,
+    private bookStateService: BookStateService
   ) {}
 
   /**
@@ -76,6 +78,102 @@ export class CriticService {
       switchMap(response => this.handleFirstResponse(response, request, true)),
       catchError(error => this.handleCriticError(error, true))
     ) as unknown as Observable<CriticResult>;
+  }
+
+  /**
+   * Streaming sibling of `evaluateChapterWithUsage`. Streams every
+   * delta into the live preview buffer, then runs the same JSON
+   * parse + content checks as the non-streaming sibling. On empty
+   * streamed content or parse failure, surfaces the same
+   * `unavailableReason` sentinel the non-streaming fallback emits
+   * so the orchestrator's "continue with empty critique" path keeps
+   * working unchanged. `usage.promptTokens` is unknown from SSE
+   * deltas (recorded as 0); `completionTokens` is approximated via
+   * `chars / 4` so the per-agent stats card stays in the same shape
+   * as the other streamed agents.
+   */
+  evaluateChapterStreamingWithUsage(chapterContent: string, brief: ChapterBrief, ctx: CriticContext): Observable<CriticResult> {
+    const subject = new Subject<CriticResult>();
+    let content = '';
+
+    const stream = this.apiService.chatCompletionStream({ ...this.buildRequest(chapterContent, brief, ctx), stream: true });
+    const subscription = stream.subscribe({
+      next: (delta: string) => {
+        content += delta;
+        this.bookStateService.appendStream$(delta);
+      },
+      error: (error) => {
+        console.error('Critic stream error:', error);
+        subject.error(error);
+      },
+      complete: () => {
+        try {
+          if (!content || content.trim().length === 0) {
+            console.warn('Critic streamed no content; using unavailableReason fallback.');
+            subject.next(this.makeUnavailableResult(0));
+            subject.complete();
+            return;
+          }
+
+          let critique: CritiqueReport;
+          let parseFailed = false;
+          try {
+            critique = this.jsonParser.parse<CritiqueReport>(content);
+            critique.createdAt = new Date();
+            this.assertCritiqueHasContent(critique);
+          } catch (parseError) {
+            console.warn('Critic streamed non-JSON content; using unavailableReason fallback. ' + (parseError as Error).message);
+            parseFailed = true;
+            critique = this.makeUnavailableCritique();
+          }
+
+          if (parseFailed) {
+            subject.next(this.makeUnavailableResult(content.length));
+            subject.complete();
+            return;
+          }
+
+          const completionTokens = Math.ceil(content.length / 4);
+          const usage: TokenUsage = {
+            promptTokens: 0,
+            completionTokens,
+            totalTokens: completionTokens
+          };
+          console.warn(
+            `Critic streaming: promptTokens unknown from a streamed response; recording 0. ` +
+            `completionTokens approximated via chars/4 from ${content.length} chars of streamed JSON.`
+          );
+          subject.next({ data: critique, usage });
+          subject.complete();
+        } catch (err) {
+          subject.error(err);
+        }
+      }
+    });
+
+    subject.subscribe({
+      complete: () => subscription.unsubscribe(),
+      error: () => subscription.unsubscribe()
+    });
+
+    return subject.asObservable();
+  }
+
+  private makeUnavailableCritique(): CritiqueReport {
+    return {
+      unavailableReason: 'The reviewer model did not return a parseable critique. The chapter itself is intact — you can still export it.'
+    } as CritiqueReport;
+  }
+
+  private makeUnavailableResult(streamedChars: number): CriticResult {
+    return {
+      data: this.makeUnavailableCritique(),
+      usage: {
+        promptTokens: 0,
+        completionTokens: Math.ceil(streamedChars / 4),
+        totalTokens: Math.ceil(streamedChars / 4)
+      }
+    };
   }
 
   /**

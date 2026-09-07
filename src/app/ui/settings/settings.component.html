@@ -94,6 +94,7 @@
           <input
             [type]="isApiKeyVisible ? 'text' : 'password'"
             [(ngModel)]="apiKeyInput"
+            [ngModelOptions]="{standalone: true}"
             [placeholder]="activeProvider.keyValidation?.prefix || 'sk-...'"
             autocomplete="off"
             autocapitalize="off"

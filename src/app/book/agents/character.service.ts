@@ -1,13 +1,14 @@
 import { Injectable } from '@angular/core';
-import { Observable, of } from 'rxjs';
+import { Observable, of, Subject } from 'rxjs';
 import { map, catchError, switchMap } from 'rxjs/operators';
-import { ApiService } from '../../core/api.service';
+import { ApiService, TokenUsage } from '../../core/api.service';
 import { JsonParserService } from '../../shared/utils/json-parser.service';
 import { ChapterBrief } from '../../models/book-state.model';
 import { CharacterStore, CharacterState } from '../../models/character.model';
 import { CharacterCheckResult, CharacterViolation } from '../../models/critique.model';
 import { characterSystemPrompt, characterChapterPrompt, characterUpdatePrompt } from '../prompts/character.prompts';
 import { ApiResult, extractUsage, defaultUsage } from '../../shared/utils/api-result.util';
+import { BookStateService } from '../state/book-state.service';
 
 interface CharacterAnalysisResponse {
   violations: CharacterViolation[];
@@ -28,7 +29,8 @@ interface CharacterAnalysisResponse {
 export class CharacterService {
   constructor(
     private apiService: ApiService,
-    private jsonParser: JsonParserService
+    private jsonParser: JsonParserService,
+    private bookStateService: BookStateService
   ) {}
 
   /**
@@ -68,6 +70,103 @@ export class CharacterService {
     })).pipe(
       catchError(error => this.fallbackCheckWithUsage(error))
     );
+  }
+
+  /**
+   * Streaming sibling of `checkCharacterConsistencyWithUsage`. Streams
+   * every delta into the live preview buffer, then runs the same JSON
+   * parse + extraction as the non-streaming sibling. On empty streamed
+   * content or parse failure, returns the same empty-result fallback
+   * (`violations: []`, the "unavailable" suggestion) so the
+   * orchestrator's "continue with empty character check" path keeps
+   * working unchanged. `usage.promptTokens` is unknown from SSE
+   * deltas (recorded as 0); `completionTokens` is approximated via
+   * `chars / 4` so the per-agent stats card stays in the same shape
+   * as the other streamed agents.
+   */
+  checkCharacterConsistencyStreamingWithUsage(
+    chapterContent: string,
+    brief: ChapterBrief,
+    characterStore: CharacterStore,
+    model: string
+  ): Observable<ApiResult<CharacterCheckResult>> {
+    const subject = new Subject<ApiResult<CharacterCheckResult>>();
+    let content = '';
+
+    const stream = this.apiService.chatCompletionStream({
+      ...this.buildCharacterCheckRequest(chapterContent, brief, characterStore, model),
+      stream: true
+    });
+    const subscription = stream.subscribe({
+      next: (delta: string) => {
+        content += delta;
+        this.bookStateService.appendStream$(delta);
+      },
+      error: (error) => {
+        console.error('Character stream error:', error);
+        subject.error(error);
+      },
+      complete: () => {
+        try {
+          if (!content || content.trim().length === 0) {
+            console.warn('Character streamed no content; using empty fallback.');
+            subject.next(this.fallbackCheckResult(0));
+            subject.complete();
+            return;
+          }
+          let parsed: CharacterAnalysisResponse;
+          try {
+            parsed = this.jsonParser.parse<CharacterAnalysisResponse>(content);
+          } catch (parseError) {
+            console.warn('Character streamed non-JSON content; using empty fallback. ' + (parseError as Error).message);
+            subject.next(this.fallbackCheckResult(content.length));
+            subject.complete();
+            return;
+          }
+
+          const result: CharacterCheckResult = {
+            violations: parsed.violations || [],
+            suggestions: parsed.suggestions || []
+          };
+          const completionTokens = Math.ceil(content.length / 4);
+          const usage: TokenUsage = {
+            promptTokens: 0,
+            completionTokens,
+            totalTokens: completionTokens
+          };
+          console.warn(
+            `Character streaming: promptTokens unknown from a streamed response; recording 0. ` +
+            `completionTokens approximated via chars/4 from ${content.length} chars of streamed JSON.`
+          );
+          subject.next({ data: result, usage });
+          subject.complete();
+        } catch (err) {
+          subject.error(err);
+        }
+      }
+    });
+
+    subject.subscribe({
+      complete: () => subscription.unsubscribe(),
+      error: () => subscription.unsubscribe()
+    });
+
+    return subject.asObservable();
+  }
+
+  private fallbackCheckResult(streamedChars: number): ApiResult<CharacterCheckResult> {
+    const completionTokens = Math.ceil(streamedChars / 4);
+    return {
+      data: {
+        violations: [],
+        suggestions: ['Character consistency check unavailable for this chapter']
+      },
+      usage: {
+        promptTokens: 0,
+        completionTokens,
+        totalTokens: completionTokens
+      }
+    };
   }
 
   /**

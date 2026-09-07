@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { Observable, Subscription, throwError } from 'rxjs';
-import { switchMap, catchError, map } from 'rxjs/operators';
+import { switchMap, catchError, map, finalize } from 'rxjs/operators';
 import { BookStateService } from '../state/book-state.service';
 import { ArchitectService } from '../agents/architect.service';
 import { AuthorService } from '../agents/author.service';
@@ -85,12 +85,16 @@ export class OrchestratorService {
       this.bookStateService.setStatus('configuring');
       this.bookStateService.setActiveAgent(null);
       this.bookStateService.setCurrentChapter(null);
+      // Wipe the live output so stale text from the previous run
+      // doesn't linger while the new run's first agent ramps up.
+      this.bookStateService.clearLiveStreamBuffer();
 
       // Start with architect
       this.bookStateService.setActiveAgent('architect');
       this.bookStateService.setStatus('generating');
 
-      this.currentSubscription = this.architectService.generateBlueprintWithUsage(config).pipe(
+      this.bookStateService.beginStream$('architect');
+      this.currentSubscription = this.architectService.generateBlueprintStreamingWithUsage(config).pipe(
         switchMap((result) => {
           // Record architect usage
           this.bookStateService.recordAgentUsage('architect', result.usage);
@@ -113,7 +117,8 @@ export class OrchestratorService {
           this.bookStateService.setStatus('error');
           this.bookStateService.setError(error.message);
           return throwError(error);
-        })
+        }),
+        finalize(() => this.bookStateService.endStream$())
       ).subscribe({
         next: async () => {
           this.bookStateService.endGenerationTimer();
@@ -478,7 +483,10 @@ export class OrchestratorService {
             previousChapters: this.bookStateService.getState().chapters
           };
 
-          this.criticService.evaluateChapterWithUsage(draft.content, brief, criticContext).subscribe({
+          this.bookStateService.beginStream$('critic');
+          this.criticService.evaluateChapterStreamingWithUsage(draft.content, brief, criticContext).pipe(
+            finalize(() => this.bookStateService.endStream$())
+          ).subscribe({
             next: (criticResult) => {
               this.bookStateService.recordAgentUsage('critic', criticResult.usage);
               this.bookStateService.setCritique(criticResult.data);
@@ -613,11 +621,14 @@ export class OrchestratorService {
       // 4. Character consistency check
       this.bookStateService.setActiveAgent('character');
       
-      this.characterService.checkCharacterConsistencyWithUsage(
+      this.bookStateService.beginStream$('character');
+      this.characterService.checkCharacterConsistencyStreamingWithUsage(
         draft.content,
         brief,
         currentState.characterStore,
         config.model
+      ).pipe(
+        finalize(() => this.bookStateService.endStream$())
       ).subscribe({
         next: (characterResult) => {
           this.bookStateService.recordAgentUsage('character', characterResult.usage);
@@ -638,11 +649,14 @@ export class OrchestratorService {
               // 6. Continuity check
               this.bookStateService.setActiveAgent('continuity');
               
-              this.continuityService.checkContinuityWithUsage(
+              this.bookStateService.beginStream$('continuity');
+              this.continuityService.checkContinuityStreamingWithUsage(
                 draft.content,
                 brief,
                 currentState.chapters,
                 config.model
+              ).pipe(
+                finalize(() => this.bookStateService.endStream$())
               ).subscribe({
                 next: (continuityResult) => {
                   this.bookStateService.recordAgentUsage('continuity', continuityResult.usage);

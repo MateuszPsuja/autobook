@@ -1,12 +1,13 @@
 import { Injectable } from '@angular/core';
-import { Observable } from 'rxjs';
+import { Observable, Subject } from 'rxjs';
 import { map, catchError } from 'rxjs/operators';
-import { ApiService } from '../../core/api.service';
+import { ApiService, TokenUsage } from '../../core/api.service';
 import { JsonParserService } from '../../shared/utils/json-parser.service';
 import { ChapterBrief, Issue } from '../../models/book-state.model';
 import { Chapter } from '../../models/chapter.model';
 import { continuitySystemPrompt, continuityChapterPrompt, continuityFlagsPrompt } from '../prompts/continuity.prompts';
 import { ApiResult, extractUsage, defaultUsage } from '../../shared/utils/api-result.util';
+import { BookStateService } from '../state/book-state.service';
 
 interface ContinuityAnalysisResponse {
   issues: Issue[];
@@ -60,7 +61,8 @@ class ContinuityParseError extends Error {
 export class ContinuityService {
   constructor(
     private apiService: ApiService,
-    private jsonParser: JsonParserService
+    private jsonParser: JsonParserService,
+    private bookStateService: BookStateService
   ) {}
 
   /**
@@ -107,6 +109,103 @@ export class ContinuityService {
       }),
       catchError(error => this.handleContinuityError(error, true))
     );
+  }
+
+  /**
+   * Streaming sibling of `checkContinuityWithUsage`. Streams every
+   * delta into the live preview buffer, then runs the same JSON
+   * parse + chapter-stamping as the non-streaming sibling. On empty
+   * streamed content or parse failure, returns the same fallback
+   * (`issues: []`, `overallContinuity: 'Fair'`) so the orchestrator's
+   * "continue with empty continuity" path keeps working unchanged.
+   * `usage.promptTokens` is unknown from SSE deltas (recorded as 0);
+   * `completionTokens` is approximated via `chars / 4` so the per-agent
+   * stats card stays in the same shape as the other streamed agents.
+   */
+  checkContinuityStreamingWithUsage(
+    chapterContent: string,
+    brief: ChapterBrief,
+    previousChapters: Chapter[],
+    model: string
+  ): Observable<ApiResult<ContinuityResult>> {
+    const subject = new Subject<ApiResult<ContinuityResult>>();
+    let content = '';
+
+    const stream = this.apiService.chatCompletionStream({
+      ...this.buildContinuityRequest(chapterContent, brief, previousChapters, model),
+      stream: true
+    });
+    const subscription = stream.subscribe({
+      next: (delta: string) => {
+        content += delta;
+        this.bookStateService.appendStream$(delta);
+      },
+      error: (error) => {
+        console.error('Continuity stream error:', error);
+        subject.error(error);
+      },
+      complete: () => {
+        try {
+          if (!content || content.trim().length === 0) {
+            console.warn('Continuity streamed no content; using empty fallback.');
+            subject.next(this.fallbackContinuityResult(0));
+            subject.complete();
+            return;
+          }
+          let parsed: ContinuityAnalysisResponse;
+          try {
+            parsed = this.jsonParser.parse<ContinuityAnalysisResponse>(content);
+          } catch (parseError) {
+            console.warn('Continuity streamed non-JSON content; using empty fallback. ' + (parseError as Error).message);
+            subject.next(this.fallbackContinuityResult(content.length));
+            subject.complete();
+            return;
+          }
+
+          const issuesWithChapter = this.addChapterToIssues(parsed.issues || [], brief.number);
+          const result: ContinuityResult = {
+            issues: issuesWithChapter,
+            overallContinuity: parsed.overallContinuity || 'Fair'
+          };
+          const completionTokens = Math.ceil(content.length / 4);
+          const usage: TokenUsage = {
+            promptTokens: 0,
+            completionTokens,
+            totalTokens: completionTokens
+          };
+          console.warn(
+            `Continuity streaming: promptTokens unknown from a streamed response; recording 0. ` +
+            `completionTokens approximated via chars/4 from ${content.length} chars of streamed JSON.`
+          );
+          subject.next({ data: result, usage });
+          subject.complete();
+        } catch (err) {
+          subject.error(err);
+        }
+      }
+    });
+
+    subject.subscribe({
+      complete: () => subscription.unsubscribe(),
+      error: () => subscription.unsubscribe()
+    });
+
+    return subject.asObservable();
+  }
+
+  private fallbackContinuityResult(streamedChars: number): ApiResult<ContinuityResult> {
+    const completionTokens = Math.ceil(streamedChars / 4);
+    return {
+      data: {
+        issues: [],
+        overallContinuity: 'Fair'
+      },
+      usage: {
+        promptTokens: 0,
+        completionTokens,
+        totalTokens: completionTokens
+      }
+    };
   }
 
   private parseContinuity(content: string, brief: ChapterBrief): ContinuityResult {

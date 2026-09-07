@@ -2,10 +2,11 @@ import { TestBed } from '@angular/core/testing';
 import { CriticService } from './critic.service';
 import { ApiService } from '../../core/api.service';
 import { JsonParserService } from '../../shared/utils/json-parser.service';
+import { BookStateService } from '../state/book-state.service';
 import { ChapterBrief, CriticContext } from '../../models/book-state.model';
 import { CritiqueReport } from '../../models/critique.model';
 import { CharacterState } from '../../models/character.model';
-import { of, throwError } from 'rxjs';
+import { of, throwError, Subject } from 'rxjs';
 
 describe('CriticService', () => {
   let service: CriticService;
@@ -83,7 +84,7 @@ describe('CriticService', () => {
     spyOn(console, 'error').and.callFake(() => {});
     spyOn(console, 'warn').and.callFake(() => {});
 
-    const apiSpy = jasmine.createSpyObj('ApiService', ['chatCompletion']);
+    const apiSpy = jasmine.createSpyObj('ApiService', ['chatCompletion', 'chatCompletionStream']);
     const jsonSpy = jasmine.createSpyObj('JsonParserService', ['parse']);
 
     // Default: return successful response for chatCompletion
@@ -104,7 +105,8 @@ describe('CriticService', () => {
       providers: [
         CriticService,
         { provide: ApiService, useValue: apiSpy },
-        { provide: JsonParserService, useValue: jsonSpy }
+        { provide: JsonParserService, useValue: jsonSpy },
+        { provide: BookStateService, useValue: { appendStream$: () => {} } }
       ]
     });
 
@@ -532,6 +534,98 @@ describe('CriticService', () => {
         next: () => done.fail('Should have errored'),
         error: (error) => {
           expect(error.message).toBe('API Error');
+          done();
+        }
+      });
+    });
+  });
+
+  describe('evaluateChapterStreamingWithUsage', () => {
+    // The streaming sibling pushes every delta into the live preview
+    // buffer, then runs the same JSON parse + content validation as
+    // the non-streaming sibling. On empty/parse-failure it emits the
+    // same `unavailableReason` sentinel the non-streaming fallback
+    // emits so the orchestrator's "continue with empty critique"
+    // path keeps working unchanged.
+    it('calls chatCompletionStream (not chatCompletion) with stream:true', (done) => {
+      const stream = new Subject<string>();
+      apiServiceSpy.chatCompletionStream.and.returnValue(stream.asObservable());
+
+      service.evaluateChapterStreamingWithUsage('Test content', mockBrief, mockContext).subscribe({
+        next: () => {},
+        complete: () => {
+          expect(apiServiceSpy.chatCompletionStream).toHaveBeenCalled();
+          const args = apiServiceSpy.chatCompletionStream.calls.mostRecent().args[0];
+          expect(args.stream).toBe(true);
+          expect(args.model).toBe(mockContext.model);
+          expect(apiServiceSpy.chatCompletion).not.toHaveBeenCalled();
+          done();
+        }
+      });
+
+      stream.next(JSON.stringify(mockCritique));
+      stream.complete();
+    });
+
+    it('parses a fully streamed JSON response into a CritiqueReport', (done) => {
+      const stream = new Subject<string>();
+      apiServiceSpy.chatCompletionStream.and.returnValue(stream.asObservable());
+      jsonParserSpy.parse.and.callFake((raw: string) => JSON.parse(raw));
+
+      service.evaluateChapterStreamingWithUsage('Test content', mockBrief, mockContext).subscribe({
+        next: (res) => {
+          expect(res.data.overallScore).toBe(7.7);
+          expect(res.data.feedback).toBe('Good chapter overall.');
+          expect(res.usage.promptTokens).toBe(0);
+          expect(res.usage.completionTokens).toBeGreaterThan(0);
+          done();
+        },
+        error: done.fail
+      });
+
+      stream.next(JSON.stringify(mockCritique));
+      stream.complete();
+    });
+
+    it('returns the unavailableReason sentinel on empty streamed content', (done) => {
+      const stream = new Subject<string>();
+      apiServiceSpy.chatCompletionStream.and.returnValue(stream.asObservable());
+
+      service.evaluateChapterStreamingWithUsage('Test content', mockBrief, mockContext).subscribe({
+        next: (res) => {
+          expect(res.data.unavailableReason).toBeDefined();
+          done();
+        },
+        error: done.fail
+      });
+
+      stream.complete();
+    });
+
+    it('returns the unavailableReason sentinel on unparseable streamed content', (done) => {
+      const stream = new Subject<string>();
+      apiServiceSpy.chatCompletionStream.and.returnValue(stream.asObservable());
+      jsonParserSpy.parse.and.callFake((raw: string) => JSON.parse(raw));
+
+      service.evaluateChapterStreamingWithUsage('Test content', mockBrief, mockContext).subscribe({
+        next: (res) => {
+          expect(res.data.unavailableReason).toBeDefined();
+          done();
+        },
+        error: done.fail
+      });
+
+      stream.next('definitely not JSON');
+      stream.complete();
+    });
+
+    it('forwards stream errors', (done) => {
+      apiServiceSpy.chatCompletionStream.and.returnValue(throwError(() => new Error('stream down')));
+
+      service.evaluateChapterStreamingWithUsage('Test content', mockBrief, mockContext).subscribe({
+        next: () => done.fail('Should have errored'),
+        error: (err) => {
+          expect(err.message).toBe('stream down');
           done();
         }
       });
