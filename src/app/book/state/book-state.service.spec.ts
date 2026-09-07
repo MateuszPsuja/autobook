@@ -426,4 +426,57 @@ describe('BookStateService', () => {
       expect(state.blueprint).toBeNull();
     });
   });
+
+  describe('error and retry counters', () => {
+    it('initialises both counters to zero', () => {
+      expect(service.getStats().errorCount).toBe(0);
+      expect(service.getStats().retryCount).toBe(0);
+    });
+
+    it('increments errorCount by 1 each call', () => {
+      service.incrementErrorCount();
+      service.incrementErrorCount();
+      service.incrementErrorCount();
+      expect(service.getStats().errorCount).toBe(3);
+    });
+
+    it('increments retryCount by 1 each call', () => {
+      service.incrementRetryCount();
+      service.incrementRetryCount();
+      expect(service.getStats().retryCount).toBe(2);
+    });
+
+    it('emits the live counters through their observables', (done) => {
+      const errorSamples: number[] = [];
+      const retrySamples: number[] = [];
+
+      const errorSub = service.getErrorCount$().subscribe(n => errorSamples.push(n));
+      const retrySub = service.getRetryCount$().subscribe(n => retrySamples.push(n));
+
+      service.incrementErrorCount();
+      service.incrementRetryCount();
+      service.incrementRetryCount();
+
+      setTimeout(() => {
+        errorSub.unsubscribe();
+        retrySub.unsubscribe();
+        expect(errorSamples[errorSamples.length - 1]).toBe(1);
+        expect(retrySamples[retrySamples.length - 1]).toBe(2);
+        done();
+      }, 0);
+    });
+
+    it('resetStats() zeros the counters back out', () => {
+      service.incrementErrorCount();
+      service.incrementErrorCount();
+      service.incrementRetryCount();
+      expect(service.getStats().errorCount).toBe(2);
+      expect(service.getStats().retryCount).toBe(1);
+
+      service.resetStats();
+
+      expect(service.getStats().errorCount).toBe(0);
+      expect(service.getStats().retryCount).toBe(0);
+    });
+  });
 });

@@ -18,6 +18,26 @@ export interface GenerationStats {
       totalTokens: number;
     };
   };
+  /**
+   * Cumulative count of individual agent-call failures during this
+   * run. Every error that propagates through an agent subscribe's
+   * `error` callback (author / critic / reviser / character /
+   * continuity / architect) increments this once — including ones
+   * that are eventually recovered by a retry. The retry count
+   * separately tracks scheduled retries, so a single failed author
+   * attempt followed by a successful retry shows up as 1 error and
+   * 1 retry.
+   */
+  errorCount: number;
+  /**
+   * Cumulative count of retry attempts scheduled by the orchestrator
+   * (author's `writeChapterWithRetry` + reviser's per-round retry
+   * loop). The first attempt of any logical call is not a retry;
+   * attempts 2 and onwards are. The error counter can exceed the
+   * retry counter if an error path skips scheduling a retry (e.g.
+   * the per-section skip rule when retries are exhausted).
+   */
+  retryCount: number;
 }
 
 export function createInitialStats(): GenerationStats {
@@ -29,7 +49,7 @@ export function createInitialStats(): GenerationStats {
     character: { calls: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0 },
     continuity: { calls: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0 }
   };
-  
+
   return {
     startTime: null,
     endTime: null,
@@ -37,7 +57,9 @@ export function createInitialStats(): GenerationStats {
     promptTokens: 0,
     completionTokens: 0,
     totalWords: 0,
-    agentStats
+    agentStats,
+    errorCount: 0,
+    retryCount: 0
   };
 }
 

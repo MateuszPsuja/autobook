@@ -53,7 +53,9 @@ describe('GeneratorComponent', () => {
             reviser: { calls: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0 },
             character: { calls: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0 },
             continuity: { calls: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0 }
-          }
+          },
+          errorCount: 0,
+          retryCount: 0
         },
         liveStream: '',
         liveStreamAgent: null,
@@ -76,6 +78,8 @@ describe('GeneratorComponent', () => {
           return completed.split('\n').map(l => l.trim()).filter(l => l.length > 0).slice(-6);
         })),
         getLiveTokenRate$: () => of(0),
+        getErrorCount$: () => stateSubject.pipe(map(s => s.stats?.errorCount ?? 0)),
+        getRetryCount$: () => stateSubject.pipe(map(s => s.stats?.retryCount ?? 0)),
         patch: (p: Partial<BookState>) => {
           stateSubject.next({ ...stateSubject.value, ...p });
         }

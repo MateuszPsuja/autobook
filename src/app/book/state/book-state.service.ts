@@ -98,6 +98,20 @@ export class BookStateService {
     this.patch({ chapters });
   }
 
+  replaceChapter(index: number, chapter: Chapter): void {
+    const current = this.state$.value.chapters;
+    if (index < 0 || index >= current.length) {
+      return;
+    }
+    const updated = [...current];
+    updated[index] = chapter;
+    this.patch({ chapters: updated });
+  }
+
+  findChapterIndexByNumber(number: number): number {
+    return this.state$.value.chapters.findIndex(c => c.number === number);
+  }
+
   setPrologue(chapter: Chapter | null): void {
     this.patch({ prologue: chapter });
   }
@@ -356,5 +370,46 @@ export class BookStateService {
 
   resetStats(): void {
     this.patch({ stats: createInitialStats() });
+  }
+
+  /**
+   * Live-stream counter: increments every time an agent call errors
+   * out, regardless of whether the orchestrator recovers with a
+   * retry or eventually skips the section. Mirrors
+   * `stats.errorCount` so the live-output card and the post-run
+   * stats card agree on the total.
+   */
+  incrementErrorCount(): void {
+    const currentStats = this.getStats();
+    this.patch({
+      stats: {
+        ...currentStats,
+        errorCount: currentStats.errorCount + 1
+      }
+    });
+  }
+
+  /**
+   * Live-stream counter: increments every time the orchestrator
+   * schedules a retry (author or reviser). Does NOT increment on
+   * the first attempt of any logical call — only attempts 2 and
+   * beyond are counted. Mirrors `stats.retryCount`.
+   */
+  incrementRetryCount(): void {
+    const currentStats = this.getStats();
+    this.patch({
+      stats: {
+        ...currentStats,
+        retryCount: currentStats.retryCount + 1
+      }
+    });
+  }
+
+  getErrorCount$(): Observable<number> {
+    return this.state$.pipe(map(s => s.stats.errorCount ?? 0));
+  }
+
+  getRetryCount$(): Observable<number> {
+    return this.state$.pipe(map(s => s.stats.retryCount ?? 0));
   }
 }

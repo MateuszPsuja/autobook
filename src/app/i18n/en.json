@@ -231,7 +231,11 @@
     "progress": "Progress",
     "draft": "Draft",
     "noChapterInProgress": "No chapter in progress",
-    "next": "Next"
+    "next": "Next",
+    "skippedChaptersTitle": "Some chapters were skipped",
+    "retrySkipped": "Retry skipped chapters",
+    "errorsLabel": "Errors",
+    "retriesLabel": "Retries"
   },
   "viewer": {
     "title": "Reading View",

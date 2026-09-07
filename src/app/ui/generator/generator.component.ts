@@ -2,6 +2,7 @@ import { Component, OnInit, OnDestroy, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
 import { Subscription, Observable, of } from 'rxjs';
+import { map } from 'rxjs/operators';
 import { BookStateService } from '../../book/state/book-state.service';
 import { OrchestratorService } from '../../book/orchestrator/orchestrator.service';
 import { ApiService } from '../../core/api.service';
@@ -25,6 +26,9 @@ export class GeneratorComponent implements OnInit, OnDestroy {
   status$: Observable<GenerationStatus>;
   chapters$: Observable<any[]>;
   currentDraft$: Observable<ChapterDraft | null>;
+  skippedChapters$: Observable<number[]>;
+  errorCount$: Observable<number>;
+  retryCount$: Observable<number>;
 
   // Live-stream preview. `liveLines$` drives the monospace box in
   // the template; `liveTokenRate` is a plain number field updated
@@ -36,11 +40,15 @@ export class GeneratorComponent implements OnInit, OnDestroy {
   liveTokenRate: number = 0;
   liveStreamAgent: AgentType | null = null;
   liveTokensApprox: number = 0;
+  liveErrorCount: number = 0;
+  liveRetryCount: number = 0;
 
   private subscription: Subscription = new Subscription();
   private generationSubscription: Subscription = new Subscription();
+  private retrySubscription: Subscription = new Subscription();
   private savedConfig: BookConfig | null = null;
   private elapsedTimeInterval: any;
+  private currentSkippedChapters: number[] = [];
 
   // Last chapter number observed in the bookState$ subscription. The
   // component compares the incoming `currentChapterNumber` against
@@ -98,6 +106,11 @@ export class GeneratorComponent implements OnInit, OnDestroy {
     this.status$ = this.bookStateService.getStatus$();
     this.chapters$ = this.bookStateService.getChapters$();
     this.currentDraft$ = this.bookStateService.getCurrentDraft$();
+    this.skippedChapters$ = this.bookStateService.getState$().pipe(
+      map((s: BookState) => s.skippedChapters ?? [])
+    );
+    this.errorCount$ = this.bookStateService.getErrorCount$();
+    this.retryCount$ = this.bookStateService.getRetryCount$();
   }
 
   ngOnInit(): void {
@@ -141,6 +154,28 @@ export class GeneratorComponent implements OnInit, OnDestroy {
       })
     );
 
+    // Mirror skippedChapters onto a local field so the retry
+    // button's click handler knows what to pass. The banner reads
+    // it through the async pipe directly from `skippedChapters$`,
+    // but the click handler is a synchronous method call.
+    this.subscription.add(
+      this.skippedChapters$.subscribe(skipped => {
+        this.currentSkippedChapters = skipped ?? [];
+      })
+    );
+
+    // Mirror the live error/retry counters so the chips in the
+    // live output card update without an extra async pipe inside
+    // their `@if` expressions. Both fields are 0 while nothing is
+    // happening and tick up as the orchestrator reports failures
+    // and retries during the run.
+    this.subscription.add(
+      this.errorCount$.subscribe(n => { this.liveErrorCount = n; })
+    );
+    this.subscription.add(
+      this.retryCount$.subscribe(n => { this.liveRetryCount = n; })
+    );
+
     // Subscribe to stats updates
     this.subscription.add(
       this.bookStateService.getStats$().subscribe(stats => {
@@ -162,6 +197,7 @@ export class GeneratorComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.subscription.unsubscribe();
     this.generationSubscription.unsubscribe();
+    this.retrySubscription.unsubscribe();
     this.stopElapsedTimer();
   }
 
@@ -252,9 +288,65 @@ export class GeneratorComponent implements OnInit, OnDestroy {
     if (this.generationSubscription) {
       this.generationSubscription.unsubscribe();
     }
+    // The retry path doesn't reuse `currentSubscription` inside the
+    // orchestrator (per the targeted-fix design choice), so this
+    // component-side handle is the only way to actually cancel an
+    // in-flight retry that Stop was clicked during.
+    if (this.retrySubscription) {
+      this.retrySubscription.unsubscribe();
+    }
     this.isGenerating = false;
     this.showStopButton = false;
     this.stopElapsedTimer();
+  }
+
+  retrySkippedChapters(): void {
+    if (this.isGenerating) {
+      // Two orchestrator instances fighting over state is the
+      // failure mode the plan flagged — refuse to start a retry
+      // while a run is already in progress.
+      return;
+    }
+    if (!this.savedConfig) {
+      return;
+    }
+    const numbers = this.currentSkippedChapters.filter(n => typeof n === 'number' && n > 0);
+    if (numbers.length === 0) {
+      return;
+    }
+
+    this.isGenerating = true;
+    this.showStopButton = true;
+    this.elapsedSeconds = 0;
+    this.startElapsedTimer();
+    // Re-arm the chapter-boundary detector so the first retry
+    // chapter (e.g. 3) is treated as a fresh transition. Without
+    // this, the previous manual run's last `currentChapterNumber`
+    // would still be cached and the retry would skip the
+    // pipeline-card reset.
+    this.lastSeenChapterNumber = null;
+
+    this.retrySubscription = this.orchestratorService.retryChapters(numbers, this.savedConfig).subscribe({
+      next: () => {
+        // Retry Observable completes after every requested chapter
+        // has run. The final state of `currentSkippedChapters`
+        // (those that still failed) is updated by the orchestrator
+        // and reflected on the next tick of `skippedChapters$`.
+      },
+      error: (error) => {
+        console.error('Retry run failed:', error);
+      },
+      complete: () => {
+        this.isGenerating = false;
+        this.showStopButton = false;
+        this.stopElapsedTimer();
+        // `currentSkippedChapters` is already current via the
+        // `skippedChapters$` subscription — the banner re-renders
+        // automatically. `isCompleted` is set on the `status$`
+        // subscription (status flips to `completed`/`error` inside
+        // the orchestrator's retryChapters finalize helper).
+      }
+    });
   }
 
   navigateBack(): void {

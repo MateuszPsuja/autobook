@@ -124,10 +124,36 @@
             {{ t('generator.rateLabel') }} <span class="text-surface-strong">{{ liveTokenRate | number:'1.1-1' }}</span>
             <span class="text-[10px] text-surface-subtle ml-0.5">tok/s</span>
           </span>
+          <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border"
+                [class.bg-rose-500\\/10]="liveErrorCount > 0"
+                [class.text-rose-600]="liveErrorCount > 0"
+                [class.dark:text-rose-400]="liveErrorCount > 0"
+                [class.border-rose-500\\/30]="liveErrorCount > 0"
+                [class.bg-surface-card]="liveErrorCount === 0"
+                [class.text-surface-subtle]="liveErrorCount === 0"
+                [class.border-surface-border]="liveErrorCount === 0">
+            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"></path>
+            </svg>
+            {{ t('generator.errorsLabel') }} <span class="font-bold">{{ formatNumber(liveErrorCount) }}</span>
+          </span>
+          <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border"
+                [class.bg-amber-500\\/10]="liveRetryCount > 0"
+                [class.text-amber-600]="liveRetryCount > 0"
+                [class.dark:text-amber-400]="liveRetryCount > 0"
+                [class.border-amber-500\\/30]="liveRetryCount > 0"
+                [class.bg-surface-card]="liveRetryCount === 0"
+                [class.text-surface-subtle]="liveRetryCount === 0"
+                [class.border-surface-border]="liveRetryCount === 0">
+            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"></path>
+            </svg>
+            {{ t('generator.retriesLabel') }} <span class="font-bold">{{ formatNumber(liveRetryCount) }}</span>
+          </span>
         </div>
       </div>
 
-      <div class="rounded-lg bg-surface-sunken border border-surface-border p-3 font-mono text-xs leading-relaxed h-48 overflow-y-auto overflow-x-hidden">
+      <div class="rounded-lg bg-surface-sunken border border-surface-border p-3 font-mono text-xs leading-snug h-40 overflow-y-auto overflow-x-hidden">
         @for (line of (liveLines$ | async) ?? []; track $index) {
           <div class="truncate text-surface-strong">{{ line }}</div>
         } @empty {
@@ -199,6 +225,45 @@
     </div>
   </div>
 
+  <!-- ===== Skipped chapters banner =====
+       Visible whenever state.skippedChapters has at least one entry
+       AND we're not actively generating. The retry button kicks off
+       `OrchestratorService.retryChapters(...)` with the current
+       skipped list (filtered to positive numbers inside the service)
+       and disables itself while `isGenerating` to avoid two
+       orchestrator instances fighting over the same state. We
+       deliberately don't gate this on `isCompleted` — a status of
+       `error` or `idle` (after a manual stop with skipped chapters
+       still in flight) should also surface the banner so the user
+       can finish the holes. -->
+  @let skipped = (skippedChapters$ | async) ?? [];
+  @if (skipped.length > 0 && !isGenerating) {
+    <div class="card p-5 border border-amber-500/30 bg-amber-500/5">
+      <div class="flex items-start gap-3 mb-3">
+        <div class="w-10 h-10 rounded-xl bg-amber-500/15 text-amber-600 dark:text-amber-400 flex items-center justify-center flex-shrink-0">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"></path>
+          </svg>
+        </div>
+        <div class="flex-1">
+          <span class="eyebrow text-amber-600 dark:text-amber-400">Incomplete</span>
+          <h3 class="text-base font-semibold text-surface-strong mt-0.5">{{ t('generator.skippedChaptersTitle') }}</h3>
+          <p class="text-sm text-surface-subtle mt-1">
+            Chapter(s)
+            <span class="font-mono text-surface-strong">{{ skipped.join(', ') }}</span>
+            were skipped during generation (LLM error). Re-run generation to fill them in.
+          </p>
+        </div>
+        <button (click)="retrySkippedChapters()" class="btn bg-amber-500 text-white hover:bg-amber-600 shadow-lg shadow-amber-500/30 flex-shrink-0">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"></path>
+          </svg>
+          {{ t('generator.retrySkipped') }}
+        </button>
+      </div>
+    </div>
+  }
+
   <!-- ===== Generation stats (after completion) ===== -->
   @if (isCompleted && generationStats) {
     <div class="card p-5">
@@ -214,8 +279,8 @@
         </div>
       </div>
 
-      <!-- Headline stats: 4 KPI tiles, mono numbers. -->
-      <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+      <!-- Headline stats: 6 KPI tiles, mono numbers. -->
+      <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-5">
         <div class="rounded-lg bg-surface-sunken border border-surface-border p-3">
           <div class="flex items-center gap-1.5 text-xs text-surface-subtle mb-1.5">
             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -254,6 +319,46 @@
             {{ t('generator.chapters') }}
           </div>
           <div class="text-xl font-bold font-mono text-surface-strong">{{ chaptersCount }}</div>
+        </div>
+
+        <div class="rounded-lg bg-surface-sunken border p-3"
+             [class.border-surface-border]="generationStats.errorCount === 0"
+             [class.border-rose-500\\/30]="generationStats.errorCount > 0">
+          <div class="flex items-center gap-1.5 text-xs mb-1.5"
+               [class.text-surface-subtle]="generationStats.errorCount === 0"
+               [class.text-rose-600]="generationStats.errorCount > 0"
+               [class.dark:text-rose-400]="generationStats.errorCount > 0">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"></path>
+            </svg>
+            {{ t('generator.errorsLabel') }}
+          </div>
+          <div class="text-xl font-bold font-mono"
+               [class.text-surface-strong]="generationStats.errorCount === 0"
+               [class.text-rose-600]="generationStats.errorCount > 0"
+               [class.dark:text-rose-400]="generationStats.errorCount > 0">
+            {{ formatNumber(generationStats.errorCount) }}
+          </div>
+        </div>
+
+        <div class="rounded-lg bg-surface-sunken border p-3"
+             [class.border-surface-border]="generationStats.retryCount === 0"
+             [class.border-amber-500\\/30]="generationStats.retryCount > 0">
+          <div class="flex items-center gap-1.5 text-xs mb-1.5"
+               [class.text-surface-subtle]="generationStats.retryCount === 0"
+               [class.text-amber-600]="generationStats.retryCount > 0"
+               [class.dark:text-amber-400]="generationStats.retryCount > 0">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"></path>
+            </svg>
+            {{ t('generator.retriesLabel') }}
+          </div>
+          <div class="text-xl font-bold font-mono"
+               [class.text-surface-strong]="generationStats.retryCount === 0"
+               [class.text-amber-600]="generationStats.retryCount > 0"
+               [class.dark:text-amber-400]="generationStats.retryCount > 0">
+            {{ formatNumber(generationStats.retryCount) }}
+          </div>
         </div>
       </div>
 

@@ -162,7 +162,9 @@ describe('OrchestratorService', () => {
       'setPrologue', 'setEpilogue',
       'resetStats', 'startGenerationTimer', 'endGenerationTimer',
       'recordAgentUsage', 'updateTotalWords',
-      'beginStream$', 'appendStream$', 'endStream$', 'clearLiveStreamBuffer'
+      'beginStream$', 'appendStream$', 'endStream$', 'clearLiveStreamBuffer',
+      'incrementErrorCount', 'incrementRetryCount',
+      'getErrorCount$', 'getRetryCount$'
     ]);
     bookStateServiceSpy.getState.and.returnValue({
       chapters: [],
@@ -625,6 +627,272 @@ describe('OrchestratorService', () => {
     });
   });
 
+  describe('retryChapters', () => {
+    // Builds a chapter-brief list with N chapters so retryChapters
+    // can resolve `blueprint.chapters.find(b => b.number === n)`
+    // for any number in 1..N. The brief fields are minimal — the
+    // retry path doesn't care about content, only the chapter's
+    // number and the brief existence.
+    const buildBriefs = (n: number) => Array.from({ length: n }, (_, i) => ({
+      number: i + 1,
+      title: `Chapter ${i + 1}`,
+      plotBeat: `Beat ${i + 1}`,
+      povCharacter: 'Hero',
+      emotionalState: 'steady',
+      location: 'Somewhere',
+      keyEvents: [`event ${i + 1}`],
+      hookType: 'hook',
+      targetWordCount: 1000,
+    }));
+
+    // Builds a fully approved Chapter with the given number — used
+    // to seed `state.chapters` so we can prove prior chapters keep
+    // their indices after a retry.
+    const approvedChapter = (n: number): Chapter => ({
+      id: `chapter-${n}`,
+      number: n,
+      title: `Chapter ${n}`,
+      content: `prior content for chapter ${n}`,
+      wordCount: 100,
+      status: 'approved',
+      createdAt: new Date(),
+      approvedAt: new Date(),
+      revisions: [],
+    });
+
+    // Override the per-test `getState` to return the chapters and
+    // blueprint we want for the retry. The orchestrator reads
+    // `state.blueprint` once at the top of `retryChapters`, then
+    // calls `getState` continuously during the pipeline (for
+    // `characterState`, `previousChapters`, etc.). Each test needs
+    // a coherent snapshot.
+    const seedState = (chapters: Chapter[], blueprint: Blueprint | null = null) => {
+      bookStateServiceSpy.getState.and.returnValue({
+        chapters,
+        characterStore: { Hero: mockCharacterState },
+        worldStateDoc: 'Test world',
+        status: 'completed',
+        activeAgent: null,
+        blueprint: blueprint ?? { ...mockBlueprint, chapters: buildBriefs(chapters.length + 3) },
+        prologue: null,
+        epilogue: null,
+        currentDraft: null,
+        critique: null,
+        revisionCount: 0,
+        config: mockConfig,
+        error: null,
+        continuityFlags: [],
+        skippedChapters: [],
+        currentChapterNumber: null,
+        stats: createInitialStats(),
+        liveStream: '',
+        liveStreamAgent: null,
+        liveStreamStartedAt: null,
+        liveTokensApprox: 0
+      });
+    };
+
+    it('completes without writing when called with an empty numbers list', (done) => {
+      service.retryChapters([], mockConfig).subscribe({
+        next: () => {},
+        complete: () => {
+          expect(authorServiceSpy.writeChapterStreamingWithUsage).not.toHaveBeenCalled();
+          // No state mutation should have happened — the early
+          // return path skips the per-chapter loop and the finalize
+          // helper. setSkippedChapters would only run inside a real
+          // retry loop.
+          expect(bookStateServiceSpy.setSkippedChapters).not.toHaveBeenCalled();
+          expect(bookStateServiceSpy.setStatus).not.toHaveBeenCalled();
+          done();
+        }
+      });
+    });
+
+    it('filters non-positive numbers before processing', (done) => {
+      seedState([], { ...mockBlueprint, chapters: buildBriefs(5) });
+
+      service.retryChapters([0, -1, -7], mockConfig).subscribe({
+        next: () => {},
+        complete: () => {
+          // After filtering, the list is empty → no-op.
+          expect(authorServiceSpy.writeChapterStreamingWithUsage).not.toHaveBeenCalled();
+          expect(bookStateServiceSpy.setStatus).not.toHaveBeenCalled();
+          done();
+        }
+      });
+    });
+
+    it('errors when no blueprint is available', (done) => {
+      bookStateServiceSpy.getState.and.returnValue({
+        chapters: [],
+        characterStore: {},
+        worldStateDoc: '',
+        status: 'completed',
+        activeAgent: null,
+        blueprint: null,
+        prologue: null,
+        epilogue: null,
+        currentDraft: null,
+        critique: null,
+        revisionCount: 0,
+        config: mockConfig,
+        error: null,
+        continuityFlags: [],
+        skippedChapters: [],
+        currentChapterNumber: null,
+        stats: createInitialStats(),
+        liveStream: '',
+        liveStreamAgent: null,
+        liveStreamStartedAt: null,
+        liveTokensApprox: 0
+      });
+
+      service.retryChapters([1, 2, 3], mockConfig).subscribe({
+        error: (err) => {
+          expect(err.message).toContain('No blueprint');
+          expect(authorServiceSpy.writeChapterStreamingWithUsage).not.toHaveBeenCalled();
+          done();
+        }
+      });
+    });
+
+    it('only invokes the author service for the requested chapter numbers', (done) => {
+      seedState([approvedChapter(1), approvedChapter(2), approvedChapter(4)], {
+        ...mockBlueprint,
+        chapters: buildBriefs(5)
+      });
+
+      const callsByNumber: number[] = [];
+      authorServiceSpy.writeChapterStreamingWithUsage.and.callFake((brief: ChapterBrief) => {
+        callsByNumber.push(brief.number);
+        return of({
+          draft: { ...mockDraft, chapterId: `chapter-${brief.number}` },
+          usage: { promptTokens: 100, completionTokens: 200, totalTokens: 300 }
+        });
+      });
+
+      // Only retry chapter 3 — leave chapters 1, 2, 4, 5 alone.
+      service.retryChapters([3], mockConfig).subscribe({
+        next: () => {},
+        complete: () => {
+          expect(callsByNumber).toEqual([3]);
+          done();
+        }
+      });
+    });
+
+    it('preserves prior approved chapters at their original indices after a successful retry', (done) => {
+      seedState([approvedChapter(1), approvedChapter(2)], {
+        ...mockBlueprint,
+        chapters: buildBriefs(3)
+      });
+
+      authorServiceSpy.writeChapterStreamingWithUsage.and.callFake((brief: ChapterBrief) => of({
+        draft: {
+          ...mockDraft,
+          chapterId: `chapter-${brief.number}`,
+          content: `new content for chapter ${brief.number}`,
+        },
+        usage: { promptTokens: 100, completionTokens: 200, totalTokens: 300 }
+      }));
+
+      service.retryChapters([3], mockConfig).subscribe({
+        next: () => {},
+        complete: () => {
+          // The most recent setChapters call should have ch1 at
+          // index 0, ch2 at index 1, and the freshly-approved ch3
+          // inserted at index 2.
+          const allCalls = bookStateServiceSpy.setChapters.calls.allArgs();
+          const latest: Chapter[] = allCalls[allCalls.length - 1][0];
+          expect(latest.length).toBe(3);
+          expect(latest[0].id).toBe('chapter-1');
+          expect(latest[1].id).toBe('chapter-2');
+          expect(latest[2].id).toBe('chapter-3');
+          expect(latest[2].content).toBe('new content for chapter 3');
+          // Successful retry → empty skipped list.
+          expect(bookStateServiceSpy.setSkippedChapters).toHaveBeenCalledWith([]);
+          // Final status reflects the clean retry.
+          const statuses = bookStateServiceSpy.setStatus.calls.allArgs().map(c => c[0]);
+          expect(statuses[statuses.length - 1]).toBe('completed');
+          done();
+        }
+      });
+    });
+
+    it('keeps a failing retry on the skipped list and flips status to error', (done) => {
+      // The retry path takes 2s × maxRetries (3 attempts, 2 between)
+      // before failing — bump the Jasmine timeout.
+      seedState([approvedChapter(1), approvedChapter(2)], {
+        ...mockBlueprint,
+        chapters: buildBriefs(3)
+      });
+      authorServiceSpy.writeChapterStreamingWithUsage.and.returnValue(throwError(() => new Error('still broken')));
+
+      service.retryChapters([3], mockConfig).subscribe({
+        next: () => {},
+        complete: () => {
+          // prior chapters untouched
+          expect(bookStateServiceSpy.setChapters).not.toHaveBeenCalled();
+          // still on the skipped list
+          const skippedCalls = bookStateServiceSpy.setSkippedChapters.calls.allArgs().map(c => c[0]);
+          expect(skippedCalls[skippedCalls.length - 1]).toEqual([3]);
+          // failure → error so the export gate stays loud
+          const statuses = bookStateServiceSpy.setStatus.calls.allArgs().map(c => c[0]);
+          expect(statuses[statuses.length - 1]).toBe('error');
+          done();
+        }
+      });
+    }, 15000);
+
+    it('processes multiple retry targets in ascending number order', (done) => {
+      seedState([], {
+        ...mockBlueprint,
+        chapters: buildBriefs(5)
+      });
+
+      const callsByNumber: number[] = [];
+      authorServiceSpy.writeChapterStreamingWithUsage.and.callFake((brief: ChapterBrief) => {
+        callsByNumber.push(brief.number);
+        return of({
+          draft: { ...mockDraft, chapterId: `chapter-${brief.number}` },
+          usage: { promptTokens: 100, completionTokens: 200, totalTokens: 300 }
+        });
+      });
+
+      // Pass them deliberately out of order — the orchestrator
+      // should sort and process 2 then 4.
+      service.retryChapters([4, 2], mockConfig).subscribe({
+        next: () => {},
+        complete: () => {
+          expect(callsByNumber).toEqual([2, 4]);
+          done();
+        }
+      });
+    });
+
+    it('keeps chapter 3 at its correct index even when chapters 4 and 5 were approved earlier', (done) => {
+      // Scenario covered by the plan: a previous run skipped ch3
+      // but approved 1, 2, 4, 5 — the orchestrator's append-only
+      // pipeline produced [ch1, ch2, ch4, ch5]. A retry of ch3
+      // must land at index 2 (between ch2 and ch4), not at the
+      // tail.
+      seedState([approvedChapter(1), approvedChapter(2), approvedChapter(4), approvedChapter(5)], {
+        ...mockBlueprint,
+        chapters: buildBriefs(5)
+      });
+
+      service.retryChapters([3], mockConfig).subscribe({
+        next: () => {},
+        complete: () => {
+          const allCalls = bookStateServiceSpy.setChapters.calls.allArgs();
+          const latest: Chapter[] = allCalls[allCalls.length - 1][0];
+          expect(latest.map(c => c.number)).toEqual([1, 2, 3, 4, 5]);
+          done();
+        }
+      });
+    });
+  });
+
   describe('stop', () => {
     it('should set status to idle', () => {
       service.stop();
@@ -635,5 +903,51 @@ describe('OrchestratorService', () => {
       service.stop();
       expect(bookStateServiceSpy.setActiveAgent).toHaveBeenCalledWith(null);
     });
+  });
+
+  describe('error and retry counters', () => {
+    // The orchestrator increments `errorCount` once per agent
+    // failure and `retryCount` once per scheduled retry. A clean
+    // run (no failures) must leave both at zero so the live output
+    // card chips and the stats KPI tiles don't false-positive.
+    it('keeps both counters at zero on a clean run', (done) => {
+      service.orchestrate(mockConfig).subscribe({
+        complete: () => {
+          expect(bookStateServiceSpy.incrementErrorCount).not.toHaveBeenCalled();
+          expect(bookStateServiceSpy.incrementRetryCount).not.toHaveBeenCalled();
+          done();
+        }
+      });
+    });
+
+    it('increments the error counter when the architect blueprint call fails', (done) => {
+      architectServiceSpy.generateBlueprintWithUsage.and.returnValue(throwError(() => new Error('blueprint down')));
+
+      service.orchestrate(mockConfig).subscribe({
+        error: () => {
+          expect(bookStateServiceSpy.incrementErrorCount).toHaveBeenCalled();
+          done();
+        }
+      });
+    });
+
+    it('increments the error counter once per author attempt failure across retries', (done) => {
+      // 3 author attempts, all error out before the per-section
+      // skip rule kicks in. Each failed attempt counts as one
+      // error; the first attempt does NOT count as a retry.
+      authorServiceSpy.writeChapterStreamingWithUsage.and.returnValue(throwError(() => new Error('author down')));
+
+      service.orchestrate(mockConfig).subscribe({
+        complete: () => {
+          // 3 failed author attempts → 3 error increments.
+          expect((bookStateServiceSpy.incrementErrorCount as jasmine.Spy).calls.count()).toBe(3);
+          // 2 retries scheduled (attempts 2 and 3) → 2 retry
+          // increments. The third failure has no follow-up attempt
+          // so it does not bump the retry counter.
+          expect((bookStateServiceSpy.incrementRetryCount as jasmine.Spy).calls.count()).toBe(2);
+          done();
+        }
+      });
+    }, 15000);
   });
 });

@@ -108,6 +108,7 @@ export class OrchestratorService {
           );
         }),
         catchError(error => {
+          this.bookStateService.incrementErrorCount();
           this.bookStateService.setStatus('error');
           this.bookStateService.setError(error.message);
           return throwError(error);
@@ -215,6 +216,131 @@ export class OrchestratorService {
   }
 
   /**
+   * Re-run the per-chapter pipeline for an explicit subset of chapter
+   * numbers. Used by the generator UI's "Retry skipped chapters"
+   * button: passing `state.skippedChapters` produces a partial run
+   * that touches only the holes from a previous attempt.
+   *
+   * Unlike `orchestrate()`, this method never resets existing
+   * approved chapters, prologue, epilogue, blueprint, config, or
+   * token-usage stats — the chapter-boundary detector is handled by
+   * `lastSeenChapterNumber` in the generator component (reset to
+   * `null` at the start of any manual kickoff), not here. Approved
+   * chapters from earlier runs keep their content; the retry only
+   * overwrites the chapter slots whose number is in `numbers`.
+   *
+   * `numbers` is filtered to positive integers: prologue and epilogue
+   * are not stored in `skippedChapters` (the export gate already
+   * filters `n > 0`) so attempting to retry them makes no sense.
+   *
+   * Mirrors the per-chapter skip rule: a chapter that fails again is
+   * appended to the new `skippedChapters`, a chapter that succeeds
+   * is left out. After the loop the orchestrator writes the new
+   * skipped list and flips status to `error` if anything is still
+   * skipped, otherwise `completed` — matching `processChapters`'s
+   * "user finds out at export" behaviour.
+   *
+   * Does NOT touch `OrchestratorService.currentSubscription`. The
+   * outer caller is responsible for unsubscribing (same pattern as
+   * `orchestrate`); `stop()` still clears pending timers and flips
+   * `stopped`, and the per-chapter pipeline checks `stopped` at
+   * every retry boundary, so a Stop mid-retry can't issue fresh
+   * API calls.
+   */
+  retryChapters(numbers: number[], config: BookConfig): Observable<any> {
+    return new Observable(subscriber => {
+      this.stopped = false;
+      this.clearAllTimers();
+
+      const targets = (numbers ?? [])
+        .filter(n => typeof n === 'number' && n > 0)
+        .slice()
+        .sort((a, b) => a - b);
+
+      if (targets.length === 0) {
+        subscriber.next('No skipped chapters to retry');
+        subscriber.complete();
+        return;
+      }
+
+      const blueprint = this.bookStateService.getState().blueprint;
+      if (!blueprint) {
+        subscriber.error(new Error('No blueprint available; cannot retry chapters.'));
+        return;
+      }
+
+      this.bookStateService.startGenerationTimer();
+      this.bookStateService.setStatus('generating');
+      this.bookStateService.setActiveAgent(null);
+
+      const stillSkipped: number[] = [];
+      let cursor = 0;
+
+      const processNext = () => {
+        if (this.stopped) {
+          finalize(true);
+          subscriber.next('Retry run stopped');
+          subscriber.complete();
+          return;
+        }
+        if (cursor >= targets.length) {
+          finalize(false);
+          subscriber.next('Retry run completed');
+          subscriber.complete();
+          return;
+        }
+
+        const chapterNumber = targets[cursor];
+        const brief = blueprint.chapters.find(b => b.number === chapterNumber);
+
+        if (!brief) {
+          stillSkipped.push(chapterNumber);
+          cursor++;
+          processNext();
+          return;
+        }
+
+        this.runSectionPipeline(brief, config, 'chapter', chapterNumber, 'replace').subscribe({
+          next: () => {
+            cursor++;
+            processNext();
+          },
+          error: (error) => {
+            console.error(
+              `Orchestrator: retry for chapter ${chapterNumber} failed — keeping on skipped list.`,
+              error?.message || error,
+            );
+            stillSkipped.push(chapterNumber);
+            cursor++;
+            processNext();
+          }
+        });
+      };
+
+      const finalize = (wasStopped: boolean) => {
+        this.bookStateService.setSkippedChapters(stillSkipped);
+        this.bookStateService.setCurrentChapter(null);
+        this.bookStateService.setActiveAgent(null);
+        this.bookStateService.endGenerationTimer();
+        this.bookStateService.endStream$();
+        if (wasStopped) {
+          this.bookStateService.setStatus('idle');
+        } else {
+          this.bookStateService.setStatus(stillSkipped.length === 0 ? 'completed' : 'error');
+        }
+      };
+
+      processNext();
+
+      return () => {
+        this.stopped = true;
+        this.clearAllTimers();
+        this.bookStateService.endStream$();
+      };
+    });
+  }
+
+  /**
    * Run the prologue through the full pipeline when the architect
    * provided a `prologue` brief. When the brief is absent (user did
    * not opt in, or the architect forgot and the fallback didn't
@@ -296,6 +422,16 @@ export class OrchestratorService {
    *   - 'prologue'  → stored on `state.prologue`
    *   - 'epilogue'  → stored on `state.epilogue`
    *
+   * `placement` controls how a chapter is appended/replaced when
+   * `slot === 'chapter'`:
+   *   - 'append'  (default) — new chapter goes at the end.
+   *   - 'replace'           — new chapter overwrites the slot for
+   *                            `sectionNumber`. Used by `retryChapters`
+   *                            so an approved chapter keeps its index
+   *                            in the book (chapter 3 stays chapter 3,
+   *                            doesn't become chapter 4) and the book
+   *                            stays in order without page gaps.
+   *
    * Returns the approved `Chapter`. Errors propagate to the caller,
    * who decides whether to skip (the section pipeline mirrors the
    * existing per-chapter skip rule).
@@ -305,6 +441,7 @@ export class OrchestratorService {
     config: BookConfig,
     slot: 'chapter' | 'prologue' | 'epilogue',
     chapterNumber?: number,
+    placement: 'append' | 'replace' = 'append',
   ): Observable<Chapter> {
     // For 'chapter' the caller passes the 1-based number; for
     // prologue/epilogue we use 0 (matches `ChapterBrief.number` from
@@ -352,7 +489,7 @@ export class OrchestratorService {
                     // Run character and continuity checks after revision
                     this.runPostRevisionChecks(brief, revisedDraft, config, sectionNumber).subscribe({
                       next: () => {
-                        const chapter = this.approveSection(brief, revisedDraft, criticResult.data, sectionNumber, slot);
+                        const chapter = this.approveSection(brief, revisedDraft, criticResult.data, sectionNumber, slot, placement);
                         subscriber.next(chapter);
                         subscriber.complete();
                       },
@@ -367,7 +504,7 @@ export class OrchestratorService {
                 // Run character and continuity checks even if no revision
                 this.runPostRevisionChecks(brief, draft, config, sectionNumber).subscribe({
                   next: () => {
-                    const chapter = this.approveSection(brief, draft, criticResult.data, sectionNumber, slot);
+                    const chapter = this.approveSection(brief, draft, criticResult.data, sectionNumber, slot, placement);
                     subscriber.next(chapter);
                     subscriber.complete();
                   },
@@ -395,7 +532,7 @@ export class OrchestratorService {
    * for prologue/epilogue it stores on `state.prologue` /
    * `state.epilogue`.
    */
-  private approveSection(brief: ChapterBrief, draft: ChapterDraft, critique: any, sectionNumber: number, slot: 'chapter' | 'prologue' | 'epilogue'): Chapter {
+  private approveSection(brief: ChapterBrief, draft: ChapterDraft, critique: any, sectionNumber: number, slot: 'chapter' | 'prologue' | 'epilogue', placement: 'append' | 'replace' = 'append'): Chapter {
     const id = slot === 'chapter'
       ? `chapter-${sectionNumber}`
       : slot;
@@ -416,8 +553,35 @@ export class OrchestratorService {
     const currentState = this.bookStateService.getState();
 
     if (slot === 'chapter') {
-      const updatedChapters = [...currentState.chapters, chapter];
-      this.bookStateService.setChapters(updatedChapters);
+      if (placement === 'replace') {
+        const idx = currentState.chapters.findIndex(c => c.number === sectionNumber);
+        if (idx >= 0) {
+          const updatedChapters = [...currentState.chapters];
+          updatedChapters[idx] = chapter;
+          this.bookStateService.setChapters(updatedChapters);
+        } else {
+          // Chapter wasn't approved yet (retrying a previously
+          // skipped slot). Insert at the number-ordered position so
+          // the chapter lands at its intended index even if a
+          // later-numbered chapter is already in the array — the
+          // pipeline skips and appends during the original run,
+          // so `state.chapters` can be out of number order on
+          // entry. Without this, retrying ch 2 after the original
+          // run produced `[ch1, ch3, ch5, ch2]` instead of
+          // `[ch1, ch2, ch3, ch5]`.
+          const insertAt = currentState.chapters.findIndex(c => c.number > sectionNumber);
+          const insertIdx = insertAt >= 0 ? insertAt : currentState.chapters.length;
+          const updatedChapters = [
+            ...currentState.chapters.slice(0, insertIdx),
+            chapter,
+            ...currentState.chapters.slice(insertIdx),
+          ];
+          this.bookStateService.setChapters(updatedChapters);
+        }
+      } else {
+        const updatedChapters = [...currentState.chapters, chapter];
+        this.bookStateService.setChapters(updatedChapters);
+      }
     } else if (slot === 'prologue') {
       this.bookStateService.setPrologue(chapter);
     } else {
@@ -493,6 +657,7 @@ export class OrchestratorService {
                 },
                 error: (err) => {
                   console.error('Continuity check error:', err);
+                  this.bookStateService.incrementErrorCount();
                   subscriber.next('Continuity check failed, continuing...');
                   subscriber.complete();
                 }
@@ -500,6 +665,7 @@ export class OrchestratorService {
             },
             error: (err) => {
               console.error('Character update error:', err);
+              this.bookStateService.incrementErrorCount();
               subscriber.next('Character update failed, continuing...');
               subscriber.complete();
             }
@@ -507,6 +673,7 @@ export class OrchestratorService {
         },
         error: (err) => {
           console.error('Character check error:', err);
+          this.bookStateService.incrementErrorCount();
           subscriber.next('Character check failed, continuing...');
           subscriber.complete();
         }
@@ -564,6 +731,7 @@ export class OrchestratorService {
           subscriber.error(new Error(`Failed to generate chapter ${brief.number} after ${maxRetries} attempts`));
           return;
         }
+        self.bookStateService.incrementRetryCount();
         self.scheduleTimer(() => ctx.attempt(), 2000);
       };
 
@@ -598,6 +766,7 @@ export class OrchestratorService {
             const draft = result.draft;
             if (!draft || !draft.content || draft.content.trim().length === 0) {
               console.error(`Empty draft received on attempt ${attempt}`);
+              self.bookStateService.incrementErrorCount();
               self.bookStateService.endStream$();
               scheduleRetry();
               return;
@@ -618,6 +787,7 @@ export class OrchestratorService {
           error: (error) => {
             if (finished) return;
             console.error(`Author attempt ${attempt} errored:`, error?.message || error);
+            self.bookStateService.incrementErrorCount();
             self.bookStateService.endStream$();
             scheduleRetry();
           }
@@ -728,6 +898,7 @@ export class OrchestratorService {
                     `Orchestrator: critic re-eval failed for chapter ${brief.number}; keeping current draft.`,
                     error?.message || error
                   );
+                  this.bookStateService.incrementErrorCount();
                   finish(currentDraft, 'critic re-eval failed, keeping draft');
                 }
               });
@@ -737,7 +908,9 @@ export class OrchestratorService {
               console.warn(
                 `Orchestrator: reviser attempt ${attempt}/${maxReviseRetries} for chapter ${brief.number} failed: ${error?.message || error}`
               );
+              this.bookStateService.incrementErrorCount();
               this.bookStateService.endStream$();
+              this.bookStateService.incrementRetryCount();
               this.scheduleTimer(doAttempt, 2000);
             }
           });
