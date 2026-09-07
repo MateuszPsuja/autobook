@@ -11,6 +11,12 @@ export interface EpubBuildInput {
   config: BookConfig;
   labels: ExportLabels;
   bookAuthor: string;
+  /** Optional approved prologue. Rendered as its own XHTML section
+   *  before Chapter 1, with the localised `labels.prologueLabel`. */
+  prologue?: Chapter | null;
+  /** Optional approved epilogue. Rendered after the last numbered
+   *  chapter, with the localised `labels.epilogueLabel`. */
+  epilogue?: Chapter | null;
   /** Optional. When provided, embedded in the cover, back cover, and per-chapter XHTML. */
   illustrationCtx?: {
     chapterIllustrations?: Map<string, ChapterIllustration>;
@@ -393,13 +399,65 @@ function buildChapterXhtml(
 }
 
 /**
- * Build the EPUB 3 navigation document. Lists every chapter.
+ * Build a prologue or epilogue XHTML section. Mirrors `buildChapterXhtml`
+ * but uses `labels.prologueLabel` / `labels.epilogueLabel` for the
+ * heading and the `prologue` / `epilogue` section id. Reuses the
+ * same chapter CSS class so typography stays consistent.
+ */
+function buildSectionXhtml(
+  section: Chapter,
+  sectionKind: 'prologue' | 'epilogue',
+  illustration: { ill: ChapterIllustration; entry: ImageEntry } | null,
+  labels: ExportLabels,
+): string {
+  const body = stripRunningWordCount(section.content || '').trim();
+  const paragraphs = body.split(/\n\s*\n/).filter(p => p.trim().length > 0);
+  const sectionLabel = sectionKind === 'prologue' ? labels.prologueLabel : labels.epilogueLabel;
+  const titleHtml = `<h1 class="chapter-title">${escapeXml(sectionLabel)}</h1>`;
+  let figure = '';
+  if (illustration) {
+    const fileName = illustration.entry.href.split('/').pop()!;
+    const caption = illustration.ill.caption || '';
+    figure = `<figure class="chapter-illustration"><img src="../images/${fileName}" alt="${escapeXml(caption)}"/><figcaption>${escapeXml(caption)}</figcaption></figure>`;
+  }
+  const paragraphHtml = paragraphs
+    .map((p, i) => `<p${i === 0 ? ' class="first-paragraph"' : ''}>${escapeXml(p)}</p>`)
+    .join('\n  ');
+  return `<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" lang="en">
+<head>
+  <title>${escapeXml(sectionLabel)}</title>
+  <link rel="stylesheet" type="text/css" href="../styles/book.css"/>
+</head>
+<body>
+<section class="chapter" id="${sectionKind}">
+  ${titleHtml}
+  ${figure}
+  ${paragraphHtml}
+</section>
+</body>
+</html>`;
+}
+
+/**
+ * Build the EPUB 3 navigation document. Lists every chapter, plus
+ * the optional prologue (before chapter 1) and epilogue (after the
+ * last chapter). Section labels come from `labels` so the nav
+ * reads in the target language.
  */
 function buildNavXhtml(input: EpubBuildInput): string {
-  const { chapters, labels } = input;
-  const items = chapters
-    .map(ch => `<li><a href="xhtml/chapter-${ch.number}.xhtml">${escapeXml(`${labels.chapterLabel} ${ch.number}: ${ch.title || ''}`)}</a></li>`)
-    .join('\n      ');
+  const { chapters, labels, prologue, epilogue } = input;
+  const items: string[] = [];
+  if (prologue) {
+    items.push(`<li><a href="xhtml/prologue.xhtml">${escapeXml(labels.prologueLabel)}</a></li>`);
+  }
+  for (const ch of chapters) {
+    items.push(`<li><a href="xhtml/chapter-${ch.number}.xhtml">${escapeXml(`${labels.chapterLabel} ${ch.number}: ${ch.title || ''}`)}</a></li>`);
+  }
+  if (epilogue) {
+    items.push(`<li><a href="xhtml/epilogue.xhtml">${escapeXml(labels.epilogueLabel)}</a></li>`);
+  }
   return `<?xml version="1.0" encoding="utf-8"?>
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" lang="en">
@@ -411,7 +469,7 @@ function buildNavXhtml(input: EpubBuildInput): string {
 <nav epub:type="toc" id="toc">
   <h1>${escapeXml(labels.tocLabel)}</h1>
   <ol>
-      ${items}
+      ${items.join('\n      ')}
   </ol>
 </nav>
 </body>
@@ -435,7 +493,7 @@ interface OpfImageEntry {
 }
 
 function buildOpf(input: EpubBuildInput, imageEntries: OpfImageEntry[]): string {
-  const { chapters, config, labels, bookAuthor } = input;
+  const { chapters, config, labels, bookAuthor, prologue, epilogue } = input;
   const title = (config?.title || '').trim() || labels.untitledFallback;
   const now = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
 
@@ -445,8 +503,14 @@ function buildOpf(input: EpubBuildInput, imageEntries: OpfImageEntry[]): string 
     `<item id="back-cover" href="xhtml/back-cover.xhtml" media-type="application/xhtml+xml"/>`,
     `<item id="styles" href="styles/book.css" media-type="text/css"/>`,
   ];
+  if (prologue) {
+    manifestItems.push(`<item id="prologue" href="xhtml/prologue.xhtml" media-type="application/xhtml+xml"/>`);
+  }
   for (const ch of chapters) {
     manifestItems.push(`<item id="chapter-${ch.number}" href="xhtml/chapter-${ch.number}.xhtml" media-type="application/xhtml+xml"/>`);
+  }
+  if (epilogue) {
+    manifestItems.push(`<item id="epilogue" href="xhtml/epilogue.xhtml" media-type="application/xhtml+xml"/>`);
   }
   for (const img of imageEntries) {
     const isCover = img.id === 'img-cover-front';
@@ -456,7 +520,9 @@ function buildOpf(input: EpubBuildInput, imageEntries: OpfImageEntry[]): string 
 
   const spineItems: string[] = [
     `<itemref idref="cover"/>`,
+    ...(prologue ? [`<itemref idref="prologue"/>`] : []),
     ...chapters.map(ch => `<itemref idref="chapter-${ch.number}"/>`),
+    ...(epilogue ? [`<itemref idref="epilogue"/>`] : []),
     `<itemref idref="back-cover"/>`,
   ];
 
@@ -575,10 +641,18 @@ export function buildEpubBlob(input: EpubBuildInput): Blob {
   // preserve order and to skip chapters that don't exist in the
   // illustration map.
   const chapterXhtmlByPath = new Map<string, string>();
+  if (input.prologue) {
+    const ill = chapterImageByChapterId.get(input.prologue.id);
+    chapterXhtmlByPath.set('OEBPS/xhtml/prologue.xhtml', buildSectionXhtml(input.prologue, 'prologue', ill || null, input.labels));
+  }
   for (const ch of input.chapters) {
     const ill = chapterImageByChapterId.get(ch.id);
     const xhtml = buildChapterXhtml(ch, ill || null, input.labels);
     chapterXhtmlByPath.set(`OEBPS/xhtml/chapter-${ch.number}.xhtml`, xhtml);
+  }
+  if (input.epilogue) {
+    const ill = chapterImageByChapterId.get(input.epilogue.id);
+    chapterXhtmlByPath.set('OEBPS/xhtml/epilogue.xhtml', buildSectionXhtml(input.epilogue, 'epilogue', ill || null, input.labels));
   }
 
   const opfImageEntries: OpfImageEntry[] = allImages.map(e => ({

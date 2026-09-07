@@ -217,8 +217,12 @@ function buildToc(args: {
   chapters: Chapter[];
   tocLabel: string;
   chapterLabel: string;
+  prologueLabel: string;
+  epilogueLabel: string;
+  prologue?: Chapter | null;
+  epilogue?: Chapter | null;
 }): DocContent[] {
-  const { chapters, tocLabel, chapterLabel } = args;
+  const { chapters, tocLabel, chapterLabel, prologueLabel, epilogueLabel, prologue, epilogue } = args;
   const out: DocContent[] = [
     { text: tocLabel.toUpperCase(), style: 'tocTitle' },
     { text: '', margin: [0, 0, 0, 8] },
@@ -238,7 +242,7 @@ function buildToc(args: {
     },
   ];
 
-  for (const chapter of chapters) {
+  const pushTocEntry = (eyebrow: string, title: string, idAnchor: string) => {
     out.push({
       // 3-column layout: eyebrow (auto) | title (`*` — takes the
       // remaining width) | page number (auto). Previously the
@@ -253,18 +257,18 @@ function buildToc(args: {
       // second line without dragging the page number down with it.
       columns: [
         {
-          text: `${chapterLabel} ${chapter.number}`,
+          text: eyebrow,
           style: 'tocEyebrow',
           width: 'auto',
         },
         {
-          text: chapter.title,
+          text: title,
           style: 'tocTitle2',
           width: '*',
         },
         {
           text: '',
-          pageReference: `ch-${chapter.id}`,
+          pageReference: `ch-${idAnchor}`,
           style: 'tocNumber',
           width: 'auto',
         },
@@ -272,6 +276,16 @@ function buildToc(args: {
       columnGap: 6,
       margin: [0, 6, 0, 6],
     });
+  };
+
+  if (prologue) {
+    pushTocEntry(prologueLabel, prologueLabel, prologue.id);
+  }
+  for (const chapter of chapters) {
+    pushTocEntry(`${chapterLabel} ${chapter.number}`, chapter.title, chapter.id);
+  }
+  if (epilogue) {
+    pushTocEntry(epilogueLabel, epilogueLabel, epilogue.id);
   }
 
   out.push({ text: '', pageBreak: 'after' });
@@ -286,6 +300,8 @@ function buildChapter(args: {
   options: PdfExportOptions;
   labels: {
     chapterLabel: string;
+    prologueLabel: string;
+    epilogueLabel: string;
   };
   chapterIllustrations?: Map<string, ChapterIllustration>;
 }): DocContent[] {
@@ -299,21 +315,43 @@ function buildChapter(args: {
     pageBreak: 'before',
   });
 
-  // Chapter eyebrow: "CHAPTER  I" etc. The first real text node carries
-  // the `id` so the TOC's `pageReference` can resolve. (pdfmake ignores
-  // `id` on an empty text node because no line is built for it.)
+  const isPrologue = chapter.id === 'prologue';
+  const isEpilogue = chapter.id === 'epilogue';
+  const sectionLabel = isPrologue
+    ? labels.prologueLabel
+    : isEpilogue
+      ? labels.epilogueLabel
+      : labels.chapterLabel;
+
+  // Section eyebrow: "CHAPTER  I", "PROLOGUE", "EPILOGUE", etc. The
+  // first real text node carries the `id` so the TOC's
+  // `pageReference` can resolve. (pdfmake ignores `id` on an empty
+  // text node because no line is built for it.)
   if (options.includeTitles) {
-    const numRoman = toRoman(chapter.number);
+    let eyebrowText: string;
+    if (isPrologue) {
+      eyebrowText = labels.prologueLabel.toUpperCase();
+    } else if (isEpilogue) {
+      eyebrowText = labels.epilogueLabel.toUpperCase();
+    } else {
+      eyebrowText = `${labels.chapterLabel.toUpperCase()}  ${toRoman(chapter.number)}`;
+    }
     out.push({
-      text: `${labels.chapterLabel.toUpperCase()}  ${numRoman}`,
+      text: eyebrowText,
       style: 'chapterEyebrow',
       id: `ch-${chapter.id}`,
     });
 
-    out.push({
-      text: chapter.title,
-      style: 'chapterTitle',
-    });
+    // For prologue / epilogue, the eyebrow already reads as the
+    // full title — no separate "title" line. Keeps the visual
+    // hierarchy clean ("PROLOGUE" alone on the page instead of
+    // "PROLOGUE" + "Prologue" stacked).
+    if (!isPrologue && !isEpilogue) {
+      out.push({
+        text: chapter.title,
+        style: 'chapterTitle',
+      });
+    }
 
     out.push({
       text: '\u00B7  \u00B7  \u00B7',  // · middle-dot ornament
@@ -325,7 +363,7 @@ function buildChapter(args: {
     // localised "Chapter" word so the anchor text matches the
     // language of the rest of the export.
     out.push({
-      text: `${labels.chapterLabel} ${chapter.number}`,
+      text: sectionLabel,
       style: 'bodyNoIndent',
       id: `ch-${chapter.id}`,
       margin: [0, 0, 0, 0],
@@ -466,6 +504,8 @@ export function buildPdfDocument(
     ? config.themes.slice(0, 3).join('  \u00B7  ')
     : null;
   const genre = (config?.genre || '').trim();
+  const prologue = context.state.prologue;
+  const epilogue = context.state.epilogue;
 
   // ---- Content list -------------------------------------------------------
   const content: DocContent[] = [];
@@ -496,7 +536,32 @@ export function buildPdfDocument(
 
   if (options.includeTOC) {
     content.push(
-      ...buildToc({ chapters, tocLabel: labels.tocLabel, chapterLabel: labels.chapterLabel }),
+      ...buildToc({
+        chapters,
+        tocLabel: labels.tocLabel,
+        chapterLabel: labels.chapterLabel,
+        prologueLabel: labels.prologueLabel,
+        epilogueLabel: labels.epilogueLabel,
+        prologue,
+        epilogue,
+      }),
+    );
+  }
+
+  if (prologue) {
+    content.push(
+      ...buildChapter({
+        chapter: prologue,
+        index: -1,
+        total: chapters.length,
+        options,
+        labels: {
+          chapterLabel: labels.chapterLabel,
+          prologueLabel: labels.prologueLabel,
+          epilogueLabel: labels.epilogueLabel,
+        },
+        chapterIllustrations: context.chapterIllustrations,
+      }),
     );
   }
 
@@ -509,11 +574,30 @@ export function buildPdfDocument(
         options,
         labels: {
           chapterLabel: labels.chapterLabel,
+          prologueLabel: labels.prologueLabel,
+          epilogueLabel: labels.epilogueLabel,
         },
         chapterIllustrations: context.chapterIllustrations,
       }),
     );
   });
+
+  if (epilogue) {
+    content.push(
+      ...buildChapter({
+        chapter: epilogue,
+        index: chapters.length,
+        total: chapters.length,
+        options,
+        labels: {
+          chapterLabel: labels.chapterLabel,
+          prologueLabel: labels.prologueLabel,
+          epilogueLabel: labels.epilogueLabel,
+        },
+        chapterIllustrations: context.chapterIllustrations,
+      }),
+    );
+  }
 
   // Back cover (when illustrations are enabled) — typographic layout
   // with an optional small decorative image. The page break is on the

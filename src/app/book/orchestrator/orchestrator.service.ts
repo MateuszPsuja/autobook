@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { Observable, Subscription, throwError } from 'rxjs';
-import { switchMap, catchError } from 'rxjs/operators';
+import { switchMap, catchError, map } from 'rxjs/operators';
 import { BookStateService } from '../state/book-state.service';
 import { ArchitectService } from '../agents/architect.service';
 import { AuthorService } from '../agents/author.service';
@@ -76,6 +76,8 @@ export class OrchestratorService {
 
       this.bookStateService.setConfig(config);
       this.bookStateService.setChapters([]); // Reset chapters
+      this.bookStateService.setPrologue(null);
+      this.bookStateService.setEpilogue(null);
       this.bookStateService.setCurrentDraft(null);
       this.bookStateService.setCritique(null);
       this.bookStateService.setRevisionCount(0);
@@ -94,8 +96,16 @@ export class OrchestratorService {
           this.bookStateService.setBlueprint(result.data);
           this.bookStateService.setActiveAgent('author');
 
-          // Process each chapter
-          return this.processChapters(result.data, config);
+          // Prologue → numbered chapters → epilogue. Each section
+          // runs the same author → critic → (revise) → character →
+          // continuity pipeline. A failure in any section mirrors
+          // the per-chapter skip behaviour: log, surface in
+          // `state.error`, and continue so the rest of the book
+          // still ships.
+          return this.processPrologue(result.data, config).pipe(
+            switchMap(() => this.processChapters(result.data, config)),
+            switchMap(() => this.processEpilogue(result.data, config)),
+          );
         }),
         catchError(error => {
           this.bookStateService.setStatus('error');
@@ -106,9 +116,12 @@ export class OrchestratorService {
         next: async () => {
           this.bookStateService.endGenerationTimer();
 
-          // Calculate total words from chapters
-          const chapters = this.bookStateService.getState().chapters;
-          const totalWords = chapters.reduce((sum, ch) => sum + (ch.wordCount || 0), 0);
+          // Calculate total words from chapters + prologue + epilogue.
+          const state = this.bookStateService.getState();
+          const totalWords =
+            state.chapters.reduce((sum, ch) => sum + (ch.wordCount || 0), 0) +
+            (state.prologue?.wordCount || 0) +
+            (state.epilogue?.wordCount || 0);
           this.bookStateService.updateTotalWords(totalWords);
 
           // Translation is now an export-time concern, not an
@@ -179,7 +192,7 @@ export class OrchestratorService {
 
         const chapterBrief = chapters[currentChapterIndex];
         const expectedNumber = currentChapterIndex + 1;
-        this.processChapter(chapterBrief, config, expectedNumber).subscribe({
+        this.processChapter(chapterBrief, config, expectedNumber, 'chapter').subscribe({
           next: () => {
             currentChapterIndex++;
             processNextChapter();
@@ -202,25 +215,122 @@ export class OrchestratorService {
   }
 
   /**
-   * Process a single chapter through the agent pipeline
+   * Run the prologue through the full pipeline when the architect
+   * provided a `prologue` brief. When the brief is absent (user did
+   * not opt in, or the architect forgot and the fallback didn't
+   * emit one), this is a no-op. Mirrors the per-chapter skip rule
+   * on failure: log + record on `state.error`, but don't abort the
+   * numbered chapters.
    */
-  private processChapter(brief: ChapterBrief, config: BookConfig, chapterNumber: number): Observable<any> {
+  private processPrologue(blueprint: Blueprint, config: BookConfig): Observable<any> {
+    return this.processSectionIfPresent(blueprint.prologue, config, 'prologue');
+  }
+
+  /**
+   * Symmetric to `processPrologue`. Runs the epilogue pipeline when
+   * the architect supplied an `epilogue` brief.
+   */
+  private processEpilogue(blueprint: Blueprint, config: BookConfig): Observable<any> {
+    return this.processSectionIfPresent(blueprint.epilogue, config, 'epilogue');
+  }
+
+  /**
+   * Shared entry point for any section that may or may not be
+   * present in the blueprint. Returns an Observable that completes
+   * synchronously with `next()` when the brief is absent, and
+   * delegates to `runSectionPipeline` (the shared author → critic
+   * → reviser → character → continuity helper) when it is. The
+   * helper internally routes the approved draft to the right slot
+   * on BookState, so this wrapper just converts pipeline errors
+   * into the per-chapter "skip and continue" rule — the rest of
+   * the book still ships even if the prologue or epilogue fails.
+   */
+  private processSectionIfPresent(brief: ChapterBrief | null | undefined, config: BookConfig, slot: 'prologue' | 'epilogue'): Observable<any> {
+    if (!brief) {
+      return new Observable(sub => { sub.next(null); sub.complete(); });
+    }
     return new Observable(subscriber => {
-      // Stamp the chapter number before any agent fires so the UI's
+      this.runSectionPipeline(brief, config, slot).subscribe({
+        next: (chapter) => {
+          subscriber.next(chapter);
+          subscriber.complete();
+        },
+        error: (error) => {
+          console.error(
+            `Orchestrator: ${slot} ("${brief.title}") failed — skipping and continuing.`,
+            error,
+          );
+          this.bookStateService.setError(
+            `${slot} failed: ${(error as Error)?.message || error}. The rest of the book continues.`,
+          );
+          subscriber.next(null);
+          subscriber.complete();
+        }
+      });
+    });
+  }
+
+  /**
+   * Process a single chapter through the agent pipeline. Delegates
+   * to the shared `runSectionPipeline` helper so numbered chapters,
+   * the prologue, and the epilogue share one implementation.
+   * `slot` is one of `'chapter' | 'prologue' | 'epilogue'` — the
+   * helper still writes to the right slot via the orchestrator's
+   * `approveChapter` / `approveSection` step.
+   */
+  private processChapter(brief: ChapterBrief, config: BookConfig, chapterNumber: number, slot: 'chapter' | 'prologue' | 'epilogue' = 'chapter'): Observable<any> {
+    return this.runSectionPipeline(brief, config, slot, chapterNumber).pipe(
+      map(chapter => ({ kind: 'chapter', chapter })),
+    );
+  }
+
+  /**
+   * Shared per-section pipeline used by numbered chapters, the
+   * prologue, and the epilogue. Runs author → critic → (optional
+   * revision rounds) → character consistency → continuity, then
+   * hands the approved draft to `approveSection` which routes it to
+   * the right slot on `BookState`.
+   *
+   * `slot` distinguishes where the final draft lives:
+   *   - 'chapter'   → appended to `state.chapters`
+   *   - 'prologue'  → stored on `state.prologue`
+   *   - 'epilogue'  → stored on `state.epilogue`
+   *
+   * Returns the approved `Chapter`. Errors propagate to the caller,
+   * who decides whether to skip (the section pipeline mirrors the
+   * existing per-chapter skip rule).
+   */
+  private runSectionPipeline(
+    brief: ChapterBrief,
+    config: BookConfig,
+    slot: 'chapter' | 'prologue' | 'epilogue',
+    chapterNumber?: number,
+  ): Observable<Chapter> {
+    // For 'chapter' the caller passes the 1-based number; for
+    // prologue/epilogue we use 0 (matches `ChapterBrief.number` from
+    // `enforcePrologueEpilogueTitles`). The `expectedNumber` arg to
+    // the legacy `processChapter` API still uses the 1-based index,
+    // so when the slot is 'chapter' we trust the explicit
+    // `chapterNumber` argument.
+    const sectionNumber = slot === 'chapter'
+      ? (chapterNumber ?? 0)
+      : 0;
+    return new Observable(subscriber => {
+      // Stamp the section number before any agent fires so the UI's
       // pipeline-card reset observes the boundary *before* it sees
-      // `activeAgent = 'author'` for the new chapter. Otherwise the
-      // reset would land mid-tick and the author card could briefly
-      // flip done → running within a single render frame.
-      this.bookStateService.setCurrentChapter(chapterNumber);
+      // `activeAgent = 'author'`. Without this the author card
+      // could briefly flip done → running within a single render
+      // frame.
+      this.bookStateService.setCurrentChapter(sectionNumber || null);
       this.writeChapterWithRetry(brief, config, 3).subscribe({
         next: (result) => {
           const { draft, usage } = result;
           this.bookStateService.recordAgentUsage('author', usage);
           this.bookStateService.setCurrentDraft(draft);
-          
-          // 2. Critic evaluates the chapter
+
+          // 2. Critic evaluates the section
           this.bookStateService.setActiveAgent('critic');
-          
+
           const criticContext: CriticContext = {
             model: config.model,
             chapterBrief: brief,
@@ -234,16 +344,16 @@ export class OrchestratorService {
             next: (criticResult) => {
               this.bookStateService.recordAgentUsage('critic', criticResult.usage);
               this.bookStateService.setCritique(criticResult.data);
-              
+
               // 3. Quality gate - check if revision is needed
               if (criticResult.data.overallScore < 7 && this.bookStateService.getState().revisionCount < 3) {
                 this.handleRevision(brief, draft, criticResult.data, config).subscribe({
                   next: (revisedDraft) => {
                     // Run character and continuity checks after revision
-                    this.runPostRevisionChecks(brief, revisedDraft, config, chapterNumber).subscribe({
+                    this.runPostRevisionChecks(brief, revisedDraft, config, sectionNumber).subscribe({
                       next: () => {
-                        this.approveChapter(brief, revisedDraft, criticResult.data, chapterNumber);
-                        subscriber.next('Chapter approved after revision');
+                        const chapter = this.approveSection(brief, revisedDraft, criticResult.data, sectionNumber, slot);
+                        subscriber.next(chapter);
                         subscriber.complete();
                       },
                       error: (err) => subscriber.error(err)
@@ -255,10 +365,10 @@ export class OrchestratorService {
                 });
               } else {
                 // Run character and continuity checks even if no revision
-                this.runPostRevisionChecks(brief, draft, config, chapterNumber).subscribe({
+                this.runPostRevisionChecks(brief, draft, config, sectionNumber).subscribe({
                   next: () => {
-                    this.approveChapter(brief, draft, criticResult.data, chapterNumber);
-                    subscriber.next('Chapter approved');
+                    const chapter = this.approveSection(brief, draft, criticResult.data, sectionNumber, slot);
+                    subscriber.next(chapter);
                     subscriber.complete();
                   },
                   error: (err) => subscriber.error(err)
@@ -275,6 +385,57 @@ export class OrchestratorService {
         }
       });
     });
+  }
+
+  /**
+   * Approve a section and route it to the right slot on BookState.
+   * Returns the approved `Chapter` so the orchestrator can hand it
+   * back to callers that need it (e.g. the persistence save in
+   * `approveChapter`). For 'chapter' this appends to `state.chapters`;
+   * for prologue/epilogue it stores on `state.prologue` /
+   * `state.epilogue`.
+   */
+  private approveSection(brief: ChapterBrief, draft: ChapterDraft, critique: any, sectionNumber: number, slot: 'chapter' | 'prologue' | 'epilogue'): Chapter {
+    const id = slot === 'chapter'
+      ? `chapter-${sectionNumber}`
+      : slot;
+    const title = slot === 'chapter' ? brief.title : (slot === 'prologue' ? 'Prologue' : 'Epilogue');
+    const chapter: Chapter = {
+      id,
+      number: sectionNumber,
+      title,
+      content: draft.content,
+      wordCount: draft.wordCount,
+      status: 'approved',
+      createdAt: new Date(),
+      approvedAt: new Date(),
+      critique,
+      revisions: []
+    };
+
+    const currentState = this.bookStateService.getState();
+
+    if (slot === 'chapter') {
+      const updatedChapters = [...currentState.chapters, chapter];
+      this.bookStateService.setChapters(updatedChapters);
+    } else if (slot === 'prologue') {
+      this.bookStateService.setPrologue(chapter);
+    } else {
+      this.bookStateService.setEpilogue(chapter);
+    }
+
+    this.bookStateService.setCurrentDraft(null);
+    this.bookStateService.setCritique(null);
+    this.bookStateService.setRevisionCount(0);
+
+    // Auto-save checkpoint using RxJS Observable
+    this.persistenceService.saveCheckpoint('current-book', this.bookStateService.getState())
+      .subscribe({
+        next: () => console.log('Checkpoint saved successfully'),
+        error: (err) => console.error('Failed to save checkpoint:', err)
+      });
+
+    return chapter;
   }
 
   /**
@@ -595,39 +756,6 @@ export class OrchestratorService {
         completed = true;
       };
     });
-  }
-
-  /**
-   * Approve a chapter and add it to the book
-   */
-  private approveChapter(brief: ChapterBrief, draft: ChapterDraft, critique: any, chapterNumber: number): void {
-    const chapter = {
-      id: `chapter-${chapterNumber}`,
-      number: chapterNumber,
-      title: brief.title,
-      content: draft.content,
-      wordCount: draft.wordCount,
-      status: 'approved' as const,
-      createdAt: new Date(),
-      approvedAt: new Date(),
-      critique,
-      revisions: []
-    };
-
-    const currentState = this.bookStateService.getState();
-    const updatedChapters = [...currentState.chapters, chapter];
-    
-    this.bookStateService.setChapters(updatedChapters);
-    this.bookStateService.setCurrentDraft(null);
-    this.bookStateService.setCritique(null);
-    this.bookStateService.setRevisionCount(0);
-
-    // Auto-save checkpoint using RxJS Observable
-    this.persistenceService.saveCheckpoint('current-book', this.bookStateService.getState())
-      .subscribe({
-        next: () => console.log('Checkpoint saved successfully'),
-        error: (err) => console.error('Failed to save checkpoint:', err)
-      });
   }
 
   /**

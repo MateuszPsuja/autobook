@@ -485,6 +485,78 @@ describe('buildPdfDocument', () => {
     });
   });
 
+  describe('prologue and epilogue', () => {
+    // The PDF renderer reads prologue / epilogue from
+    // `context.state.prologue` / `context.state.epilogue`. When
+    // present they must:
+    //   1. appear in the TOC before chapter 1 / after the last
+    //      chapter,
+    //   2. be rendered as their own page with the localised
+    //      "Prologue" / "Epilogue" eyebrow (not "Chapter N"),
+    //   3. carry a stable id anchor (`ch-prologue` / `ch-epilogue`)
+    //      so the TOC's `pageReference` resolves.
+    const prologue: Chapter = {
+      id: 'prologue', number: 0, title: 'Prologue',
+      content: 'Years before, a stranger came to the door.',
+      wordCount: 7, status: 'approved', createdAt: new Date(), revisions: [],
+    };
+    const epilogue: Chapter = {
+      id: 'epilogue', number: 0, title: 'Epilogue',
+      content: 'Years later, the study was empty.',
+      wordCount: 6, status: 'approved', createdAt: new Date(), revisions: [],
+    };
+
+    it('renders prologue and epilogue when state provides them', () => {
+      const doc = buildPdfDocument([chapterA], baseOptions, {
+        state: { ...baseState, prologue, epilogue } as any,
+        language: 'en',
+      });
+      const flat = JSON.stringify(doc);
+      expect(flat).toContain('"id":"ch-prologue"');
+      expect(flat).toContain('"id":"ch-epilogue"');
+      expect(flat).toContain('"pageReference":"ch-prologue"');
+      expect(flat).toContain('"pageReference":"ch-epilogue"');
+      expect(flat).toContain('PROLOGUE');
+      expect(flat).toContain('EPILOGUE');
+    });
+
+    it('uses Polish labels for prologue and epilogue when language is Polish', () => {
+      const doc = buildPdfDocument([chapterA], baseOptions, {
+        state: { ...baseState, prologue, epilogue } as any,
+        language: 'pl',
+      });
+      const flat = JSON.stringify(doc);
+      expect(flat).toContain('PROLOG');
+      expect(flat).toContain('EPILOG');
+    });
+
+    it('orders prologue before chapter 1 and epilogue after the last chapter', () => {
+      const doc = buildPdfDocument([chapterA, chapterB], baseOptions, {
+        state: { ...baseState, prologue, epilogue } as any,
+        language: 'en',
+      });
+      const flat = JSON.stringify(doc);
+      const prologueIdx = flat.indexOf('"id":"ch-prologue"');
+      const chapterAIdx = flat.indexOf('"id":"ch-a"');
+      const chapterBIdx = flat.indexOf('"id":"ch-b"');
+      const epilogueIdx = flat.indexOf('"id":"ch-epilogue"');
+      expect(prologueIdx).toBeGreaterThan(-1);
+      expect(chapterAIdx).toBeGreaterThan(prologueIdx);
+      expect(chapterBIdx).toBeGreaterThan(chapterAIdx);
+      expect(epilogueIdx).toBeGreaterThan(chapterBIdx);
+    });
+
+    it('omits prologue / epilogue when state has none', () => {
+      const doc = buildPdfDocument([chapterA], baseOptions, {
+        state: baseState,
+        language: 'en',
+      });
+      const flat = JSON.stringify(doc);
+      expect(flat).not.toContain('"id":"ch-prologue"');
+      expect(flat).not.toContain('"id":"ch-epilogue"');
+    });
+  });
+
   describe('defensive cleanup for running word-count corruption', () => {
     // The model in some setups outputs the per-word counter inline, e.g.
     //   "Count: A1 banner2 fluttered3 ... snap91. 91 words. ECHOES OF TOMORROW 10"

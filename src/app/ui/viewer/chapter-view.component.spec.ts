@@ -52,8 +52,10 @@ describe('ChapterViewComponent', () => {
   ];
 
   beforeEach(async () => {
-    const bookStateSpy = jasmine.createSpyObj('BookStateService', ['getChapters$', 'getState']);
+    const bookStateSpy = jasmine.createSpyObj('BookStateService', ['getChapters$', 'getState', 'getPrologue$', 'getEpilogue$']);
     bookStateSpy.getChapters$.and.returnValue(of(mockChapters));
+    bookStateSpy.getPrologue$.and.returnValue(of(null));
+    bookStateSpy.getEpilogue$.and.returnValue(of(null));
     bookStateSpy.getState.and.returnValue({
       chapters: mockChapters,
       characterStore: {},
@@ -61,6 +63,8 @@ describe('ChapterViewComponent', () => {
       status: 'completed',
       activeAgent: null,
       blueprint: null,
+      prologue: null,
+      epilogue: null,
       currentDraft: null,
       critique: null,
       revisionCount: 0,

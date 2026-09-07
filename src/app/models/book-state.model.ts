@@ -55,6 +55,18 @@ export interface BookState {
   status: GenerationStatus;
   error: string | null;
   /**
+   * Optional approved prologue chapter. Lives outside `chapters` so
+   * the chapter-numbering pipeline (`number !== position` check in the
+   * exporter) treats it as front-matter. Persisted on the same
+   * checkpoint and rendered before Chapter 1 in every export format.
+   */
+  prologue?: Chapter | null;
+  /**
+   * Optional approved epilogue chapter. Same persistence + ordering
+   * rules as `prologue`; rendered after the last numbered chapter.
+   */
+  epilogue?: Chapter | null;
+  /**
    * Chapter numbers that the orchestrator couldn't generate and
    * skipped, so the rest of the book could continue. Empty when
    * generation was clean. The user can re-trigger generation and
@@ -100,6 +112,18 @@ export interface BookState {
 
 export interface Blueprint {
   chapters: ChapterBrief[];
+  /**
+   * Optional architect-authored brief for the prologue section. Only
+   * populated when the user opted in via `BookConfig.hasPrologue`.
+   * Lives outside `chapters` so the rest of the orchestrator pipeline
+   * (chapter numbering, skip list, etc.) is unaffected.
+   */
+  prologue?: ChapterBrief | null;
+  /**
+   * Optional architect-authored brief for the epilogue section. Same
+   * shape and lifecycle rules as `prologue`.
+   */
+  epilogue?: ChapterBrief | null;
   characterArcs: CharacterArc[];
   worldBuilding: WorldBuildingElement[];
   themes: string[];

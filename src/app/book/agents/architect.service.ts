@@ -47,7 +47,7 @@ export class ArchitectService {
 
         try {
           const blueprint = this.jsonParser.parse<Blueprint>(content);
-          return { data: this.sanitizeBriefTitles(blueprint), usage: extractUsage(response) };
+          return { data: this.enforcePrologueEpilogueTitles(this.sanitizeBriefTitles(blueprint)), usage: extractUsage(response) };
         } catch (e) {
           console.warn(
             'Architect response was not parseable JSON; using fallback blueprint. Error:',
@@ -62,7 +62,10 @@ export class ArchitectService {
   /**
    * Build a minimal blueprint from the book config when the architect
    * agent can't produce one. Chapter count and target word count are
-   * derived from the configured targetLength / chapterLength.
+   * derived from the configured targetLength / chapterLength. Honors
+   * the user's prologue/epilogue flags so the fallback still produces
+   * them — an LLM refusal must not silently drop sections the user
+   * asked for.
    */
   private buildFallbackBlueprint(config: BookConfig): Blueprint {
     const chapterCount = this.estimateChapterCount(config.targetLength);
@@ -91,7 +94,29 @@ export class ArchitectService {
       themes: Array.isArray(config.themes) ? config.themes : [],
       keyPlotPoints: [],
     };
-    return this.sanitizeBriefTitles(blueprint);
+
+    if (config.hasPrologue) {
+      blueprint.prologue = this.buildFallbackSectionBrief('Prologue', 'the story opens on a self-contained scene that frames the central conflict before Chapter 1', targetWordCount);
+    }
+    if (config.hasEpilogue) {
+      blueprint.epilogue = this.buildFallbackSectionBrief('Epilogue', 'after the climax, the protagonist reflects on what was lost and what comes next', targetWordCount);
+    }
+
+    return this.enforcePrologueEpilogueTitles(this.sanitizeBriefTitles(blueprint));
+  }
+
+  private buildFallbackSectionBrief(title: 'Prologue' | 'Epilogue', plotBeat: string, targetWordCount: number): ChapterBrief {
+    return {
+      number: 0,
+      title,
+      plotBeat,
+      povCharacter: 'the protagonist',
+      emotionalState: title === 'Prologue' ? 'curious, guarded' : 'reflective, settled',
+      location: 'as established by the surrounding story',
+      keyEvents: [`${title} establishes or resolves the central question`],
+      hookType: title === 'Prologue' ? 'an unanswered question that lingers' : 'a quiet image that reframes the journey',
+      targetWordCount,
+    };
   }
 
   /**
@@ -122,6 +147,29 @@ export class ArchitectService {
       }
       return { ...brief, title: synthesized };
     });
+    return blueprint;
+  }
+
+  /**
+   * Force the prologue/epilogue titles to the literal "Prologue" /
+   * "Epilogue" strings. The architect prompt explicitly asks for
+   * these literals, but models sometimes substitute creative titles
+   * anyway. Without this override, a creative title would survive
+   * `sanitizeBriefTitles` (none of the banned patterns match) and the
+   * user would see "The Doorstep at Midnight" instead of "Prologue"
+   * in the exported file.
+   *
+   * Runs after `sanitizeBriefTitles` so it always wins. When the
+   * brief is missing (user didn't opt in, or LLM refused and the
+   * fallback didn't add one) the slot is left untouched.
+   */
+  private enforcePrologueEpilogueTitles(blueprint: Blueprint): Blueprint {
+    if (blueprint.prologue) {
+      blueprint.prologue = { ...blueprint.prologue, title: 'Prologue', number: 0 };
+    }
+    if (blueprint.epilogue) {
+      blueprint.epilogue = { ...blueprint.epilogue, title: 'Epilogue', number: 0 };
+    }
     return blueprint;
   }
 

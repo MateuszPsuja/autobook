@@ -159,6 +159,7 @@ describe('OrchestratorService', () => {
       'setRevisionCount', 'setStatus', 'setActiveAgent', 'setError',
       'setBlueprint', 'getState', 'setCharacterStore', 'setContinuityFlags',
       'setSkippedChapters', 'setCurrentChapter',
+      'setPrologue', 'setEpilogue',
       'resetStats', 'startGenerationTimer', 'endGenerationTimer',
       'recordAgentUsage', 'updateTotalWords',
       'beginStream$', 'appendStream$', 'endStream$', 'clearLiveStreamBuffer'
@@ -170,6 +171,8 @@ describe('OrchestratorService', () => {
       status: 'idle',
       activeAgent: null,
       blueprint: null,
+      prologue: null,
+      epilogue: null,
       currentDraft: null,
       critique: null,
       revisionCount: 0,
@@ -345,6 +348,180 @@ describe('OrchestratorService', () => {
       });
     });
 
+    describe('prologue + epilogue pipeline', () => {
+      // The shared per-section pipeline (`runSectionPipeline`) runs
+      // the same author → critic → reviser → character → continuity
+      // chain on the prologue, the numbered chapters, and the
+      // epilogue. The orchestrator routes the resulting draft to
+      // the right slot (`state.prologue` / `state.epilogue` /
+      // `state.chapters`) and serialises them so the prologue lands
+      // before chapter 1 and the epilogue after the last chapter.
+      it('runs the full pipeline for the prologue when blueprint.prologue is present', (done) => {
+        const prologueBrief = {
+          number: 0,
+          title: 'Prologue',
+          plotBeat: 'A stranger leaves an unmarked map on a doorstep.',
+          povCharacter: 'the stranger',
+          emotionalState: 'purposeful',
+          location: 'A rain-lashed doorstep',
+          keyEvents: ['The stranger arrives', 'Slips the map under the door'],
+          hookType: 'The door creaks open behind them — and no one is there',
+          targetWordCount: 2000,
+        };
+        architectServiceSpy.generateBlueprintWithUsage.and.returnValue(of({
+          data: { ...mockBlueprint, prologue: prologueBrief },
+          usage: { promptTokens: 100, completionTokens: 200, totalTokens: 300 }
+        }));
+
+        service.orchestrate({ ...mockConfig, hasPrologue: true }).subscribe({
+          complete: () => {
+            // The prologue runs through the same author + critic
+            // + character + continuity chain as a numbered chapter.
+            expect(authorServiceSpy.writeChapterStreamingWithUsage).toHaveBeenCalled();
+            expect(criticServiceSpy.evaluateChapterWithUsage).toHaveBeenCalled();
+            // The approved draft lands on `setPrologue`, not on the
+            // numbered chapters list.
+            expect(bookStateServiceSpy.setPrologue).toHaveBeenCalled();
+            const prologueArg = bookStateServiceSpy.setPrologue.calls.mostRecent().args[0] as Chapter;
+            expect(prologueArg.title).toBe('Prologue');
+            done();
+          }
+        });
+      });
+
+      it('runs the full pipeline for the epilogue when blueprint.epilogue is present', (done) => {
+        const epilogueBrief = {
+          number: 0,
+          title: 'Epilogue',
+          plotBeat: 'Months later, Mara visits the empty study.',
+          povCharacter: 'Mara',
+          emotionalState: 'reflective',
+          location: 'Her father\'s study',
+          keyEvents: ['Mara sits at the desk', 'Opens the journal'],
+          hookType: 'The wind catches the last page',
+          targetWordCount: 2000,
+        };
+        architectServiceSpy.generateBlueprintWithUsage.and.returnValue(of({
+          data: { ...mockBlueprint, epilogue: epilogueBrief },
+          usage: { promptTokens: 100, completionTokens: 200, totalTokens: 300 }
+        }));
+
+        service.orchestrate({ ...mockConfig, hasEpilogue: true }).subscribe({
+          complete: () => {
+            expect(bookStateServiceSpy.setEpilogue).toHaveBeenCalled();
+            const epilogueArg = bookStateServiceSpy.setEpilogue.calls.mostRecent().args[0] as Chapter;
+            expect(epilogueArg.title).toBe('Epilogue');
+            done();
+          }
+        });
+      });
+
+      it('orders prologue before chapter 1 and epilogue after the last chapter', (done) => {
+        // Track the global call order across all three spies so we
+        // can compare cross-spy indices. Each spy push records the
+        // slot name into a single ordered array; per-spy call
+        // histories would only give within-spy indices.
+        const order: string[] = [];
+        bookStateServiceSpy.setPrologue.calls.reset();
+        bookStateServiceSpy.setChapters.calls.reset();
+        bookStateServiceSpy.setEpilogue.calls.reset();
+        bookStateServiceSpy.setPrologue.and.callFake((arg: any) => { order.push(arg ? 'setPrologue' : 'setPrologue(null)'); });
+        bookStateServiceSpy.setChapters.and.callFake((arg: any) => { order.push(arg && arg.length ? 'setChapters' : 'setChapters([])'); });
+        bookStateServiceSpy.setEpilogue.and.callFake((arg: any) => { order.push(arg ? 'setEpilogue' : 'setEpilogue(null)'); });
+
+        const prologueBrief = {
+          number: 0, title: 'Prologue', plotBeat: 'A', povCharacter: 'the stranger',
+          emotionalState: 'p', location: 'L', keyEvents: ['k'], hookType: 'h', targetWordCount: 1000,
+        };
+        const epilogueBrief = {
+          number: 0, title: 'Epilogue', plotBeat: 'Z', povCharacter: 'Mara',
+          emotionalState: 'r', location: 'L', keyEvents: ['k'], hookType: 'h', targetWordCount: 1000,
+        };
+        architectServiceSpy.generateBlueprintWithUsage.and.returnValue(of({
+          data: { ...mockBlueprint, prologue: prologueBrief, epilogue: epilogueBrief },
+          usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 }
+        }));
+
+        service.orchestrate({ ...mockConfig, hasPrologue: true, hasEpilogue: true }).subscribe({
+          complete: () => {
+            const prologueIdx = order.indexOf('setPrologue');
+            const chapterIdx = order.indexOf('setChapters');
+            const epilogueIdx = order.indexOf('setEpilogue');
+            expect(prologueIdx).toBeGreaterThanOrEqual(0);
+            expect(chapterIdx).toBeGreaterThan(prologueIdx);
+            expect(epilogueIdx).toBeGreaterThan(chapterIdx);
+            done();
+          }
+        });
+      });
+
+      it('skips the prologue when blueprint.prologue is absent', (done) => {
+        architectServiceSpy.generateBlueprintWithUsage.and.returnValue(of({
+          data: { ...mockBlueprint }, // no prologue
+          usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 }
+        }));
+
+        service.orchestrate(mockConfig).subscribe({
+          complete: () => {
+            // `setPrologue` is called once at the top of
+            // `orchestrate` to reset the slot to `null`; the
+            // assertion is that no approved prologue chapter was
+            // pushed (i.e. it was never called with a non-null
+            // argument after the reset).
+            const nonNullPrologueCalls = bookStateServiceSpy.setPrologue.calls.allArgs().filter(args => args[0] != null);
+            expect(nonNullPrologueCalls.length).toBe(0);
+            done();
+          }
+        });
+      });
+
+      it('skips the epilogue when blueprint.epilogue is absent', (done) => {
+        architectServiceSpy.generateBlueprintWithUsage.and.returnValue(of({
+          data: { ...mockBlueprint }, // no epilogue
+          usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 }
+        }));
+
+        service.orchestrate(mockConfig).subscribe({
+          complete: () => {
+            const nonNullEpilogueCalls = bookStateServiceSpy.setEpilogue.calls.allArgs().filter(args => args[0] != null);
+            expect(nonNullEpilogueCalls.length).toBe(0);
+            done();
+          }
+        });
+      });
+
+      it('continues with numbered chapters when the prologue pipeline fails', (done) => {
+        // The retry path takes 2s × maxRetries before failing. The
+        // 3-retry default would push past Jasmine's default 5s
+        // timeout, so bump the budget for this test.
+        authorServiceSpy.writeChapterStreamingWithUsage.and.returnValue(throwError(() => new Error('prologue author failed')));
+        const prologueBrief = {
+          number: 0, title: 'Prologue', plotBeat: 'A', povCharacter: 'the stranger',
+          emotionalState: 'p', location: 'L', keyEvents: ['k'], hookType: 'h', targetWordCount: 1000,
+        };
+        architectServiceSpy.generateBlueprintWithUsage.and.returnValue(of({
+          data: { ...mockBlueprint, prologue: prologueBrief },
+          usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 }
+        }));
+
+        service.orchestrate({ ...mockConfig, hasPrologue: true }).subscribe({
+          complete: () => {
+            // Per-section skip rule: prologue failure logs an error
+            // and surfaces in state.error but the numbered chapters
+            // still go through the pipeline and ship.
+            const nonNullPrologueCalls = bookStateServiceSpy.setPrologue.calls.allArgs().filter(args => args[0] != null);
+            expect(nonNullPrologueCalls.length).toBe(0);
+            expect(bookStateServiceSpy.setError).toHaveBeenCalled();
+            expect(bookStateServiceSpy.setChapters).toHaveBeenCalled();
+            done();
+          },
+          error: () => {
+            done.fail('orchestrate should not error on prologue failure');
+          }
+        });
+      }, 15000);
+    });
+
     it('should handle architect errors', (done) => {
       architectServiceSpy.generateBlueprintWithUsage.and.returnValue(throwError(() => new Error('Blueprint error')));
 
@@ -417,6 +594,8 @@ describe('OrchestratorService', () => {
           status: 'generating',
           activeAgent: 'author',
           blueprint: null,
+          prologue: null,
+          epilogue: null,
           currentDraft: null,
           critique: null,
           revisionCount: 0,

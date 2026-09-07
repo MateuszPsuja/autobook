@@ -27,6 +27,37 @@
         </div>
 
         <div class="space-y-1 -mx-1">
+          @let prologue = (prologue$ | async);
+          @if (prologue) {
+            @let active = selectedChapter?.id === prologue.id;
+            <button
+              type="button"
+              (click)="selectChapter(prologue, -1)"
+              class="relative w-full text-left px-3 py-2.5 rounded-lg transition-colors"
+              [class]="active
+                ? 'bg-accent-500/10 text-surface-strong'
+                : 'hover:bg-surface-sunken text-surface-strong/80'">
+              @if (active) {
+                <span class="active-rail" style="top: 0.5rem; bottom: 0.5rem;"></span>
+              }
+              <div class="flex items-center gap-2 mb-1">
+                <span class="font-mono text-[10px] uppercase tracking-wider"
+                  [class]="active ? 'text-accent-600 dark:text-accent-300' : 'text-surface-subtle'">
+                  {{ t('viewer.prologue') }}
+                </span>
+              </div>
+              <h4 class="text-sm font-medium leading-snug line-clamp-2">{{ prologue.title }}</h4>
+              <div class="mt-2 flex items-center gap-2 text-[11px] font-mono text-surface-subtle">
+                <span class="status-badge status-{{ prologue.status }}">{{ t('status.' + prologue.status) }}</span>
+                @if (getChapterScore(prologue) !== null) {
+                  <span class="chapter-score {{ getScoreColor(getChapterScore(prologue)) }}">
+                    ★ {{ formatScore(getChapterScore(prologue)) }}
+                  </span>
+                }
+                <span>{{ prologue.wordCount }}w</span>
+              </div>
+            </button>
+          }
           @for (chapter of (chapters$ | async) || []; track chapter.id; let i = $index) {
             @let active = selectedChapter?.id === chapter.id;
             <button
@@ -57,6 +88,38 @@
               </div>
             </button>
           }
+          @let epilogue = (epilogue$ | async);
+          @let chapterCount = ((chapters$ | async)?.length || 0);
+          @if (epilogue) {
+            @let active = selectedChapter?.id === epilogue.id;
+            <button
+              type="button"
+              (click)="selectChapter(epilogue, chapterCount)"
+              class="relative w-full text-left px-3 py-2.5 rounded-lg transition-colors"
+              [class]="active
+                ? 'bg-accent-500/10 text-surface-strong'
+                : 'hover:bg-surface-sunken text-surface-strong/80'">
+              @if (active) {
+                <span class="active-rail" style="top: 0.5rem; bottom: 0.5rem;"></span>
+              }
+              <div class="flex items-center gap-2 mb-1">
+                <span class="font-mono text-[10px] uppercase tracking-wider"
+                  [class]="active ? 'text-accent-600 dark:text-accent-300' : 'text-surface-subtle'">
+                  {{ t('viewer.epilogue') }}
+                </span>
+              </div>
+              <h4 class="text-sm font-medium leading-snug line-clamp-2">{{ epilogue.title }}</h4>
+              <div class="mt-2 flex items-center gap-2 text-[11px] font-mono text-surface-subtle">
+                <span class="status-badge status-{{ epilogue.status }}">{{ t('status.' + epilogue.status) }}</span>
+                @if (getChapterScore(epilogue) !== null) {
+                  <span class="chapter-score {{ getScoreColor(getChapterScore(epilogue)) }}">
+                    ★ {{ formatScore(getChapterScore(epilogue)) }}
+                  </span>
+                }
+                <span>{{ epilogue.wordCount }}w</span>
+              </div>
+            </button>
+          }
         </div>
       </div>
     </aside>
@@ -69,7 +132,15 @@
         <div class="card p-6">
           <div class="flex items-start justify-between gap-4 mb-5">
             <div>
-              <span class="eyebrow">Chapter {{ selectedChapter.number }}</span>
+              <span class="eyebrow">
+                @if (selectedChapter.id === 'prologue') {
+                  {{ t('viewer.prologue') }}
+                } @else if (selectedChapter.id === 'epilogue') {
+                  {{ t('viewer.epilogue') }}
+                } @else {
+                  Chapter {{ selectedChapter.number }}
+                }
+              </span>
               <h2 class="mt-1 text-2xl font-bold tracking-tight text-surface-strong">
                 {{ selectedChapter.title }}
               </h2>

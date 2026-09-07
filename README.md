@@ -56,6 +56,7 @@ Available npm scripts:
 
 - Add your AI provider key in the app Settings screen before generation.
 - The app supports OpenRouter-style API configuration and related provider credentials.
+- On the Structure step of the wizard you can opt in to a prologue and/or epilogue. Each section runs through the full author → critic → reviser → character → continuity pipeline and is rendered before chapter 1 (prologue) or after the last chapter (epilogue) in every export format.
 
 ## Tests
 

@@ -164,7 +164,8 @@ function bookIdOf(config: IllustrationRequest['config']): string {
 type WorkResult =
   | { kind: 'front'; r: { base64: string; mimeType: 'image/jpeg' | 'image/png' } | null }
   | { kind: 'back'; r: { base64: string; mimeType: 'image/jpeg' | 'image/png' } | null }
-  | { kind: 'chapter'; id: string; ill: ChapterIllustration | null };
+  | { kind: 'chapter'; id: string; ill: ChapterIllustration | null }
+  | { kind: 'section'; id: string; ill: ChapterIllustration | null };
 
 function truncate(s: string, n: number): string {
   if (!s) return s;
@@ -233,7 +234,7 @@ export class IllustrationService {
     if (this.providerService.getActiveProviderId() !== 'minimax') {
       return of({ chapterIllustrations: new Map(), totalCalls: 0, completedCalls: 0 });
     }
-    if (!req.chapters || req.chapters.length === 0) {
+    if ((!req.chapters || req.chapters.length === 0) && !req.prologue && !req.epilogue) {
       return of({ chapterIllustrations: new Map(), totalCalls: 0, completedCalls: 0 });
     }
 
@@ -270,8 +271,11 @@ export class IllustrationService {
     //    them stylistically consistent with the chapter plates.
     //    Total = character refs + 2 cover scenes + 2 cover images
     //    + chapter illustrations (each chapter is 1 image + 1
-    //    scene, counted as 1 in the existing pipeline).
-    const totalCalls = povList.length + 4 + req.chapters.length;
+    //    scene, counted as 1 in the existing pipeline) +
+    //    optional prologue / epilogue illustrations.
+    const prologueCount = req.prologue ? 1 : 0;
+    const epilogueCount = req.epilogue ? 1 : 0;
+    const totalCalls = povList.length + 4 + req.chapters.length + prologueCount + epilogueCount;
     let completed = 0;
     const tick = () => {
       completed++;
@@ -333,17 +337,36 @@ export class IllustrationService {
                   .pipe(map(r => ({ kind: 'back' as const, r })))),
               ];
               const chapterWork = req.chapters.map(ch => defer(() =>
-                this.generateChapterIllustration$(ch, req, bookId, styleSuffix, charRefs).pipe(
+                this.generateChapterIllustration$(ch, req, bookId, styleSuffix, charRefs, 'chapter').pipe(
                   map(ill => ({ kind: 'chapter' as const, id: ch.id, ill })),
                   catchError(() => of<{ kind: 'chapter'; id: string; ill: ChapterIllustration | null }>({ kind: 'chapter', id: ch.id, ill: null })),
                 )
               ));
+              const sectionWork: Observable<{ kind: 'section'; id: string; ill: ChapterIllustration | null }>[] = [];
+              if (req.prologue) {
+                sectionWork.push(defer(() =>
+                  this.generateChapterIllustration$(req.prologue!, req, bookId, styleSuffix, charRefs, 'prologue').pipe(
+                    map(ill => ({ kind: 'section' as const, id: req.prologue!.id, ill })),
+                    catchError(() => of<{ kind: 'section'; id: string; ill: ChapterIllustration | null }>({ kind: 'section', id: req.prologue!.id, ill: null })),
+                  )
+                ));
+              }
+              if (req.epilogue) {
+                sectionWork.push(defer(() =>
+                  this.generateChapterIllustration$(req.epilogue!, req, bookId, styleSuffix, charRefs, 'epilogue').pipe(
+                    map(ill => ({ kind: 'section' as const, id: req.epilogue!.id, ill })),
+                    catchError(() => of<{ kind: 'section'; id: string; ill: ChapterIllustration | null }>({ kind: 'section', id: req.epilogue!.id, ill: null })),
+                  )
+                ));
+              }
 
               const coverObs: Observable<WorkResult>[] = coverWork as unknown as Observable<WorkResult>[];
               const chapterObs: Observable<WorkResult>[] = chapterWork as unknown as Observable<WorkResult>[];
+              const sectionObs: Observable<WorkResult>[] = sectionWork as unknown as Observable<WorkResult>[];
               const allWork: Observable<WorkResult>[] = [
                 ...coverObs,
                 ...chapterObs,
+                ...sectionObs,
               ].map((item): Observable<WorkResult> => item.pipe(
                 map((r: WorkResult) => { tick(); return r; }),
               ));
@@ -359,6 +382,11 @@ export class IllustrationService {
                     } else if (r.kind === 'back' && r.r) {
                       backCoverArt = { base64: r.r.base64, mimeType: r.r.mimeType, side: 'back' };
                     } else if (r.kind === 'chapter' && r.ill) {
+                      chapterIllustrations.set(r.id, r.ill);
+                    } else if (r.kind === 'section' && r.ill) {
+                      // Prologue / epilogue illustrations share the
+                      // chapter-illustration map so the existing
+                      // builder pipeline can pick them up by id.
                       chapterIllustrations.set(r.id, r.ill);
                     }
                   }
@@ -529,6 +557,7 @@ export class IllustrationService {
     bookId: string,
     styleSuffix: string,
     charRefs: Map<string, CharacterReference>,
+    sectionKind: 'chapter' | 'prologue' | 'epilogue' = 'chapter',
   ): Observable<ChapterIllustration | null> {
     const cleanContent = stripRunningWordCount(chapter.content || '');
     // Resolve the brief for this chapter. The architect stores the
@@ -591,7 +620,17 @@ export class IllustrationService {
             const captionText = (chapter.title && chapter.title.trim())
               || (brief?.title && brief.title.trim())
               || truncate(scene.replace(/\.$/, ''), 60);
-            const caption = `Chapter ${chapter.number} \u00B7 ${captionText}`;
+            // Prologue / epilogue captions skip the "Chapter N"
+            // prefix — they're labelled with the section kind so
+            // the localised rewriter in the export component can
+            // swap "Prologue" / "Epilogue" in. Default English
+            // matches the source-of-truth title string.
+            const captionPrefix = sectionKind === 'prologue'
+              ? 'Prologue'
+              : sectionKind === 'epilogue'
+                ? 'Epilogue'
+                : `Chapter ${chapter.number}`;
+            const caption = `${captionPrefix} \u00B7 ${captionText}`;
             return {
               base64: r.base64,
               mimeType: r.mimeType,

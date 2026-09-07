@@ -3,6 +3,7 @@ import { BehaviorSubject, Observable, interval } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { BookState, AgentType, GenerationStatus, GenerationStats, createInitialStats } from '../../models/book-state.model';
 import { BookConfig } from '../../models/book-config.model';
+import { Chapter } from '../../models/chapter.model';
 
 @Injectable({
   providedIn: 'root'
@@ -12,6 +13,8 @@ export class BookStateService {
     config: {} as BookConfig,
     blueprint: null,
     chapters: [],
+    prologue: null,
+    epilogue: null,
     currentDraft: null,
     characterStore: {},
     worldStateDoc: '',
@@ -58,6 +61,14 @@ export class BookStateService {
     return this.state$.pipe(map(s => s.chapters));
   }
 
+  getPrologue$(): Observable<Chapter | null | undefined> {
+    return this.state$.pipe(map(s => s.prologue));
+  }
+
+  getEpilogue$(): Observable<Chapter | null | undefined> {
+    return this.state$.pipe(map(s => s.epilogue));
+  }
+
   getCurrentDraft$(): Observable<any | null> {
     return this.state$.pipe(map(s => s.currentDraft));
   }
@@ -85,6 +96,14 @@ export class BookStateService {
 
   setChapters(chapters: any[]): void {
     this.patch({ chapters });
+  }
+
+  setPrologue(chapter: Chapter | null): void {
+    this.patch({ prologue: chapter });
+  }
+
+  setEpilogue(chapter: Chapter | null): void {
+    this.patch({ epilogue: chapter });
   }
 
   setCurrentDraft(draft: any | null): void {

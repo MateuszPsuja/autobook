@@ -423,5 +423,103 @@ describe('ArchitectService', () => {
         });
       });
     });
+
+    describe('prologue / epilogue enforcement', () => {
+      // The architect prompt explicitly tells the model to return
+      // the literal "Prologue" / "Epilogue" titles, but a creative
+      // title sometimes slips through `sanitizeBriefTitles` (none
+      // of the banned patterns match). `enforcePrologueEpilogueTitles`
+      // forces the literal value so the exported file always
+      // reads "Prologue" / "Epilogue" regardless of what the LLM
+      // produced.
+      const replyWithSections = (prologue: any, epilogue: any) => {
+        const blueprint = {
+          ...mockBlueprint,
+          chapters: [
+            { number: 1, title: 'Chapter 1: The Beginning', plotBeat: 'Introduction', povCharacter: 'Hero', emotionalState: 'Curious', location: 'Village', keyEvents: ['e'], hookType: 'continuation', targetWordCount: 2500 }
+          ],
+          prologue,
+          epilogue,
+        };
+        apiServiceSpy.chatCompletion.and.returnValue(of({
+          id: 'test',
+          choices: [{ message: { role: 'assistant', content: JSON.stringify(blueprint) }, finish_reason: 'stop', index: 0 }],
+          created: 123,
+          model: 'test/model',
+          object: 'chat.completion',
+          usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 }
+        }));
+      };
+
+      it('overrides a creative prologue title with the literal "Prologue"', (done) => {
+        replyWithSections({
+          number: 0, title: 'The Doorstep at Midnight', plotBeat: 'A',
+          povCharacter: 'the stranger', emotionalState: 'p', location: 'L',
+          keyEvents: ['k'], hookType: 'h', targetWordCount: 2000,
+        }, null);
+        service.generateBlueprintWithUsage({ ...mockConfig, hasPrologue: true }).subscribe({
+          next: (res) => {
+            expect(res.data.prologue?.title).toBe('Prologue');
+            done();
+          },
+          error: done.fail
+        });
+      });
+
+      it('overrides a creative epilogue title with the literal "Epilogue"', (done) => {
+        replyWithSections(null, {
+          number: 0, title: 'The Last Page', plotBeat: 'A',
+          povCharacter: 'Mara', emotionalState: 'r', location: 'L',
+          keyEvents: ['k'], hookType: 'h', targetWordCount: 2000,
+        });
+        service.generateBlueprintWithUsage({ ...mockConfig, hasEpilogue: true }).subscribe({
+          next: (res) => {
+            expect(res.data.epilogue?.title).toBe('Epilogue');
+            done();
+          },
+          error: done.fail
+        });
+      });
+
+      it('keeps prologue.number = 0 so chapter numbering stays intact', (done) => {
+        replyWithSections({
+          number: 99, title: 'Prologue', plotBeat: 'A',
+          povCharacter: 'the stranger', emotionalState: 'p', location: 'L',
+          keyEvents: ['k'], hookType: 'h', targetWordCount: 2000,
+        }, null);
+        service.generateBlueprintWithUsage({ ...mockConfig, hasPrologue: true }).subscribe({
+          next: (res) => {
+            expect(res.data.prologue?.number).toBe(0);
+            done();
+          },
+          error: done.fail
+        });
+      });
+
+      it('falls back to a generic prologue brief when the LLM refuses or returns empty content', (done) => {
+        apiServiceSpy.chatCompletion.and.returnValue(of({
+          id: 'test',
+          choices: [{ message: { role: 'assistant', content: '' }, finish_reason: 'stop', index: 0 }],
+          created: 123,
+          model: 'test/model',
+          object: 'chat.completion',
+          usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 }
+        }));
+
+        service.generateBlueprintWithUsage({ ...mockConfig, hasPrologue: true, hasEpilogue: true }).subscribe({
+          next: (res) => {
+            // The fallback must produce a prologue when the user
+            // opted in — a refused architect call cannot silently
+            // drop the user's chosen sections.
+            expect(res.data.prologue).toBeTruthy();
+            expect(res.data.prologue?.title).toBe('Prologue');
+            expect(res.data.epilogue).toBeTruthy();
+            expect(res.data.epilogue?.title).toBe('Epilogue');
+            done();
+          },
+          error: done.fail
+        });
+      });
+    });
   });
 });

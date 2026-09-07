@@ -11,7 +11,8 @@ const baseInput: DocxBuildInput = {
   config: { title: 'Test Book', genre: 'mystery', protagonist: { name: 'Alex' }, themes: ['love', 'loss'] } as unknown as BookConfig,
   labels: {
     bookAuthor: 'Written by AI', aBookLabel: 'a novel', tocLabel: 'Contents',
-    chapterLabel: 'Chapter', untitledFallback: 'Untitled', stopping: 'Stopping...',
+    chapterLabel: 'Chapter', prologueLabel: 'Prologue', epilogueLabel: 'Epilogue',
+    untitledFallback: 'Untitled', stopping: 'Stopping...',
     translating: 'Translating...', backCoverHead: 'About the author',
     backCoverSubject: 'AutoBook', backCoverVerb: ' exploring', backCoverUnknownTheme: 'mystery',
     backCoverUnknownProtagonist: 'A protagonist', backCoverUnknownTitle: 'This book',
@@ -256,5 +257,35 @@ describe('buildDocxBlob — illustration embedding', () => {
     // No image media in the package (WebP was skipped).
     const mediaKeys = Object.keys(files).filter(n => n.startsWith('word/media/'));
     expect(mediaKeys.length).toBe(0);
+  });
+
+  it('renders a prologue / epilogue when input includes them', async () => {
+    const prologue: Chapter = {
+      id: 'prologue', number: 0, title: 'Prologue',
+      content: 'Years before, a stranger came to the door.',
+      wordCount: 7, status: 'approved', createdAt: new Date(), revisions: [],
+    } as Chapter;
+    const epilogue: Chapter = {
+      id: 'epilogue', number: 0, title: 'Epilogue',
+      content: 'Years later, the study was empty.',
+      wordCount: 6, status: 'approved', createdAt: new Date(), revisions: [],
+    } as Chapter;
+    const blob = await buildDocxBlob({
+      ...baseInput,
+      prologue,
+      epilogue,
+      labels: { ...baseInput.labels, prologueLabel: 'Prologue', epilogueLabel: 'Epilogue' },
+    });
+    const { text } = await unzip(blob);
+    const doc = text['word/document.xml'];
+    // The drop cap strips the first letter off the body text — same
+    // shape the existing chapter test relies on for "It was a dark
+    // and stormy night." (it asserts `t was a dark...`). For
+    // "Years before" the surviving substring is "ears before".
+    expect(doc).toContain('ears before');
+    expect(doc).toContain('ears later');
+    // Prologue / epilogue headings use the localised label directly.
+    expect(doc).toContain('Prologue');
+    expect(doc).toContain('Epilogue');
   });
 });

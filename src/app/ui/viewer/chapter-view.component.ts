@@ -24,6 +24,8 @@ export class ChapterViewComponent implements OnInit {
   protected translationService = inject(TranslationService);
 
   chapters$: Observable<Chapter[]>;
+  prologue$: Observable<Chapter | null | undefined>;
+  epilogue$: Observable<Chapter | null | undefined>;
   selectedChapter: Chapter | null = null;
   selectedChapterIndex = 0;
 
@@ -39,15 +41,27 @@ export class ChapterViewComponent implements OnInit {
 
   constructor(private bookStateService: BookStateService) {
     this.chapters$ = this.bookStateService.getChapters$();
+    this.prologue$ = this.bookStateService.getPrologue$();
+    this.epilogue$ = this.bookStateService.getEpilogue$();
   }
 
   ngOnInit(): void {
-    // Load saved state or default to first chapter
-    this.chapters$.subscribe((chapters: Chapter[]) => {
-      if (chapters.length > 0 && !this.selectedChapter) {
-        this.selectChapter(chapters[0], 0);
-      }
-    });
+    // Default to the prologue when one exists so the user lands
+    // on the first section of the book (rather than jumping over
+    // it to Chapter 1). Falls back to chapter 1 when there's no
+    // prologue. Reads both observables synchronously off the
+    // shared state to avoid a race between the two subscriptions.
+    if (this.selectedChapter) return;
+    const state = this.bookStateService.getState();
+    if (state.prologue) {
+      this.selectChapter(state.prologue, -1);
+    } else {
+      this.chapters$.subscribe((chapters: Chapter[]) => {
+        if (chapters.length > 0 && !this.selectedChapter) {
+          this.selectChapter(chapters[0], 0);
+        }
+      });
+    }
   }
 
   selectChapter(chapter: Chapter, index: number): void {

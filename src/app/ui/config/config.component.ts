@@ -734,12 +734,15 @@ export class ConfigComponent implements OnInit {
       this.hydrateSupportingCharacters([]);
     }
 
-    // Step 2: Structure - NO prologue/epilogue to minimize chapters
+    // Step 2: Structure - randomise archetype/act structure and
+    // leave the user's prologue/epilogue flags untouched. An older
+    // version forced both to `false` here; that silently undid the
+    // user's choice every time they clicked "Surprise me", which
+    // the implementing agent for the prologue/epilogue plan had
+    // to fix or the new pipeline would never see the flag set.
     this.configForm.patchValue({
       plotArchetype: randomFromArray(this.plotArchetypes),
-      actStructure: randomFromArray(this.actStructures),
-      hasPrologue: false,
-      hasEpilogue: false
+      actStructure: randomFromArray(this.actStructures)
     });
   }
 }

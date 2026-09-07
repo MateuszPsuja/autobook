@@ -11,7 +11,8 @@ const baseInput: EpubBuildInput = {
   config: { title: 'Test Book', genre: 'mystery', protagonist: { name: 'Alex' }, themes: ['love', 'loss'] } as unknown as BookConfig,
   labels: {
     bookAuthor: 'Written by AI', aBookLabel: 'a novel', tocLabel: 'Contents',
-    chapterLabel: 'Chapter', untitledFallback: 'Untitled', stopping: 'Stopping...',
+    chapterLabel: 'Chapter', prologueLabel: 'Prologue', epilogueLabel: 'Epilogue',
+    untitledFallback: 'Untitled', stopping: 'Stopping...',
     translating: 'Translating...', backCoverHead: 'About the author',
     backCoverSubject: 'AutoBook', backCoverVerb: ' exploring', backCoverUnknownTheme: 'mystery',
     backCoverUnknownProtagonist: 'A protagonist', backCoverUnknownTitle: 'This book',
@@ -302,5 +303,91 @@ describe('buildEpubBlob — illustration embedding', () => {
     const css = text['OEBPS/styles/book.css'];
     expect(css).toContain('.chapter-illustration');
     expect(css).toContain('figcaption');
+  });
+});
+
+describe('buildEpubBlob — prologue / epilogue', () => {
+  // The EPUB builder must emit separate XHTML files for the
+  // prologue / epilogue (when present), list them in the
+  // navigation document and the OPF spine, and use the localised
+  // label in the heading + nav entry. They sit between the cover
+  // and chapter 1 (prologue) or between the last chapter and the
+  // back cover (epilogue).
+  const prologue: Chapter = {
+    id: 'prologue', number: 0, title: 'Prologue',
+    content: 'Years before, a stranger came to the door.',
+    wordCount: 7, status: 'approved', createdAt: new Date(), revisions: [],
+  } as Chapter;
+  const epilogue: Chapter = {
+    id: 'epilogue', number: 0, title: 'Epilogue',
+    content: 'Years later, the study was empty.',
+    wordCount: 6, status: 'approved', createdAt: new Date(), revisions: [],
+  } as Chapter;
+
+  it('emits prologue.xhtml and epilogue.xhtml when the input includes them', async () => {
+    const blob = buildEpubBlob({ ...baseInput, prologue, epilogue });
+    const { text } = await unzip(blob);
+    expect(text['OEBPS/xhtml/prologue.xhtml']).toBeDefined();
+    expect(text['OEBPS/xhtml/epilogue.xhtml']).toBeDefined();
+    expect(text['OEBPS/xhtml/prologue.xhtml']).toContain('Years before');
+    expect(text['OEBPS/xhtml/epilogue.xhtml']).toContain('Years later');
+  });
+
+  it('lists prologue and epilogue in the nav document in the right order', async () => {
+    const blob = buildEpubBlob({ ...baseInput, prologue, epilogue });
+    const { text } = await unzip(blob);
+    const nav = text['OEBPS/nav.xhtml'];
+    const prologuePos = nav.indexOf('xhtml/prologue.xhtml');
+    const chapter1Pos = nav.indexOf('xhtml/chapter-1.xhtml');
+    const epiloguePos = nav.indexOf('xhtml/epilogue.xhtml');
+    expect(prologuePos).toBeGreaterThan(-1);
+    expect(chapter1Pos).toBeGreaterThan(prologuePos);
+    expect(epiloguePos).toBeGreaterThan(chapter1Pos);
+  });
+
+  it('declares prologue / epilogue in the OPF manifest and spine in the right order', async () => {
+    const blob = buildEpubBlob({ ...baseInput, prologue, epilogue });
+    const { text } = await unzip(blob);
+    const opf = text['OEBPS/package.opf'];
+    expect(opf).toContain('id="prologue"');
+    expect(opf).toContain('href="xhtml/prologue.xhtml"');
+    expect(opf).toContain('id="epilogue"');
+    expect(opf).toContain('href="xhtml/epilogue.xhtml"');
+    // Spine: cover → prologue → chapter-1 → epilogue → back-cover
+    const spineStart = opf.indexOf('<spine>');
+    const spineEnd = opf.indexOf('</spine>');
+    const spine = opf.slice(spineStart, spineEnd);
+    const coverPos = spine.indexOf('idref="cover"');
+    const prologuePos = spine.indexOf('idref="prologue"');
+    const chapterPos = spine.indexOf('idref="chapter-1"');
+    const epiloguePos = spine.indexOf('idref="epilogue"');
+    const backPos = spine.indexOf('idref="back-cover"');
+    expect(prologuePos).toBeGreaterThan(coverPos);
+    expect(chapterPos).toBeGreaterThan(prologuePos);
+    expect(epiloguePos).toBeGreaterThan(chapterPos);
+    expect(backPos).toBeGreaterThan(epiloguePos);
+  });
+
+  it('uses the localised prologue / epilogue labels when language supplies them', async () => {
+    const blob = buildEpubBlob({
+      ...baseInput,
+      prologue,
+      epilogue,
+      labels: { ...baseInput.labels, prologueLabel: 'Prolog', epilogueLabel: 'Epilog' }
+    });
+    const { text } = await unzip(blob);
+    expect(text['OEBPS/xhtml/prologue.xhtml']).toContain('Prolog');
+    expect(text['OEBPS/xhtml/epilogue.xhtml']).toContain('Epilog');
+    expect(text['OEBPS/nav.xhtml']).toContain('Prolog');
+    expect(text['OEBPS/nav.xhtml']).toContain('Epilog');
+  });
+
+  it('omits prologue / epilogue when input has none', async () => {
+    const blob = buildEpubBlob({ ...baseInput });
+    const { text } = await unzip(blob);
+    expect(text['OEBPS/xhtml/prologue.xhtml']).toBeUndefined();
+    expect(text['OEBPS/xhtml/epilogue.xhtml']).toBeUndefined();
+    expect(text['OEBPS/nav.xhtml']).not.toContain('xhtml/prologue.xhtml');
+    expect(text['OEBPS/nav.xhtml']).not.toContain('xhtml/epilogue.xhtml');
   });
 });

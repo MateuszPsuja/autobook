@@ -43,6 +43,28 @@ Return a JSON object with the following structure:
       "targetWordCount": 3000
     }
   ],
+  "prologue": {
+    "number": 0,
+    "title": "Prologue",
+    "plotBeat": "Ten years before Chapter 1, a stranger leaves an unmarked map on a doorstep — the seed of everything that follows.",
+    "povCharacter": "the stranger",
+    "emotionalState": "purposeful, wary",
+    "location": "A rain-lashed doorstep at midnight",
+    "keyEvents": ["The stranger arrives", "Slips the map under the door", "Disappears into the storm"],
+    "hookType": "The door creaks open behind them — and no one is there",
+    "targetWordCount": 2500
+  },
+  "epilogue": {
+    "number": 0,
+    "title": "Epilogue",
+    "plotBeat": "Months after the climax, Mara visits the empty study and finds one final entry — a postscript that reframes the whole journey.",
+    "povCharacter": "Mara",
+    "emotionalState": "reflective, settled",
+    "location": "Her father's study, now hers, in late afternoon light",
+    "keyEvents": ["Mara sits at the desk", "Opens the journal", "Reads the closing entry"],
+    "hookType": "She closes the journal, but the wind catches the last page",
+    "targetWordCount": 2500
+  },
   "characterArcs": [
     {
       "name": "Character Name",
@@ -64,10 +86,16 @@ Return a JSON object with the following structure:
   "keyPlotPoints": ["Plot Point 1", "Plot Point 2", "Plot Point 3"]
 }
 
+**Prologue and Epilogue (optional):**
+- When the user opts in, return top-level \`prologue\` and/or \`epilogue\` objects shaped exactly like a chapter brief (use \`number: 0\` for both — the chapters list is still numbered 1..N).
+- The \`plotBeat\` must be a self-contained scene that stands outside the main numbered chapters. Do NOT place prologue/epilogue material inside \`chapters\`.
+- A prologue typically opens earlier in time or from a different vantage point. An epilogue typically closes after the climax.
+
 **Title rules (strict):**
 - Every chapter's \`title\` must be a UNIQUE 2–6 word phrase that hints at what happens in that chapter. It is what the reader sees in the chapter list and the PDF table of contents.
 - Titles must be derived from each chapter's own \`plotBeat\` — not from a template.
 - BANNED title patterns (a post-processor will rewrite these, but you should not produce them): "Chapter", "Chapter N", "Chapter 1", "Chapter Title", "Untitled", or any title that is just the word "Chapter" with an optional number/colon.
+- For the prologue and epilogue the \`title\` field MUST be the literal string \`"Prologue"\` or \`"Epilogue"\` — these are overridden at approval time, so even if you set a creative title it will be replaced. Keep the literal value.
 - Concrete examples of GOOD titles: "The Cartographer's Confession", "Shadows over Millhaven", "A Bargain in the Bone Orchard", "The Last Train North". Keep them evocative, not generic.
 
 **Important:**
@@ -141,6 +169,14 @@ ${
 5. Ensure the story has a satisfying arc
 6. Consider the target audience's expectations
 7. Align with the chosen plot archetype and act structure
+${
+  config.hasPrologue || config.hasEpilogue
+    ? `8. ${[
+        config.hasPrologue ? 'Prologue: include a self-contained top-level `prologue` brief (`number: 0`, `title: "Prologue"`, plotBeat, povCharacter, emotionalState, location, keyEvents, hookType, targetWordCount derived from chapterLength).' : '',
+        config.hasEpilogue ? 'Epilogue: include a self-contained top-level `epilogue` brief (`number: 0`, `title: "Epilogue"`, plotBeat, povCharacter, emotionalState, location, keyEvents, hookType, targetWordCount derived from chapterLength).' : ''
+      ].filter(Boolean).join(' ')}`
+    : ''
+}
 
 **Output:**
 Return only the JSON blueprint as specified in the system prompt. Do not include any additional text, explanations, or formatting.

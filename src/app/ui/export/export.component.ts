@@ -153,6 +153,8 @@ export class ExportComponent implements OnInit {
     try {
       const state = this.bookStateService.getState();
       let chapters = [...state.chapters];
+      let prologue: Chapter | null = state.prologue ?? null;
+      let epilogue: Chapter | null = state.epilogue ?? null;
       // `config` is the user-typed book metadata. When the user
       // picked a non-English target, we translate the user-visible
       // fields (title, genre, themes, character profiles) below and
@@ -246,6 +248,26 @@ export class ExportComponent implements OnInit {
             this.translationService.translateBookTo$(chapters, target, labels.chapterLabel)
           );
           if (this.isExportStopped) return;
+
+          // Translate the optional prologue / epilogue using the
+          // same per-chapter helper. We pass them in as
+          // single-element chapter arrays and unpack the result so
+          // the heading text is also rendered in the target
+          // language.
+          if (prologue) {
+            const translated = await firstValueFrom(
+              this.translationService.translateBookTo$([prologue], target, labels.prologueLabel)
+            );
+            if (this.isExportStopped) return;
+            prologue = { ...prologue, ...translated[0] };
+          }
+          if (epilogue) {
+            const translated = await firstValueFrom(
+              this.translationService.translateBookTo$([epilogue], target, labels.epilogueLabel)
+            );
+            if (this.isExportStopped) return;
+            epilogue = { ...epilogue, ...translated[0] };
+          }
         } catch (err) {
           // A whole-book translation failure is rare (per-field
           // helpers swallow errors) but if the outer observable
@@ -281,6 +303,8 @@ export class ExportComponent implements OnInit {
         });
         const result = await firstValueFrom(this.illustrationService.generateAll$({
           chapters,
+          prologue,
+          epilogue,
           config: state.config,
           // Pass the architect's blueprint so the cover and chapter
           // scene LLM calls have actual story content (titles, plot
@@ -310,17 +334,22 @@ export class ExportComponent implements OnInit {
       // the title it pulled from the (English) blueprint. When the
       // user exported to a non-English target, the chapter titles
       // have just been translated — rewrite the captions here so
-      // they read in the target language too. Keeps the service
-      // language-agnostic; the export component owns localisation.
+      // they read in the target language too. Prologue / epilogue
+      // illustrations use the matching localised label instead of
+      // "Chapter". Keeps the service language-agnostic; the export
+      // component owns localisation.
       if (chapterIllustrations && chapterIllustrations.size > 0) {
-        const chapterById = new Map(chapters.map(c => [c.id, c]));
+        const chapterById = new Map<string, { label: string; title: string }>();
+        for (const c of chapters) chapterById.set(c.id, { label: `${labels.chapterLabel} ${c.number}`, title: c.title || '' });
+        if (prologue) chapterById.set(prologue.id, { label: labels.prologueLabel, title: labels.prologueLabel });
+        if (epilogue) chapterById.set(epilogue.id, { label: labels.epilogueLabel, title: labels.epilogueLabel });
         const rewritten = new Map<string, ChapterIllustration>();
         for (const [id, ill] of chapterIllustrations.entries()) {
-          const ch = chapterById.get(id);
-          if (!ch) { rewritten.set(id, ill); continue; }
+          const entry = chapterById.get(id);
+          if (!entry) { rewritten.set(id, ill); continue; }
           rewritten.set(id, {
             ...ill,
-            caption: `${labels.chapterLabel} ${ch.number} \u00B7 ${ch.title || ''}`.trim()
+            caption: `${entry.label} \u00B7 ${entry.title}`.trim()
           });
         }
         chapterIllustrations = rewritten;
@@ -359,7 +388,7 @@ export class ExportComponent implements OnInit {
             chapterIllustrations,
             coverArt,
             backCoverArt,
-          });
+          }, prologue, epilogue);
           filename = 'book-export.epub';
           break;
         case 'docx':
@@ -367,12 +396,12 @@ export class ExportComponent implements OnInit {
             chapterIllustrations,
             coverArt,
             backCoverArt,
-          });
+          }, prologue, epilogue);
           filename = 'book-export.docx';
           break;
         case 'markdown':
         default:
-          content = this.generateMarkdown(chapters, config);
+          content = this.generateMarkdown(chapters, config, prologue, epilogue);
           filename = 'book-export.md';
           break;
       }
@@ -452,6 +481,8 @@ export class ExportComponent implements OnInit {
       coverArt?: BookCoverArt;
       backCoverArt?: BookCoverArt;
     },
+    prologue?: Chapter | null,
+    epilogue?: Chapter | null,
   ): Promise<Blob> {
     // If a translated config was provided, swap it into a copy of
     // the state so the EPUB builder reads the localised title /
@@ -467,6 +498,8 @@ export class ExportComponent implements OnInit {
       labels,
       bookAuthor: this.getEffectiveAuthor(),
       illustrationCtx,
+      prologue: prologue ?? null,
+      epilogue: epilogue ?? null,
     });
   }
 
@@ -478,6 +511,8 @@ export class ExportComponent implements OnInit {
       coverArt?: BookCoverArt;
       backCoverArt?: BookCoverArt;
     },
+    prologue?: Chapter | null,
+    epilogue?: Chapter | null,
   ): Promise<Blob> {
     // If a translated config was provided, swap it into a copy of
     // the state so the DOCX builder reads the localised title /
@@ -493,15 +528,17 @@ export class ExportComponent implements OnInit {
       labels,
       bookAuthor: this.getEffectiveAuthor(),
       illustrationCtx,
+      prologue: prologue ?? null,
+      epilogue: epilogue ?? null,
     });
   }
 
-  private generateMarkdown(chapters: Chapter[], translatedConfig?: any): Blob {
-    const content = this.buildBookContent(chapters, translatedConfig);
+  private generateMarkdown(chapters: Chapter[], translatedConfig?: any, prologue?: Chapter | null, epilogue?: Chapter | null): Blob {
+    const content = this.buildBookContent(chapters, translatedConfig, prologue, epilogue);
     return new Blob([content], { type: 'text/markdown' });
   }
 
-  private buildBookContent(chapters: Chapter[], translatedConfig?: any): string {
+  private buildBookContent(chapters: Chapter[], translatedConfig?: any, prologue?: Chapter | null, epilogue?: Chapter | null): string {
     const labels = getExportLabels(this.exportLanguage);
     // Prefer the translated title; fall through to the live state's
     // title for the default (English) export.
@@ -513,10 +550,24 @@ export class ExportComponent implements OnInit {
 
     if (this.exportOptions.includeTOC) {
       content += `## ${labels.tocLabel}\n\n`;
+      if (prologue) {
+        content += `- [${labels.prologueLabel}](#prologue)\n`;
+      }
       chapters.forEach(chapter => {
         content += `- [${labels.chapterLabel} ${chapter.number}: ${chapter.title}](#chapter-${chapter.number})\n`;
       });
+      if (epilogue) {
+        content += `- [${labels.epilogueLabel}](#epilogue)\n`;
+      }
       content += '\n';
+    }
+
+    if (prologue) {
+      if (this.exportOptions.includeTitles) {
+        content += `# ${labels.prologueLabel}\n\n`;
+      }
+      content += `${stripRunningWordCount(prologue.content)}\n\n`;
+      content += '---\n\n';
     }
 
     chapters.forEach(chapter => {
@@ -527,6 +578,14 @@ export class ExportComponent implements OnInit {
 
       content += '---\n\n';
     });
+
+    if (epilogue) {
+      if (this.exportOptions.includeTitles) {
+        content += `# ${labels.epilogueLabel}\n\n`;
+      }
+      content += `${stripRunningWordCount(epilogue.content)}\n\n`;
+      content += '---\n\n';
+    }
 
     return content;
   }

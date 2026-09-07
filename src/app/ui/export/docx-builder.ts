@@ -22,6 +22,12 @@ export interface DocxBuildInput {
   config: BookConfig;
   labels: ExportLabels;
   bookAuthor: string;
+  /** Optional approved prologue. Rendered as its own page with a
+   *  page break before, using `labels.prologueLabel`. */
+  prologue?: Chapter | null;
+  /** Optional approved epilogue. Rendered after the last numbered
+   *  chapter, with `labels.epilogueLabel` and a trailing page break. */
+  epilogue?: Chapter | null;
   /** Optional. When provided, embedded in the cover, back cover, and per-chapter XHTML. */
   illustrationCtx?: {
     chapterIllustrations?: Map<string, ChapterIllustration>;
@@ -199,12 +205,14 @@ function buildCoverPage(input: DocxBuildInput, coverImage: DocxImage | null): Pa
 /**
  * One chapter. Title at top (centered), optional figure with caption,
  * body paragraphs with first-paragraph drop-cap and first-line indent
- * on the rest.
+ * on the rest. Also used for prologue / epilogue sections — pass the
+ * right `sectionLabel` and the rest of the typography stays identical.
  */
 function buildChapter(
   chapter: Chapter,
   illustration: { ill: ChapterIllustration; image: DocxImage } | null,
   labels: ExportLabels,
+  sectionLabel?: string,
 ): Paragraph[] {
   const body_text = stripRunningWordCount(chapter.content || '').trim();
   const paragraphs = body_text.split(/\n\s*\n/).filter(p => p.trim().length > 0);
@@ -215,12 +223,16 @@ function buildChapter(
   // their own).
   out.push(new Paragraph({ children: [new PageBreak()] }));
 
+  const headingText = sectionLabel
+    ? sectionLabel
+    : `${labels.chapterLabel} ${chapter.number}: ${chapter.title || ''}`;
+
   // Chapter title.
   out.push(new Paragraph({
     alignment: AlignmentType.CENTER,
     spacing: { before: 1200, after: 600 },
     children: [new TextRun({
-      text: `${labels.chapterLabel} ${chapter.number}: ${chapter.title || ''}`,
+      text: headingText,
       font: { name: BODY_FONT, cs: FALLBACK_FONT, eastAsia: FALLBACK_FONT, hAnsi: BODY_FONT, ascii: BODY_FONT },
       size: CHAPTER_TITLE_SIZE_HALF_POINTS,
       bold: false,
@@ -449,9 +461,17 @@ export async function buildDocxBlob(input: DocxBuildInput): Promise<Blob> {
 
   const children: Paragraph[] = [];
   children.push(...buildCoverPage(input, coverImage));
+  if (input.prologue) {
+    const ill = chapterImageByChapterId.get(input.prologue.id);
+    children.push(...buildChapter(input.prologue, ill || null, input.labels, input.labels.prologueLabel));
+  }
   for (const ch of input.chapters) {
     const ill = chapterImageByChapterId.get(ch.id);
     children.push(...buildChapter(ch, ill || null, input.labels));
+  }
+  if (input.epilogue) {
+    const ill = chapterImageByChapterId.get(input.epilogue.id);
+    children.push(...buildChapter(input.epilogue, ill || null, input.labels, input.labels.epilogueLabel));
   }
   children.push(...buildBackCover(input, backImage));
 

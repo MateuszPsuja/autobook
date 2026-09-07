@@ -68,6 +68,12 @@ export interface ExportLabels {
   tocLabel: string;
   /** "Chapter" / "Rozdział" / "Chapitre" label. */
   chapterLabel: string;
+  /** "Prologue" / "Prolog" / "Prólogo" label — exported file heading
+   *  for the optional section that precedes Chapter 1. */
+  prologueLabel: string;
+  /** "Epilogue" / "Epilog" / "Epílogo" label — exported file heading
+   *  for the optional section that follows the last numbered chapter. */
+  epilogueLabel: string;
   /** Fallback for an empty book title (e.g. "Untitled"). */
   untitledFallback: string;
   /** Status string shown in the UI when the user clicks Stop. */
@@ -115,6 +121,8 @@ const ENGLISH_LABELS: ExportLabels = {
   aBookLabel: 'a novel',
   tocLabel: 'Table of Contents',
   chapterLabel: 'Chapter',
+  prologueLabel: 'Prologue',
+  epilogueLabel: 'Epilogue',
   untitledFallback: 'Untitled',
   stopping: 'Stopping...',
   translating: 'Translating...',
@@ -134,6 +142,8 @@ const POLISH_LABELS: ExportLabels = {
   aBookLabel: 'powieść',
   tocLabel: 'Spis treści',
   chapterLabel: 'Rozdział',
+  prologueLabel: 'Prolog',
+  epilogueLabel: 'Epilog',
   untitledFallback: 'Bez tytułu',
   stopping: 'Zatrzymywanie...',
   translating: 'Tłumaczenie...',
@@ -153,6 +163,8 @@ const SPANISH_LABELS: ExportLabels = {
   aBookLabel: 'una novela',
   tocLabel: 'Índice',
   chapterLabel: 'Capítulo',
+  prologueLabel: 'Prólogo',
+  epilogueLabel: 'Epílogo',
   untitledFallback: 'Sin título',
   stopping: 'Deteniendo...',
   translating: 'Traduciendo...',
@@ -172,6 +184,8 @@ const FRENCH_LABELS: ExportLabels = {
   aBookLabel: 'un roman',
   tocLabel: 'Table des matières',
   chapterLabel: 'Chapitre',
+  prologueLabel: 'Prologue',
+  epilogueLabel: 'Épilogue',
   untitledFallback: 'Sans titre',
   stopping: 'Arrêt...',
   translating: 'Traduction...',
@@ -191,6 +205,8 @@ const GERMAN_LABELS: ExportLabels = {
   aBookLabel: 'ein Roman',
   tocLabel: 'Inhaltsverzeichnis',
   chapterLabel: 'Kapitel',
+  prologueLabel: 'Prolog',
+  epilogueLabel: 'Epilog',
   untitledFallback: 'Ohne Titel',
   stopping: 'Wird gestoppt...',
   translating: 'Übersetzung...',
@@ -210,6 +226,8 @@ const ITALIAN_LABELS: ExportLabels = {
   aBookLabel: 'un romanzo',
   tocLabel: 'Indice',
   chapterLabel: 'Capitolo',
+  prologueLabel: 'Prologo',
+  epilogueLabel: 'Epilogo',
   untitledFallback: 'Senza titolo',
   stopping: 'Arresto...',
   translating: 'Traduzione...',
@@ -229,6 +247,8 @@ const PORTUGUESE_LABELS: ExportLabels = {
   aBookLabel: 'um romance',
   tocLabel: 'Sumário',
   chapterLabel: 'Capítulo',
+  prologueLabel: 'Prólogo',
+  epilogueLabel: 'Epílogo',
   untitledFallback: 'Sem título',
   stopping: 'Parando...',
   translating: 'Traduzindo...',
@@ -248,6 +268,8 @@ const DUTCH_LABELS: ExportLabels = {
   aBookLabel: 'een roman',
   tocLabel: 'Inhoudsopgave',
   chapterLabel: 'Hoofdstuk',
+  prologueLabel: 'Proloog',
+  epilogueLabel: 'Epiloog',
   untitledFallback: 'Zonder titel',
   stopping: 'Stoppen...',
   translating: 'Vertalen...',
@@ -267,6 +289,8 @@ const RUSSIAN_LABELS: ExportLabels = {
   aBookLabel: 'роман',
   tocLabel: 'Содержание',
   chapterLabel: 'Глава',
+  prologueLabel: 'Пролог',
+  epilogueLabel: 'Эпилог',
   untitledFallback: 'Без названия',
   stopping: 'Остановка...',
   translating: 'Перевод...',
@@ -286,6 +310,8 @@ const UKRAINIAN_LABELS: ExportLabels = {
   aBookLabel: 'роман',
   tocLabel: 'Зміст',
   chapterLabel: 'Розділ',
+  prologueLabel: 'Пролог',
+  epilogueLabel: 'Епілог',
   untitledFallback: 'Без назви',
   stopping: 'Зупинка...',
   translating: 'Переклад...',
@@ -305,6 +331,8 @@ const CZECH_LABELS: ExportLabels = {
   aBookLabel: 'román',
   tocLabel: 'Obsah',
   chapterLabel: 'Kapitola',
+  prologueLabel: 'Prolog',
+  epilogueLabel: 'Epilog',
   untitledFallback: 'Bez názvu',
   stopping: 'Zastavování...',
   translating: 'Překlad...',

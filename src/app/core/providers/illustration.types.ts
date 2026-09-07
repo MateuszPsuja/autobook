@@ -38,6 +38,13 @@ export interface IllustrationResult {
 
 export interface IllustrationRequest {
   chapters: Chapter[];
+  /** Optional prologue. When present and the user opted in, an
+   *  illustration is generated and keyed under the chapter id
+   *  `'prologue'`. */
+  prologue?: Chapter | null;
+  /** Optional epilogue. Same shape as `prologue`, keyed under
+   *  `'epilogue'`. */
+  epilogue?: Chapter | null;
   config: BookConfig;
   /**
    * Architect's blueprint. Each chapter in `chapters` has a matching
