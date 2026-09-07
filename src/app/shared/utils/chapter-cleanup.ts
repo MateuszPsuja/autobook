@@ -58,6 +58,13 @@ export function stripRunningWordCount(text: string): string {
   // strip.
   result = stripThinkingBlocks(result);
 
+  // Handle the case where a reasoning model emits `<think>` and then
+  // streams the chapter prose without ever closing the tag — the
+  // regular stripThinkingBlocks pass requires a matching close and
+  // would leave the entire reasoning + chapter chunk intact. This
+  // pass excises the unclosed block up to the first prose paragraph.
+  result = stripUnclosedThinkingBlock(result);
+
   const hasCountPrefix = PREFIX_RE.test(result);
   const hasWordsSuffix = SUFFIX_WORDS_RE.test(result.trim());
   if (!hasCountPrefix && !hasWordsSuffix) return result;
@@ -118,6 +125,15 @@ const REASONING_PREAMBLE_RE = /^\s*(?:\*\*)?(?:here(?:'s| is)\s+(?:a|my)\s+think
  * optional brackets.
  */
 const THINKING_BLOCK_RE = /<\s*(?:\|\s*)?(?:think(?:ing)?|reasoning|thought|chain_of_thought|reflection)\s*(?:\|\s*)?>[\s\S]*?<\s*(?:\|\s*)?\/\s*(?:\|\s*)?(?:think(?:ing)?|reasoning|thought|chain_of_thought|reflection)\s*(?:\|\s*)?>/gi;
+
+/**
+ * Opening tag for a reasoning block, without requiring a matching close.
+ * Some providers emit `<think>` (or `<reasoning>`, etc.) and then start
+ * streaming prose without ever closing the tag — the reasoning + the
+ * entire chapter end up inside one unterminated block. Matching just the
+ * opener lets `stripUnclosedThinkingBlock` find and excise it.
+ */
+const THINKING_OPEN_RE = /<\s*(?:\|\s*)?(?:think(?:ing)?|reasoning|thought|chain_of_thought|reflection)\s*(?:\|\s*)?>/i;
 
 /**
  * Strip reasoning that some models emit as a `think>` / `reasoning>`
@@ -223,4 +239,82 @@ export function stripThinkingBlocks(text: string): string {
   if (!THINKING_BLOCK_RE.test(text)) return text;
   THINKING_BLOCK_RE.lastIndex = 0;
   return text.replace(THINKING_BLOCK_RE, '').replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+}
+
+/**
+ * Detect and remove an unclosed `<think>` (or `<reasoning>`, etc.)
+ * block. Some providers — typically OpenRouter routes surfacing
+ * reasoning-capable models — emit the opening tag and then stream the
+ * model's chain-of-thought followed by the chapter prose, all without
+ * ever writing the closing tag. The standard `THINKING_BLOCK_RE` only
+ * matches properly-paired blocks and leaves the entire chunk intact.
+ *
+ * Strategy:
+ *  1. If no opening tag is present, the input is already clean.
+ *  2. If the opening tag is present and has a matching close somewhere
+ *     later, the standard `stripThinkingBlocks` pass handles it — bail.
+ *  3. Otherwise: walk the content after the opening tag, look for the
+ *     first paragraph that looks like narrative prose (long enough, has
+ *     sentence punctuation, isn't a list/bold/heading line), and treat
+ *     everything from the opening tag up to (but not including) that
+ *     paragraph as leaked reasoning.
+ *
+ * Returns the input unchanged when no opener is found, so it's safe to
+ * call unconditionally.
+ */
+export function stripUnclosedThinkingBlock(text: string): string {
+  if (!text) return text;
+  const openMatch = THINKING_OPEN_RE.exec(text);
+  if (!openMatch) return text;
+
+  // Already paired? Let stripThinkingBlocks handle it.
+  THINKING_BLOCK_RE.lastIndex = 0;
+  if (THINKING_BLOCK_RE.test(text)) return text;
+  THINKING_BLOCK_RE.lastIndex = 0;
+
+  const tail = text.slice(openMatch.index + openMatch[0].length);
+  const lines = tail.split('\n');
+
+  // Walk through and find the first paragraph that looks like actual
+  // narrative prose. The reasoning block that follows an unclosed
+  // <think> tag is typically a mix of (a) English-language meta lines
+  // ("Let me write Chapter 4..."), (b) list items ("- bullet", "1.
+  // step"), and (c) short declarative sentences without sentence-end
+  // punctuation ("outline the chapter beats"). Real chapter prose is
+  // almost always separated from the reasoning by a blank line and
+  // carries sentence-ending punctuation. We use that blank-line +
+  // sentence-end signal as the primary "prose starts here" marker;
+  // as a fall-back we also accept a long multi-sentence paragraph
+  // even without a blank-line separator.
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
+    if (trimmed === '') continue;
+    if (STRUCTURED_LINE_RE.test(trimmed)) continue;
+
+    const sentenceEnds = (trimmed.match(/[.!?]/g) || []).length;
+    if (sentenceEnds < 1) continue;
+
+    // Blank-line separator above is the strongest "prose starts here"
+    // signal — reasoning blocks virtually always end with a blank line
+    // before the prose begins.
+    let prev = i - 1;
+    while (prev >= 0 && lines[prev].trim() === '') prev--;
+    const hasBlankLineAbove = prev < i - 1;
+    if (hasBlankLineAbove) {
+      return lines.slice(i).join('\n').trim();
+    }
+
+    // Fall-back: a long multi-sentence paragraph is almost certainly
+    // prose even without a blank-line separator above it.
+    if (sentenceEnds >= 2 && trimmed.length >= 40) {
+      return lines.slice(i).join('\n').trim();
+    }
+  }
+
+  // Couldn't find a clear prose paragraph. Most likely the stream was
+  // truncated mid-reasoning — return whatever sits after the opening
+  // tag, but trim the obviously-leaky bits.
+  const trimmedTail = tail.replace(/^\s+/, '').trim();
+  return trimmedTail;
 }

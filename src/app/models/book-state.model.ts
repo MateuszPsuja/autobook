@@ -70,6 +70,32 @@ export interface BookState {
    */
   currentChapterNumber: number | null;
   stats: GenerationStats;
+  /**
+   * Accumulated prose text from the currently-streaming prose agent
+   * (architect/author/reviser). Cleared at the start of each attempt
+   * by `beginStream$`, grown token-by-token via `appendStream$`, and
+   * left in place after `endStream$` so the UI can show a brief tail
+   * before the card hides.
+   */
+  liveStream: string;
+  /**
+   * Which agent currently owns the stream buffer. `null` means no
+   * stream is active. The stream card is visible while this is
+   * non-null and for ~2s after it flips back to `null` (see
+   * generator component for the tail-window logic).
+   */
+  liveStreamAgent: AgentType | null;
+  /**
+   * Epoch-ms when the current stream began, or `null` when no stream
+   * is active. Used to compute tokens/sec for the live stats chips.
+   */
+  liveStreamStartedAt: number | null;
+  /**
+   * Running heuristic token estimate (`chars / 4`) of the live stream.
+   * Off by ~30–50% on real prose vs API-reported totals — the per-agent
+   * stats card is the source of truth for the final count.
+   */
+  liveTokensApprox: number;
 }
 
 export interface Blueprint {

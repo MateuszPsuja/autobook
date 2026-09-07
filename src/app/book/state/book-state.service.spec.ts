@@ -315,6 +315,99 @@ describe('BookStateService', () => {
     });
   });
 
+  describe('Live stream buffer', () => {
+    /**
+     * Drives the Live Output card on the generator UI. The
+     * orchestrator wraps every prose-emitting agent call (author,
+     * reviser) with beginStream$ → appendStream$ on each delta →
+     * endStream$. Each retry attempt must re-call beginStream$ so
+     * a failed attempt's prose doesn't bleed into the next attempt's
+     * display.
+     */
+    it('beginStream$ clears the buffer and stamps the start time', () => {
+      // Seed some leftover state.
+      service.appendStream$('leftover from previous call');
+      expect(service.getState().liveStream).toBe('leftover from previous call');
+
+      service.beginStream$('author');
+      const state = service.getState();
+      expect(state.liveStream).toBe('');
+      expect(state.liveStreamAgent).toBe('author');
+      expect(state.liveStreamStartedAt).not.toBeNull();
+      expect(state.liveTokensApprox).toBe(0);
+    });
+
+    it('appendStream$ accumulates text and updates the heuristic token count', () => {
+      service.beginStream$('author');
+      service.appendStream$('Hello, ');
+      service.appendStream$('world!');
+      const state = service.getState();
+      expect(state.liveStream).toBe('Hello, world!');
+      // 13 chars / 4 = 3 (floor).
+      expect(state.liveTokensApprox).toBe(3);
+    });
+
+    it('endStream$ leaves the buffer in place but schedules a 2s clear', (done) => {
+      service.beginStream$('author');
+      service.appendStream$('Some prose.');
+      service.endStream$();
+
+      // Immediately after endStream$, the buffer text is still
+      // there so the card can show the tail before hiding.
+      expect(service.getState().liveStream).toBe('Some prose.');
+      expect(service.getState().liveStreamAgent).toBe('author');
+
+      // After the 2s tail window the agent field clears so the
+      // card hides.
+      setTimeout(() => {
+        expect(service.getState().liveStreamAgent).toBeNull();
+        expect(service.getState().liveStreamStartedAt).toBeNull();
+        done();
+      }, 2100);
+    });
+
+    it('clearLiveStreamBuffer wipes the buffer immediately (used by stop)', () => {
+      service.beginStream$('author');
+      service.appendStream$('Some prose.');
+      service.clearLiveStreamBuffer();
+      const state = service.getState();
+      expect(state.liveStream).toBe('');
+      expect(state.liveStreamAgent).toBeNull();
+      expect(state.liveTokensApprox).toBe(0);
+    });
+
+    it('beginStream$ cancels a pending endStream$ hide-timer (so retries don\'t blink)', (done) => {
+      service.beginStream$('author');
+      service.endStream$();
+      // Immediately begin another attempt — the hide-timer from
+      // endStream$ must be cancelled so the new attempt stays visible.
+      service.beginStream$('author');
+      setTimeout(() => {
+        // After 2s+ the agent field should still be 'author' (the
+        // cancelled timer never fired).
+        expect(service.getState().liveStreamAgent).toBe('author');
+        done();
+      }, 2100);
+    });
+
+    it('getLiveStreamLines$ emits the last 6 non-empty lines, dropping the partial tail', (done) => {
+      service.beginStream$('author');
+      service.appendStream$('alpha\nbravo\ncharlie\ndelta\necho\nfoxtrot\ngolf partial');
+
+      const collected: string[][] = [];
+      const sub = service.getLiveStreamLines$().subscribe(lines => collected.push(lines));
+      setTimeout(() => {
+        sub.unsubscribe();
+        const last = collected[collected.length - 1];
+        // 'golf partial' has no trailing newline so it's the mid-line
+        // tail and must be dropped; everything up to the last \n is
+        // rendered.
+        expect(last).toEqual(['alpha', 'bravo', 'charlie', 'delta', 'echo', 'foxtrot']);
+        done();
+      }, 0);
+    });
+  });
+
   describe('Reset', () => {
     it('should reset state to initial values', () => {
       // Modify state

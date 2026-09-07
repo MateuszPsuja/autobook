@@ -160,7 +160,8 @@ describe('OrchestratorService', () => {
       'setBlueprint', 'getState', 'setCharacterStore', 'setContinuityFlags',
       'setSkippedChapters', 'setCurrentChapter',
       'resetStats', 'startGenerationTimer', 'endGenerationTimer',
-      'recordAgentUsage', 'updateTotalWords'
+      'recordAgentUsage', 'updateTotalWords',
+      'beginStream$', 'appendStream$', 'endStream$', 'clearLiveStreamBuffer'
     ]);
     bookStateServiceSpy.getState.and.returnValue({
       chapters: [],
@@ -177,7 +178,11 @@ describe('OrchestratorService', () => {
       continuityFlags: [],
       skippedChapters: [],
       currentChapterNumber: null,
-      stats: createInitialStats()
+      stats: createInitialStats(),
+      liveStream: '',
+      liveStreamAgent: null,
+      liveStreamStartedAt: null,
+      liveTokensApprox: 0
     });
 
     architectServiceSpy = jasmine.createSpyObj('ArchitectService', ['generateBlueprintWithUsage']);
@@ -186,7 +191,21 @@ describe('OrchestratorService', () => {
       usage: { promptTokens: 100, completionTokens: 200, totalTokens: 300 }
     }));
 
-    authorServiceSpy = jasmine.createSpyObj('AuthorService', ['writeChapterWithUsage', 'reviseChapterWithUsage']);
+    authorServiceSpy = jasmine.createSpyObj('AuthorService', [
+      'writeChapterWithUsage', 'reviseChapterWithUsage',
+      'writeChapterStreamingWithUsage', 'reviseChapterStreamingWithUsage'
+    ]);
+    // The orchestrator now uses the streaming siblings for author
+    // and reviser; the non-streaming ones stay as fallbacks for
+    // existing tests that explicitly verify them.
+    authorServiceSpy.writeChapterStreamingWithUsage.and.returnValue(of({
+      draft: mockDraft,
+      usage: { promptTokens: 100, completionTokens: 200, totalTokens: 300 }
+    }));
+    authorServiceSpy.reviseChapterStreamingWithUsage.and.returnValue(of({
+      draft: mockDraft,
+      usage: { promptTokens: 100, completionTokens: 200, totalTokens: 300 }
+    }));
     authorServiceSpy.writeChapterWithUsage.and.returnValue(of({
       draft: mockDraft,
       usage: { promptTokens: 100, completionTokens: 200, totalTokens: 300 }
@@ -306,7 +325,11 @@ describe('OrchestratorService', () => {
     it('should process all chapters from blueprint', (done) => {
       service.orchestrate(mockConfig).subscribe({
         complete: () => {
-          expect(authorServiceSpy.writeChapterWithUsage).toHaveBeenCalled();
+          // Orchestrator uses the streaming siblings for author /
+          // reviser so the live-preview card can show prose as it
+          // arrives; the non-streaming variants stay available as
+          // fallback / for unit tests that explicitly verify them.
+          expect(authorServiceSpy.writeChapterStreamingWithUsage).toHaveBeenCalled();
           expect(criticServiceSpy.evaluateChapterWithUsage).toHaveBeenCalled();
           done();
         }
@@ -402,7 +425,11 @@ describe('OrchestratorService', () => {
           continuityFlags: [],
           skippedChapters: [],
           currentChapterNumber: null,
-          stats: createInitialStats()
+          stats: createInitialStats(),
+          liveStream: '',
+          liveStreamAgent: null,
+          liveStreamStartedAt: null,
+          liveTokensApprox: 0
         });
 
         service.orchestrate(mockConfig).subscribe({

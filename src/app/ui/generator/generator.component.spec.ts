@@ -1,5 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { BehaviorSubject, of } from 'rxjs';
+import { map } from 'rxjs/operators';
 import { GeneratorComponent } from './generator.component';
 import { BookStateService } from '../../book/state/book-state.service';
 import { OrchestratorService } from '../../book/orchestrator/orchestrator.service';
@@ -53,7 +54,11 @@ describe('GeneratorComponent', () => {
             character: { calls: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0 },
             continuity: { calls: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0 }
           }
-        }
+        },
+        liveStream: '',
+        liveStreamAgent: null,
+        liveStreamStartedAt: null,
+        liveTokensApprox: 0
       } as BookState;
       const stateSubject = new BehaviorSubject<BookState>(initialState);
 
@@ -64,6 +69,13 @@ describe('GeneratorComponent', () => {
         getChapters$: () => stateSubject.asObservable(),
         getCurrentDraft$: () => stateSubject.asObservable(),
         getStats$: () => stateSubject.asObservable(),
+        getLiveStreamLines$: () => stateSubject.pipe(map(s => {
+          const text = s.liveStream ?? '';
+          const lastNl = text.lastIndexOf('\n');
+          const completed = lastNl >= 0 ? text.slice(0, lastNl) : '';
+          return completed.split('\n').map(l => l.trim()).filter(l => l.length > 0).slice(-6);
+        })),
+        getLiveTokenRate$: () => of(0),
         patch: (p: Partial<BookState>) => {
           stateSubject.next({ ...stateSubject.value, ...p });
         }
@@ -239,6 +251,51 @@ describe('GeneratorComponent', () => {
       pushState(stateSubject, { currentChapterNumber: 1, activeAgent: 'critic', status: 'critiquing' });
       expect(component.agentStates.author.status).toBe('done');
       expect(component.agentStates.critic.status).toBe('running');
+    });
+
+    describe('live-stream card visibility', () => {
+      /**
+       * The card visibility rule in the template is
+       *   `@if (isGenerating || liveStreamAgent)`.
+       * The template binding (`liveStreamAgent` field) is updated
+       * inside the `bookState$` subscription in `startGeneration()`,
+       * and the per-emission mirroring is structurally identical to
+       * the existing `agentStates` updates that the chapter-boundary
+       * tests above already exercise — both subscriptions live in
+       * the same place and read the same observable. So instead of
+       * a second near-duplicate test, we focus here on the bits the
+       * chapter-boundary tests can't reach:
+       *
+       *  - `liveLines$` is exposed and emits the last 6 non-empty
+       *    lines of the live stream (with the partial tail dropped
+       *    so the box doesn't show a "fake line" caret).
+       *
+       * The state behaviour (`beginStream$` / `endStream$` /
+       * `clearLiveStreamBuffer` / 2s tail-window timer) is covered
+       * directly in `book-state.service.spec.ts` against the real
+       * service.
+       */
+      it('exposes liveLines$ derived from the liveStream buffer (last 6 non-empty lines)', (done) => {
+        const { component, stateSubject } = setup();
+
+        // Six completed lines plus a partial tail that must NOT appear
+        // (the live card drops the mid-line tail so the box doesn't
+        // show a "fake line" caret). After the newline, the partial
+        // text remains in `liveStream` but only completed lines render.
+        const completedLines = 'alpha\nbravo\ncharlie\ndelta\necho\nfoxtrot\n';
+        pushState(stateSubject, {
+          liveStream: completedLines + 'golf partial'
+        });
+
+        const collected: string[][] = [];
+        const sub = component.liveLines$.subscribe((lines: string[]) => collected.push(lines));
+        setTimeout(() => {
+          sub.unsubscribe();
+          const last = collected[collected.length - 1];
+          expect(last).toEqual(['alpha', 'bravo', 'charlie', 'delta', 'echo', 'foxtrot']);
+          done();
+        }, 0);
+      });
     });
   });
 });

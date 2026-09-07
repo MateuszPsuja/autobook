@@ -1,7 +1,8 @@
 import { Injectable } from '@angular/core';
 import { Observable, Subject } from 'rxjs';
-import { map, takeUntil } from 'rxjs/operators';
+import { map } from 'rxjs/operators';
 import { ApiService, TokenUsage } from '../../core/api.service';
+import { BookStateService } from '../state/book-state.service';
 import { ChapterBrief, AuthorContext, AuthorStyleContext } from '../../models/book-state.model';
 import { ChapterDraft } from '../../models/chapter.model';
 import { authorSystemPrompt, authorChapterPrompt, authorRevisionPrompt } from '../prompts/author.prompts';
@@ -17,7 +18,10 @@ export interface AuthorResult {
   providedIn: 'root'
 })
 export class AuthorService {
-  constructor(private apiService: ApiService) {}
+  constructor(
+    private apiService: ApiService,
+    private bookStateService: BookStateService
+  ) {}
 
   /**
    * Write a chapter with streaming output
@@ -183,6 +187,110 @@ export class AuthorService {
   }
 
   /**
+   * Streaming sibling of `writeChapterWithUsage`. Calls the SSE
+   * endpoint, pushes every delta into `bookStateService.appendStream$`
+   * for the live-preview card, then runs the same safety/cleanup
+   * checks as the non-streaming path on completion. Throws the same
+   * errors so the orchestrator's retry path treats them identically.
+   *
+   * `usage.promptTokens` is unknown from a streamed response — we
+   * leave it at 0 and warn. `completionTokens` is approximated from
+   * the streamed text via the same `chars / 4` heuristic the live
+   * card uses; the per-agent stats card will show that approximation
+   * for Author/Reviser once switched over.
+   */
+  writeChapterStreamingWithUsage(brief: ChapterBrief, ctx: AuthorContext): Observable<AuthorResult> {
+    const messages = [
+      { role: 'system' as const, content: authorSystemPrompt(ctx.styleContext) },
+      { role: 'user' as const, content: authorChapterPrompt(brief, ctx) }
+    ];
+
+    const request = {
+      model: ctx.model,
+      messages,
+      temperature: 0.8,
+      max_tokens: brief.targetWordCount * 2,
+      stream: true
+    };
+
+    const subject = new Subject<AuthorResult>();
+    let content = '';
+
+    const stream = this.apiService.chatCompletionStream(request);
+    const subscription = stream.subscribe({
+      next: (delta: string) => {
+        content += delta;
+        this.bookStateService.appendStream$(delta);
+      },
+      error: (error) => {
+        console.error('Author stream error:', error);
+        // Surface partial content as an AuthorResult so the caller
+        // can decide what to do. We don't try to retry here — the
+        // orchestrator's writeChapterWithRetry loop is the single
+        // owner of retry semantics. Throwing keeps the existing
+        // retry path on the same code path as the non-streaming
+        // sibling, including safety/cleanup checks on what we did
+        // receive. The orchestrator already calls beginStream$()
+        // on each retry attempt, so the next attempt starts with a
+        // fresh buffer.
+        subject.error(error);
+      },
+      complete: () => {
+        try {
+          const finishReason = undefined; // SSE streams don't carry finish_reason reliably
+          if (isRefusalOrSafety(content, finishReason)) {
+            throw new Error(
+              'Author returned a safety / content-policy response instead of chapter prose. ' +
+              'Will retry — this is the model refusing the prompt, not a model error.'
+            );
+          }
+          const cleaned = stripRunningWordCount(content);
+          const wordCount = this.countWords(cleaned);
+
+          const minViableWords = Math.min(200, Math.max(50, Math.floor(brief.targetWordCount * 0.2)));
+          if (wordCount < minViableWords) {
+            throw new Error(
+              `Author returned only ${wordCount} words after cleanup (minimum ${minViableWords}). ` +
+              `Likely a refusal, truncation, or reasoning-only response — will retry.`
+            );
+          }
+
+          const draft: ChapterDraft = {
+            chapterId: `chapter-${brief.number}`,
+            content: cleaned,
+            wordCount,
+            progress: Math.min(100, Math.floor((wordCount / brief.targetWordCount) * 100)),
+            createdAt: new Date(),
+            updatedAt: new Date()
+          };
+
+          const completionTokens = Math.ceil(cleaned.length / 4);
+          const usage: TokenUsage = {
+            promptTokens: 0,
+            completionTokens,
+            totalTokens: completionTokens
+          };
+          console.warn(
+            `Author streaming: promptTokens unknown from a streamed response; recording 0. ` +
+            `completionTokens approximated via chars/4 from ${cleaned.length} chars of prose.`
+          );
+
+          subject.next({ draft, usage });
+          subject.complete();
+        } catch (err) {
+          subject.error(err);
+        }
+      }
+    });
+
+    subject.subscribe({
+      complete: () => subscription.unsubscribe()
+    });
+
+    return subject.asObservable();
+  }
+
+  /**
    * Revise a chapter based on critique
    */
   reviseChapter(draft: ChapterDraft, critique: any, brief: ChapterBrief, model: string, styleContext: AuthorStyleContext): Observable<ChapterDraft> {
@@ -273,6 +381,100 @@ export class AuthorService {
         return { draft: revisedDraft, usage };
       })
     );
+  }
+
+  /**
+   * Streaming sibling of `reviseChapterWithUsage`. Same semantics
+   * as `writeChapterStreamingWithUsage` but for revisions: pushes
+   * every delta into the live stream buffer, runs the same
+   * safety / too-short checks on completion, and returns an
+   * `AuthorResult` whose `usage.promptTokens` is unknown.
+   */
+  reviseChapterStreamingWithUsage(
+    draft: ChapterDraft,
+    critique: any,
+    brief: ChapterBrief,
+    model: string,
+    styleContext: AuthorStyleContext
+  ): Observable<AuthorResult> {
+    const messages = [
+      { role: 'system' as const, content: authorSystemPrompt(styleContext) },
+      { role: 'user' as const, content: authorRevisionPrompt(draft.content, critique, brief) }
+    ];
+
+    const request = {
+      model,
+      messages,
+      temperature: 0.7,
+      max_tokens: draft.wordCount * 2,
+      stream: true
+    };
+
+    const subject = new Subject<AuthorResult>();
+    let content = '';
+
+    const stream = this.apiService.chatCompletionStream(request);
+    const subscription = stream.subscribe({
+      next: (delta: string) => {
+        content += delta;
+        this.bookStateService.appendStream$(delta);
+      },
+      error: (error) => {
+        console.error('Reviser stream error:', error);
+        subject.error(error);
+      },
+      complete: () => {
+        try {
+          const raw = content || draft.content;
+          const finishReason = undefined;
+          if (isRefusalOrSafety(raw, finishReason)) {
+            throw new Error(
+              'Reviser returned a safety / content-policy response instead of revised chapter prose. ' +
+              'Will retry — the model is refusing the prompt, not failing.'
+            );
+          }
+          const cleaned = stripRunningWordCount(raw);
+          const wordCount = this.countWords(cleaned);
+
+          const minViableWords = Math.min(200, Math.max(50, Math.floor(draft.wordCount * 0.5)));
+          if (wordCount < minViableWords) {
+            throw new Error(
+              `Reviser returned only ${wordCount} words after cleanup (minimum ${minViableWords}). ` +
+              `Likely a refusal or truncation — will retry.`
+            );
+          }
+
+          const revisedDraft: ChapterDraft = {
+            ...draft,
+            content: cleaned,
+            wordCount,
+            updatedAt: new Date()
+          };
+
+          const completionTokens = Math.ceil(cleaned.length / 4);
+          const usage: TokenUsage = {
+            promptTokens: 0,
+            completionTokens,
+            totalTokens: completionTokens
+          };
+          console.warn(
+            `Reviser streaming: promptTokens unknown from a streamed response; recording 0. ` +
+            `completionTokens approximated via chars/4 from ${cleaned.length} chars of prose.`
+          );
+
+          subject.next({ draft: revisedDraft, usage });
+          subject.complete();
+        } catch (err) {
+          subject.error(err);
+        }
+      }
+    });
+
+    subject.subscribe({
+      complete: () => subscription.unsubscribe()
+    });
+
+    return subject.asObservable();
   }
 
   /**

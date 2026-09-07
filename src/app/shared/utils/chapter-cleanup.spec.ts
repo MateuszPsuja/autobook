@@ -1,4 +1,4 @@
-import { stripReasoningPreamble, stripRunningWordCount, stripThinkingBlocks } from './chapter-cleanup';
+import { stripReasoningPreamble, stripRunningWordCount, stripThinkingBlocks, stripUnclosedThinkingBlock } from './chapter-cleanup';
 
 describe('stripReasoningPreamble', () => {
   it('returns the input unchanged when there is no preamble', () => {
@@ -166,6 +166,55 @@ describe('stripThinkingBlocks', () => {
   });
 });
 
+describe('stripUnclosedThinkingBlock', () => {
+  it('returns the input unchanged when there is no opening tag', () => {
+    const prose = 'You bury the lantern at the crossroads, and the dawn finds you walking.';
+    expect(stripUnclosedThinkingBlock(prose)).toBe(prose);
+  });
+
+  it('strips an unclosed <think>...prose block at the start', () => {
+    // Reproduces the bug observed when an OpenRouter route surfaced
+    // a reasoning-capable model that emitted <think> and then streamed
+    // the chapter without ever writing </think>. The reasoning ran for
+    // ~40 lines of list items before the model switched to actual prose.
+    const input = [
+      '<think>Let me write Chapter 4: "The Dawn Between" following all the strict requirements.',
+      '',
+      'Key elements to include:',
+      '- Start directly with 1. You bury Jordan\'s lantern with honor',
+      '2. You begin walking toward the city',
+      '3. You carry both light and shadow in your heart',
+      '- Children find you and follow',
+      '- You become the bridge between two worlds',
+      '',
+      'You bury the lantern at the crossroads. The dawn finds you walking toward the city.',
+      'The children fall in behind you, a strange procession moving toward the last light.'
+    ].join('\n');
+
+    const result = stripUnclosedThinkingBlock(input);
+    expect(result).not.toContain('Let me write Chapter 4');
+    expect(result).not.toContain('Key elements');
+    expect(result).not.toContain('<think');
+    expect(result.startsWith('You bury the lantern')).toBe(true);
+  });
+
+  it('strips an unclosed <reasoning> block', () => {
+    const input = '<reasoning>outline the chapter beats and character arcs\n\nYou walk toward the city.';
+    const result = stripUnclosedThinkingBlock(input);
+    expect(result).not.toContain('outline the chapter beats');
+    expect(result.startsWith('You walk toward the city.')).toBe(true);
+  });
+
+  it('falls back to stripThinkingBlocks when the block IS properly closed', () => {
+    // Defensive: if a future caller forgets to run stripThinkingBlocks
+    // first, this pass should not duplicate the work or damage the
+    // paired-block output.
+    const input = '<think>plan a hook</think>\n\nThe dawn found her walking.';
+    const result = stripUnclosedThinkingBlock(input);
+    expect(result).toBe(input);
+  });
+});
+
 describe('stripRunningWordCount', () => {
   it('passes through clean prose', () => {
     const prose = 'Phoenix knelt in the dust and pressed her palm to the shard.';
@@ -243,5 +292,30 @@ describe('stripRunningWordCount', () => {
     expect(result.startsWith('Phoenix')).toBe(true);
     expect(result).not.toContain('analyze');
     expect(result).not.toContain('strong hook');
+  });
+
+  it('strips an UNCLOSED <think> block (reasoning + prose inside one tag)', () => {
+    // Reproduces the bug observed when an OpenRouter route surfaced
+    // a reasoning-capable model that emitted <think> and then streamed
+    // the chapter prose without ever writing </think>. The reasoning
+    // preamble detector misses it (no English marker line), and the
+    // paired-block detector misses it (no closing tag). The
+    // unclosed-block pass catches it.
+    const input = [
+      '<think>Let me write Chapter 4: "The Dawn Between" following all the strict requirements.',
+      '',
+      'Key elements to include:',
+      '- Start directly with 1. You bury',
+      '2. You begin walking',
+      '3. You carry both light and shadow',
+      '',
+      'You bury the lantern at the crossroads. The dawn finds you walking toward the city.'
+    ].join('\n');
+
+    const result = stripRunningWordCount(input);
+    expect(result.startsWith('You bury the lantern')).toBe(true);
+    expect(result).not.toContain('Let me write Chapter 4');
+    expect(result).not.toContain('Key elements');
+    expect(result).not.toContain('<think');
   });
 });

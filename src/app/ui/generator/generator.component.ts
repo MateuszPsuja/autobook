@@ -1,7 +1,7 @@
 import { Component, OnInit, OnDestroy, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
-import { Subscription, Observable, interval } from 'rxjs';
+import { Subscription, Observable, of } from 'rxjs';
 import { BookStateService } from '../../book/state/book-state.service';
 import { OrchestratorService } from '../../book/orchestrator/orchestrator.service';
 import { ApiService } from '../../core/api.service';
@@ -25,6 +25,17 @@ export class GeneratorComponent implements OnInit, OnDestroy {
   status$: Observable<GenerationStatus>;
   chapters$: Observable<any[]>;
   currentDraft$: Observable<ChapterDraft | null>;
+
+  // Live-stream preview. `liveLines$` drives the monospace box in
+  // the template; `liveTokenRate` is a plain number field updated
+  // by the 1Hz throttled observable so the chip interpolates without
+  // needing an async pipe inside its expression. `liveStreamAgent`
+  // and `liveTokensApprox` are mirrors of the book-state fields the
+  // template binds to.
+  liveLines$: Observable<string[]> = of([]);
+  liveTokenRate: number = 0;
+  liveStreamAgent: AgentType | null = null;
+  liveTokensApprox: number = 0;
 
   private subscription: Subscription = new Subscription();
   private generationSubscription: Subscription = new Subscription();
@@ -76,6 +87,13 @@ export class GeneratorComponent implements OnInit, OnDestroy {
     private router: Router
   ) {
     this.bookState$ = this.bookStateService.getState$();
+    // Initialise in the constructor so the template binding has a
+    // non-null observable even before ngOnInit runs (the existing
+    // test setup constructs the component directly without invoking
+    // Angular's lifecycle hooks). The observable is a lazy reference
+    // to the service method — no work happens until a subscriber
+    // attaches.
+    this.liveLines$ = this.bookStateService.getLiveStreamLines$();
     this.activeAgent$ = this.bookStateService.getActiveAgent$();
     this.status$ = this.bookStateService.getStatus$();
     this.chapters$ = this.bookStateService.getChapters$();
@@ -129,6 +147,16 @@ export class GeneratorComponent implements OnInit, OnDestroy {
         this.generationStats = stats;
       })
     );
+
+    // Live stream — drive the new preview card. Rate is
+    // 1Hz-throttled internally so we don't recompute on every SSE
+    // delta. `liveLines$` is initialised in the constructor so the
+    // template binding has a real observable from the start.
+    this.subscription.add(
+      this.bookStateService.getLiveTokenRate$().subscribe(rate => {
+        this.liveTokenRate = rate;
+      })
+    );
   }
 
   ngOnDestroy(): void {
@@ -178,6 +206,12 @@ export class GeneratorComponent implements OnInit, OnDestroy {
     // Subscribe to state changes for UI updates
     this.subscription.add(
       this.bookState$.subscribe(state => {
+        // Live stream preview fields mirror the book state directly
+        // — the template binds to them, and the visibility @if reads
+        // `liveStreamAgent` for the tail-window after endStream$.
+        this.liveStreamAgent = state.liveStreamAgent;
+        this.liveTokensApprox = state.liveTokensApprox;
+
         // Detect a chapter boundary before any per-agent update so
         // the new active agent (typically 'author') lands on a clean
         // `running` slot instead of a stale `done` from the previous

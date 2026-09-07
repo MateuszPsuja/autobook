@@ -416,7 +416,13 @@ export class OrchestratorService {
         attempt++;
         console.log(`Writing chapter attempt ${attempt}/${maxRetries}`);
 
-        self.authorService.writeChapterWithUsage(brief, {
+        // Reset the stream buffer at the top of every attempt, not
+        // outside the loop — a failed attempt's prose would otherwise
+        // remain visible during the next attempt's 2s delay and
+        // bleed into the new attempt's display the moment it starts.
+        self.bookStateService.beginStream$('author');
+
+        self.authorService.writeChapterStreamingWithUsage(brief, {
           model: config.model,
           chapterBrief: brief,
           previousChapters: self.bookStateService.getState().chapters,
@@ -431,10 +437,12 @@ export class OrchestratorService {
             const draft = result.draft;
             if (!draft || !draft.content || draft.content.trim().length === 0) {
               console.error(`Empty draft received on attempt ${attempt}`);
+              self.bookStateService.endStream$();
               scheduleRetry();
               return;
             }
             console.log(`Orchestrator: Received draft with ${draft.wordCount} words`);
+            self.bookStateService.endStream$();
             finished = true;
             subscriber.next({
               draft,
@@ -449,6 +457,7 @@ export class OrchestratorService {
           error: (error) => {
             if (finished) return;
             console.error(`Author attempt ${attempt} errored:`, error?.message || error);
+            self.bookStateService.endStream$();
             scheduleRetry();
           }
         });
@@ -516,10 +525,16 @@ export class OrchestratorService {
           }
           attempt++;
 
-          this.authorService.reviseChapterWithUsage(currentDraft, critique, brief, config.model, this.buildAuthorStyleContext(config)).subscribe({
+          // Reset the stream buffer at the top of every reviser
+          // attempt (same rationale as writeChapterWithRetry above —
+          // a failed attempt's tail must not bleed into the next).
+          this.bookStateService.beginStream$('reviser');
+
+          this.authorService.reviseChapterStreamingWithUsage(currentDraft, critique, brief, config.model, this.buildAuthorStyleContext(config)).subscribe({
             next: (result) => {
               if (completed) return;
               this.bookStateService.recordAgentUsage('reviser', result.usage);
+              this.bookStateService.endStream$();
               const newDraft = result.draft;
               const criticContext: CriticContext = {
                 model: config.model,
@@ -561,6 +576,7 @@ export class OrchestratorService {
               console.warn(
                 `Orchestrator: reviser attempt ${attempt}/${maxReviseRetries} for chapter ${brief.number} failed: ${error?.message || error}`
               );
+              this.bookStateService.endStream$();
               this.scheduleTimer(doAttempt, 2000);
             }
           });
@@ -660,5 +676,10 @@ export class OrchestratorService {
     this.bookStateService.setStatus('idle');
     this.bookStateService.setActiveAgent(null);
     this.bookStateService.endGenerationTimer();
+    // Drop the live stream buffer immediately — the 2s tail window
+    // is for natural completion, not for stop. Leaving the partial
+    // prose visible would suggest generation is still running.
+    this.bookStateService.endStream$();
+    this.bookStateService.clearLiveStreamBuffer();
   }
 }

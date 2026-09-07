@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { BehaviorSubject, Observable } from 'rxjs';
+import { BehaviorSubject, Observable, interval } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { BookState, AgentType, GenerationStatus, GenerationStats, createInitialStats } from '../../models/book-state.model';
 import { BookConfig } from '../../models/book-config.model';
@@ -23,7 +23,11 @@ export class BookStateService {
     error: null,
     skippedChapters: [],
     currentChapterNumber: null,
-    stats: createInitialStats()
+    stats: createInitialStats(),
+    liveStream: '',
+    liveStreamAgent: null,
+    liveStreamStartedAt: null,
+    liveTokensApprox: 0
   };
 
   // Keep BehaviorSubject for backwards compatibility and for use with toSignal()
@@ -125,6 +129,139 @@ export class BookStateService {
 
   setCurrentChapter(chapterNumber: number | null): void {
     this.patch({ currentChapterNumber: chapterNumber });
+  }
+
+  // ===== Stream buffer (live prose preview) =====
+  //
+  // The orchestrator wraps every prose-emitting agent call (author,
+  // reviser) with `beginStream$` → `appendStream$` on each delta →
+  // `endStream$` when the call resolves/errors. The stream card in
+  // the generator UI reads `liveStream` / `liveStreamAgent` and the
+  // two derived observables below to render live progress.
+
+  /**
+   * Timer handle for the 2s tail-window after `endStream$` —
+   * cleared when `beginStream$` runs again so a retry that starts
+   * within the window doesn't accidentally hide the new attempt.
+   */
+  private streamHideTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /**
+   * Reset the stream buffer for a new attempt and stamp the start
+   * time. Idempotent — calling it again with the same agent just
+   * resets the buffer (used inside retry loops so a failed attempt's
+   * text doesn't bleed into the next attempt's display).
+   */
+  beginStream$(agent: AgentType): void {
+    if (this.streamHideTimer !== null) {
+      clearTimeout(this.streamHideTimer);
+      this.streamHideTimer = null;
+    }
+    this.patch({
+      liveStream: '',
+      liveStreamAgent: agent,
+      liveStreamStartedAt: Date.now(),
+      liveTokensApprox: 0
+    });
+  }
+
+  /**
+   * Append a chunk of prose text to the live stream buffer and
+   * recompute the heuristic token estimate. Called from the
+   * SSE-delta callback in the orchestrator — fires many times per
+   * second during generation.
+   */
+  appendStream$(delta: string): void {
+    if (!delta) return;
+    const next = this.state$.value.liveStream + delta;
+    this.patch({
+      liveStream: next,
+      liveTokensApprox: Math.floor(next.length / 4)
+    });
+  }
+
+  /**
+   * Mark the current stream as finished. Leaves the buffer text in
+   * `liveStream` so the UI shows a brief tail after the agent ends,
+   * and schedules a 2s hide-timer that flips `liveStreamAgent` to
+   * `null`. The tail window is cancelled by the next `beginStream$`
+   * (which fires on the orchestrator's retry path), so retries
+   * never end up briefly hiding a fresh attempt.
+   */
+  endStream$(): void {
+    if (this.streamHideTimer !== null) {
+      clearTimeout(this.streamHideTimer);
+    }
+    this.streamHideTimer = setTimeout(() => {
+      this.streamHideTimer = null;
+      this.patch({
+        liveStreamAgent: null,
+        liveStreamStartedAt: null
+      });
+    }, 2000);
+  }
+
+  /**
+   * Wipe the buffer text and cancel the tail-window timer in one
+   * shot. Used by the orchestrator's `stop()` so a partial stream
+   * doesn't linger after the user cancelled — the 2s tail is for
+   * natural completion, not for stop.
+   */
+  clearLiveStreamBuffer(): void {
+    if (this.streamHideTimer !== null) {
+      clearTimeout(this.streamHideTimer);
+      this.streamHideTimer = null;
+    }
+    this.patch({
+      liveStream: '',
+      liveStreamAgent: null,
+      liveStreamStartedAt: null,
+      liveTokensApprox: 0
+    });
+  }
+
+  /**
+   * Emit the last 6 non-empty lines of the live stream. Splits the
+   * accumulated buffer on `\n`, drops blanks, and trims. Memoized
+   * via `distinctUntilChanged`-like semantics inside the operator
+   * chain — callers can render this in a tight loop without us
+   * re-emitting on every unrelated state change.
+   */
+  getLiveStreamLines$(): Observable<string[]> {
+    return this.state$.pipe(
+      map(s => {
+        const text = s.liveStream ?? '';
+        if (!text) return [];
+        // Only show *completed* lines (everything up to the last
+        // newline). The mid-stream tail of the current line is the
+        // partial that would otherwise flicker a caret "line".
+        const lastNewline = text.lastIndexOf('\n');
+        const completed = lastNewline >= 0 ? text.slice(0, lastNewline) : '';
+        const lines = completed
+          .split('\n')
+          .map(l => l.trim())
+          .filter(l => l.length > 0);
+        return lines.slice(-6);
+      })
+    );
+  }
+
+  /**
+   * Emit the current tokens/sec rate, throttled to 1 Hz via an
+   * internal `interval`. Avoids recomputing on every SSE delta —
+   * even a 50-token/sec stream fires hundreds of deltas per second,
+   * and the chip is mono digits, not a live counter.
+   */
+  getLiveTokenRate$(): Observable<number> {
+    return interval(1000).pipe(
+      map(() => {
+        const s = this.state$.value;
+        if (!s.liveStreamStartedAt || !s.liveStreamAgent) return 0;
+        const elapsedSec = (Date.now() - s.liveStreamStartedAt) / 1000;
+        if (elapsedSec <= 0) return 0;
+        return s.liveTokensApprox / elapsedSec;
+      })
+    );
   }
 
   // Stats methods
