@@ -29,8 +29,7 @@ export class BookStateService {
     stats: createInitialStats(),
     liveStream: '',
     liveStreamAgent: null,
-    liveStreamStartedAt: null,
-    liveTokensApprox: 0
+    liveStreamStartedAt: null
   };
 
   // Keep BehaviorSubject for backwards compatibility and for use with toSignal()
@@ -193,23 +192,20 @@ export class BookStateService {
     this.patch({
       liveStream: '',
       liveStreamAgent: agent,
-      liveStreamStartedAt: Date.now(),
-      liveTokensApprox: 0
+      liveStreamStartedAt: Date.now()
     });
   }
 
   /**
-   * Append a chunk of prose text to the live stream buffer and
-   * recompute the heuristic token estimate. Called from the
-   * SSE-delta callback in the orchestrator — fires many times per
-   * second during generation.
+   * Append a chunk of prose text to the live stream buffer. Called
+   * from the SSE-delta callback in the orchestrator — fires many
+   * times per second during generation.
    */
   appendStream$(delta: string): void {
     if (!delta) return;
     const next = this.state$.value.liveStream + delta;
     this.patch({
-      liveStream: next,
-      liveTokensApprox: Math.floor(next.length / 4)
+      liveStream: next
     });
   }
 
@@ -248,8 +244,7 @@ export class BookStateService {
     this.patch({
       liveStream: '',
       liveStreamAgent: null,
-      liveStreamStartedAt: null,
-      liveTokensApprox: 0
+      liveStreamStartedAt: null
     });
   }
 
@@ -281,18 +276,23 @@ export class BookStateService {
 
   /**
    * Emit the current tokens/sec rate, throttled to 1 Hz via an
-   * internal `interval`. Avoids recomputing on every SSE delta —
-   * even a 50-token/sec stream fires hundreds of deltas per second,
-   * and the chip is mono digits, not a live counter.
+   * internal `interval`. Sourced from the real cumulative
+   * `stats.totalTokens` (recorded by `recordAgentUsage` on every
+   * completed agent call) divided by seconds since `stats.startTime`,
+   * not from the per-stream chars/4 heuristic. Avoids recomputing
+   * on every SSE delta — even a 50-token/sec stream fires hundreds
+   * of deltas per second, and the chip is mono digits, not a live
+   * counter. Returns 0 until the orchestrator has stamped
+   * `stats.startTime` via `startGenerationTimer()`.
    */
   getLiveTokenRate$(): Observable<number> {
     return interval(1000).pipe(
       map(() => {
         const s = this.state$.value;
-        if (!s.liveStreamStartedAt || !s.liveStreamAgent) return 0;
-        const elapsedSec = (Date.now() - s.liveStreamStartedAt) / 1000;
+        if (!s.stats.startTime) return 0;
+        const elapsedSec = (Date.now() - s.stats.startTime.getTime()) / 1000;
         if (elapsedSec <= 0) return 0;
-        return s.liveTokensApprox / elapsedSec;
+        return s.stats.totalTokens / elapsedSec;
       })
     );
   }

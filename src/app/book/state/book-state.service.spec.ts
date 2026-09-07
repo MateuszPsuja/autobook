@@ -334,17 +334,20 @@ describe('BookStateService', () => {
       expect(state.liveStream).toBe('');
       expect(state.liveStreamAgent).toBe('author');
       expect(state.liveStreamStartedAt).not.toBeNull();
-      expect(state.liveTokensApprox).toBe(0);
     });
 
-    it('appendStream$ accumulates text and updates the heuristic token count', () => {
+    it('appendStream$ accumulates text only — it does not touch stats.totalTokens', () => {
+      // Real token totals are recorded by recordAgentUsage on every
+      // completed agent call (see stats.totalTokens / getLiveTokenRate$).
+      // The stream buffer is prose-only — appendStream$ must stay out
+      // of the stats path so it doesn't double-count or race with
+      // the orchestrator's usage reporting.
       service.beginStream$('author');
       service.appendStream$('Hello, ');
       service.appendStream$('world!');
       const state = service.getState();
       expect(state.liveStream).toBe('Hello, world!');
-      // 13 chars / 4 = 3 (floor).
-      expect(state.liveTokensApprox).toBe(3);
+      expect(state.stats.totalTokens).toBe(0);
     });
 
     it('endStream$ leaves the buffer in place but schedules a 2s clear', (done) => {
@@ -373,7 +376,6 @@ describe('BookStateService', () => {
       const state = service.getState();
       expect(state.liveStream).toBe('');
       expect(state.liveStreamAgent).toBeNull();
-      expect(state.liveTokensApprox).toBe(0);
     });
 
     it('beginStream$ cancels a pending endStream$ hide-timer (so retries don\'t blink)', (done) => {

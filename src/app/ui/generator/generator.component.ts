@@ -34,12 +34,14 @@ export class GeneratorComponent implements OnInit, OnDestroy {
   // the template; `liveTokenRate` is a plain number field updated
   // by the 1Hz throttled observable so the chip interpolates without
   // needing an async pipe inside its expression. `liveStreamAgent`
-  // and `liveTokensApprox` are mirrors of the book-state fields the
-  // template binds to.
+  // is a mirror of the book-state field the template binds to.
+  // `liveTotalTokens` is the real cumulative total sourced from
+  // `stats.totalTokens` (updated by `recordAgentUsage` on every
+  // completed agent call) — replaces the prior `chars / 4` heuristic.
   liveLines$: Observable<string[]> = of([]);
   liveTokenRate: number = 0;
   liveStreamAgent: AgentType | null = null;
-  liveTokensApprox: number = 0;
+  liveTotalTokens: number = 0;
   liveErrorCount: number = 0;
   liveRetryCount: number = 0;
 
@@ -180,6 +182,14 @@ export class GeneratorComponent implements OnInit, OnDestroy {
     this.subscription.add(
       this.bookStateService.getStats$().subscribe(stats => {
         this.generationStats = stats;
+        // Mirror the real cumulative total into the live-stream
+        // card so the "Tokens" chip tracks the same source the
+        // post-run per-agent stats card reads from. Sourced here
+        // (rather than from `bookState$`) so it ticks up the
+        // instant any agent's `recordAgentUsage` call lands,
+        // including non-streaming agents whose deltas never touch
+        // the live-stream buffer.
+        this.liveTotalTokens = stats.totalTokens;
       })
     );
 
@@ -246,7 +256,6 @@ export class GeneratorComponent implements OnInit, OnDestroy {
         // — the template binds to them, and the visibility @if reads
         // `liveStreamAgent` for the tail-window after endStream$.
         this.liveStreamAgent = state.liveStreamAgent;
-        this.liveTokensApprox = state.liveTokensApprox;
 
         // Detect a chapter boundary before any per-agent update so
         // the new active agent (typically 'author') lands on a clean

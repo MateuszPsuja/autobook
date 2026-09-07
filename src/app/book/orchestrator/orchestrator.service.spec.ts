@@ -186,8 +186,7 @@ describe('OrchestratorService', () => {
       stats: createInitialStats(),
       liveStream: '',
       liveStreamAgent: null,
-      liveStreamStartedAt: null,
-      liveTokensApprox: 0
+      liveStreamStartedAt: null
     });
 
     architectServiceSpy = jasmine.createSpyObj('ArchitectService', ['generateBlueprintWithUsage', 'generateBlueprintStreamingWithUsage']);
@@ -743,8 +742,7 @@ describe('OrchestratorService', () => {
           stats: createInitialStats(),
           liveStream: '',
           liveStreamAgent: null,
-          liveStreamStartedAt: null,
-          liveTokensApprox: 0
+          liveStreamStartedAt: null
         });
 
         service.orchestrate(mockConfig).subscribe({
@@ -821,8 +819,7 @@ describe('OrchestratorService', () => {
         stats: createInitialStats(),
         liveStream: '',
         liveStreamAgent: null,
-        liveStreamStartedAt: null,
-        liveTokensApprox: 0
+        liveStreamStartedAt: null
       });
     };
 
@@ -877,8 +874,7 @@ describe('OrchestratorService', () => {
         stats: createInitialStats(),
         liveStream: '',
         liveStreamAgent: null,
-        liveStreamStartedAt: null,
-        liveTokensApprox: 0
+        liveStreamStartedAt: null
       });
 
       service.retryChapters([1, 2, 3], mockConfig).subscribe({

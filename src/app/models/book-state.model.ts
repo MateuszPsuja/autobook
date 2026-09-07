@@ -121,15 +121,10 @@ export interface BookState {
   liveStreamAgent: AgentType | null;
   /**
    * Epoch-ms when the current stream began, or `null` when no stream
-   * is active. Used to compute tokens/sec for the live stats chips.
+   * is active. Used by `endStream$` to schedule the 2s tail window
+   * that flips `liveStreamAgent` back to `null`.
    */
   liveStreamStartedAt: number | null;
-  /**
-   * Running heuristic token estimate (`chars / 4`) of the live stream.
-   * Off by ~30–50% on real prose vs API-reported totals — the per-agent
-   * stats card is the source of truth for the final count.
-   */
-  liveTokensApprox: number;
 }
 
 export interface Blueprint {

@@ -59,8 +59,7 @@ describe('GeneratorComponent', () => {
         },
         liveStream: '',
         liveStreamAgent: null,
-        liveStreamStartedAt: null,
-        liveTokensApprox: 0
+        liveStreamStartedAt: null
       } as BookState;
       const stateSubject = new BehaviorSubject<BookState>(initialState);
 

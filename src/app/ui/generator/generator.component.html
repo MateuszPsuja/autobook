@@ -93,11 +93,12 @@
        tail of the final response. The buffer text is the last 6
        completed lines; partial tails (mid-line) are dropped so the
        bottom of the box doesn't show a "fake line" caret. The
-       token/rate chips below use a chars/4 heuristic — label says
-       "(est.)" so users don't conflate them with the API-reported
-       totals shown after completion. The box has a fixed height
-       with vertical scroll so the card layout stays stable as the
-       stream fills up. -->
+       token/rate chips below show real cumulative usage sourced
+       from `stats.totalTokens` (recorded by `recordAgentUsage` on
+       every completed agent call); rate is tokens/sec since
+       `stats.startTime` (set by `startGenerationTimer`). The box
+       has a fixed height with vertical scroll so the card layout
+       stays stable as the stream fills up. -->
   @if (isGenerating || liveStreamAgent) {
     <div class="card p-5">
       <div class="flex items-center justify-between mb-3">
@@ -123,8 +124,7 @@
             {{ t('generator.timeLabel') }} <span class="text-surface-strong">{{ formatElapsedTime() }}</span>
           </span>
           <span class="text-surface-subtle">
-            {{ t('generator.tokensLabel') }} <span class="text-surface-strong">{{ formatNumber(liveTokensApprox) }}</span>
-            <span class="text-[10px] text-surface-subtle ml-0.5">(est.)</span>
+            {{ t('generator.tokensLabel') }} <span class="text-surface-strong">{{ formatNumber(liveTotalTokens) }}</span>
           </span>
           <span class="text-surface-subtle">
             {{ t('generator.rateLabel') }} <span class="text-surface-strong">{{ liveTokenRate | number:'1.1-1' }}</span>
