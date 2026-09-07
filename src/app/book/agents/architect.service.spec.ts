@@ -248,7 +248,7 @@ describe('ArchitectService', () => {
       });
     });
 
-    it('should handle malformed JSON response', (done) => {
+    it('falls back to a minimal blueprint when the response is not parseable JSON', (done) => {
       apiServiceSpy.chatCompletion.and.returnValue(of({
         id: 'test',
         choices: [{
@@ -265,11 +265,13 @@ describe('ArchitectService', () => {
       const result = service.generateBlueprint(mockConfig);
       
       result.subscribe({
-        next: () => done.fail('Should have errored'),
-        error: (error) => {
-          expect(error).toBeDefined();
+        next: (blueprint) => {
+          expect(blueprint).toBeDefined();
+          expect(Array.isArray(blueprint.chapters)).toBe(true);
+          expect(blueprint.chapters.length).toBeGreaterThan(0);
           done();
-        }
+        },
+        error: done.fail
       });
     });
   });
@@ -303,7 +305,7 @@ describe('ArchitectService', () => {
       });
     });
 
-    it('should error when response has empty choices', (done) => {
+    it('falls back to a minimal blueprint when choices are empty', (done) => {
       apiServiceSpy.chatCompletion.and.returnValue(of({
         id: 'test',
         choices: [],
@@ -316,15 +318,15 @@ describe('ArchitectService', () => {
       const result = service.generateBlueprintWithUsage(mockConfig);
 
       result.subscribe({
-        next: () => done.fail('Should have errored for empty choices'),
-        error: (err) => {
-          expect(err).toBeDefined();
+        next: (res) => {
+          expect(res.data.chapters.length).toBeGreaterThan(0);
           done();
-        }
+        },
+        error: done.fail
       });
     });
 
-    it('should error when message content is missing', (done) => {
+    it('falls back to a minimal blueprint when message content is missing', (done) => {
       apiServiceSpy.chatCompletion.and.returnValue(of({
         id: 'test',
         choices: [{ message: {} as any, finish_reason: 'stop', index: 0 }],
@@ -337,11 +339,11 @@ describe('ArchitectService', () => {
       const result = service.generateBlueprintWithUsage(mockConfig);
 
       result.subscribe({
-        next: () => done.fail('Should have errored for missing content'),
-        error: (err) => {
-          expect(err).toBeDefined();
+        next: (res) => {
+          expect(res.data.chapters.length).toBeGreaterThan(0);
           done();
-        }
+        },
+        error: done.fail
       });
     });
 
