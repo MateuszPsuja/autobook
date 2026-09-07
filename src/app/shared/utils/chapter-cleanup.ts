@@ -318,3 +318,109 @@ export function stripUnclosedThinkingBlock(text: string): string {
   const trimmedTail = tail.replace(/^\s+/, '').trim();
   return trimmedTail;
 }
+
+/**
+ * Tail-completeness check. Returns `true` when the supplied text
+ * appears to end on a real sentence terminator (after stripping
+ * common typographic ornaments some models append), and `false`
+ * when the tail looks truncated mid-sentence.
+ *
+ * Three classes of false positives are guarded against:
+ *
+ * 1. Trailing typographic ornaments. Streaming authors sometimes
+ *    close the final sentence with `"`, `*`, `~`, backtick, or
+ *    curly-quote decoration that lives *after* the period. We strip
+ *    a small set of these from the very tail before checking.
+ *
+ * 2. Markdown noise at the end. A model that wraps an example in a
+ *    fenced code block finishes with `` ``` `` — no terminal
+ *    punctuation, but not a truncated chapter. We strip a trailing
+ *    fence (and trailing `---` horizontal rule / `<!-- … -->` HTML
+ *    comment) before checking.
+ *
+ * 3. Legitimate stylistic fragments. Some prose deliberately ends
+ *    on a short fragment after a longer paragraph (a trailing image,
+ *    a beat of silence). A naive "last character must be `.`/`?`/`!`"
+ *    rule would force those through a retry. The two-line guard
+ *    mitigates this: only flag as truncated when the LAST non-blank
+ *    line has no terminal punctuation AND the previous non-blank
+ *    line is also short (< 60 chars). A long previous paragraph
+ *    reads as a deliberate fragment; a short one plus a short tail
+ *    reads as a mid-sentence cut.
+ *
+ * Returns `false` (treat as truncated) when `text` is empty or when
+ * the only content is a single short line with no terminal
+ * punctuation — these are almost certainly interrupted streams, not
+ * stylistic endings.
+ */
+const TAIL_ORNAMENTS_RE = /[\s"'`’”*_~]+$/;
+const TRAILING_RULE_RE = /\n*---\s*$/m;
+const TRAILING_HTML_COMMENT_RE = /\n*<!--[\s\S]*?-->\s*$/m;
+const TERMINAL_CHAR_RE = /[.!?…。」』\)\]"'”]$/;
+
+/**
+ * Strip a trailing fenced code block (``` or ~~~) so the
+ * completeness check doesn't mistake the fence's lack of terminal
+ * punctuation for a truncated chapter. Done with string operations
+ * rather than a regex because the regex engine does leftmost
+ * matching — a `/^|\n````[\s\S]*?\````$/` style pattern would
+ * happily strip the OPENING fence and leave the prose-after-fence
+ * intact, which is the opposite of what we want.
+ *
+ * The function only fires when the text ends with a closing fence
+ * (after `trimEnd`) AND the matching opening fence is at the start
+ * of its own line — so inline triple-backticks inside prose (rare
+ * but possible in technical writing) are left alone.
+ */
+function stripTrailingCodeFence(text: string): string {
+  const trimmed = text.replace(/\s+$/, '');
+  const fenceMatch = /(```+|~~~+)$/.exec(trimmed);
+  if (!fenceMatch) return text;
+  const fence = fenceMatch[1];
+  const closingIdx = trimmed.length - fence.length;
+  const before = trimmed.slice(0, closingIdx);
+  const openingIdx = before.lastIndexOf(fence);
+  if (openingIdx < 0) return text;
+  const prevNewline = before.lastIndexOf('\n', openingIdx - 1);
+  const openerLineStart = prevNewline >= 0 ? prevNewline + 1 : 0;
+  if (openingIdx !== openerLineStart) {
+    // The "opening" ``` is mid-line — inline triple-backticks in
+    // prose, not a real fence. Leave it alone.
+    return text;
+  }
+  return before.slice(0, openerLineStart).replace(/\s+$/, '');
+}
+
+export function endsWithSentenceTerminator(text: string): boolean {
+  if (!text) return false;
+
+  // Strip a markdown code fence / horizontal rule / HTML comment
+  // tail first so we don't mistake those for a truncated sentence.
+  let cleaned = stripTrailingCodeFence(text);
+  cleaned = cleaned
+    .replace(TRAILING_HTML_COMMENT_RE, '')
+    .replace(TRAILING_RULE_RE, '');
+
+  // Strip a small set of trailing typographic ornaments (closing
+  // quote / asterisk / backtick / curly-quote / em-dash / whitespace)
+  // that some models append after the final sentence.
+  cleaned = cleaned.replace(TAIL_ORNAMENTS_RE, '').trimEnd();
+  if (!cleaned) return false;
+
+  // Fast path: the tail ends on real sentence-ending punctuation
+  // (period, question mark, exclamation, ellipsis, closing bracket
+  // or quote). Treat as complete.
+  if (TERMINAL_CHAR_RE.test(cleaned)) return true;
+
+  // The last non-blank line has no terminal punctuation. Apply the
+  // two-line guard from the planning notes: only flag as truncated
+  // when the previous non-blank line is also short (< 60 chars).
+  // A long previous paragraph signals a deliberate stylistic ending;
+  // a short previous paragraph plus a short tail suggests the model
+  // was cut mid-sentence.
+  const lines = cleaned.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+  if (lines.length < 2) return false;
+  const prevLine = lines[lines.length - 2];
+  if (prevLine.length < 60) return false;
+  return true;
+}

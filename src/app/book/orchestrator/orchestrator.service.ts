@@ -13,6 +13,7 @@ import { ChapterBrief, CriticContext, AuthorStyleContext } from '../../models/bo
 import { ChapterDraft, Chapter } from '../../models/chapter.model';
 import { PersistenceService } from '../../core/persistence.service';
 import { ProviderService } from '../../core/providers/provider.service';
+import { endsWithSentenceTerminator } from '../../shared/utils/chapter-cleanup';
 
 @Injectable({
   providedIn: 'root'
@@ -698,9 +699,24 @@ export class OrchestratorService {
 
   /**
    * Write chapter with retry logic. Retries on any failure —
-   * network error, empty response, too-short response, or thrown
-   * validation error from the author service. The first successful
+   * network error, empty response, too-short response, thrown
+   * validation error from the author service, OR a tail-truncated
+   * draft (no sentence terminator at the end). The first complete
    * draft wins.
+   *
+   * Tail-truncation handling: when every attempt returns a non-empty
+   * draft that lacks a sentence terminator, the function falls
+   * through with the most recent draft instead of erroring. The
+   * draft gets a `[… incomplete — generation cut off …]` marker
+   * appended so reviewers can see what got generated, and a clear
+   * `state.error` entry quotes the truncated tail. This mirrors the
+   * reviser's "always approves the best attempt" contract: a
+   * chapter is never lost just because the model cut off; the
+   * reviewer sees a flagged draft instead of a gap.
+   *
+   * The per-section skip rule still fires for fully empty / fully
+   * errored runs (no draft at all after `maxRetries`) so the rest of
+   * the book keeps shipping.
    */
   private writeChapterWithRetry(brief: ChapterBrief, config: BookConfig, maxRetries: number): Observable<{ draft: ChapterDraft; usage: any }> {
     return new Observable(subscriber => {
@@ -709,8 +725,12 @@ export class OrchestratorService {
       let attempt = 0;
       let totalPromptTokens = 0;
       let totalCompletionTokens = 0;
-      let gaveUp = false;
       let finished = false;
+      // Track the most recent non-empty (but truncated) draft so
+      // the fallback can ship it with a marker if every attempt
+      // produces the same failure. Cleared once a complete draft
+      // arrives — we never fall back on a successful run.
+      let lastTruncatedDraft: ChapterDraft | null = null;
 
       const self = this;
       const ctx: { attempt: () => void } = { attempt: () => {} };
@@ -726,9 +746,16 @@ export class OrchestratorService {
           return;
         }
         if (attempt >= maxRetries) {
-          gaveUp = true;
+          if (lastTruncatedDraft) {
+            self.shipTruncatedDraft(brief, lastTruncatedDraft, subscriber);
+          } else {
+            // No draft at all (every attempt was empty or errored).
+            // Fall back to the original error semantics so the
+            // per-section skip rule still fires and the rest of
+            // the book ships.
+            subscriber.error(new Error(`Failed to generate chapter ${brief.number} after ${maxRetries} attempts`));
+          }
           finished = true;
-          subscriber.error(new Error(`Failed to generate chapter ${brief.number} after ${maxRetries} attempts`));
           return;
         }
         self.bookStateService.incrementRetryCount();
@@ -736,7 +763,7 @@ export class OrchestratorService {
       };
 
       ctx.attempt = () => {
-        if (finished || gaveUp) return;
+        if (finished) return;
         if (self.stopped) {
           finished = true;
           subscriber.complete();
@@ -766,6 +793,24 @@ export class OrchestratorService {
             const draft = result.draft;
             if (!draft || !draft.content || draft.content.trim().length === 0) {
               console.error(`Empty draft received on attempt ${attempt}`);
+              self.bookStateService.incrementErrorCount();
+              self.bookStateService.endStream$();
+              scheduleRetry();
+              return;
+            }
+            if (!endsWithSentenceTerminator(draft.content)) {
+              // Tail-completeness check failed — the author stream
+              // was cut off mid-sentence. Treat it like an empty
+              // draft for retry purposes: bump the error counter,
+              // close the stream, and schedule another attempt. We
+              // keep the draft around so the fallback can ship a
+              // marked-up version if every attempt truncates near
+              // the same length.
+              const tailSnippet = draft.content.slice(-80).replace(/\s+/g, ' ').trim();
+              console.warn(
+                `Orchestrator: attempt ${attempt} returned a truncated draft (no sentence terminator). Tail: "${tailSnippet}"`
+              );
+              lastTruncatedDraft = draft;
               self.bookStateService.incrementErrorCount();
               self.bookStateService.endStream$();
               scheduleRetry();
@@ -802,6 +847,35 @@ export class OrchestratorService {
         finished = true;
       };
     });
+  }
+
+  /**
+   * Fallback path for `writeChapterWithRetry` when every attempt
+   * produced a tail-truncated draft. Appends a
+   * `[… incomplete — generation cut off …]` marker so reviewers can
+   * see what got generated and surfaces a `state.error` line that
+   * quotes the truncated tail. The chapter still gets approved so
+   * the rest of the pipeline (critic / character / continuity /
+   * export) keeps running, but the user sees the marker on the
+   * approved section.
+   */
+  private shipTruncatedDraft(
+    brief: ChapterBrief,
+    draft: ChapterDraft,
+    subscriber: any,
+  ): void {
+    const marker = '\n\n[… incomplete — generation cut off …]';
+    const tailSnippet = draft.content.slice(-120).replace(/\s+/g, ' ').trim();
+    const errorMessage = `Author returned a truncated draft on every attempt for chapter ${brief.number} — content ends at: "${tailSnippet}"`;
+    console.warn(`Orchestrator: ${errorMessage}`);
+    this.bookStateService.setError(errorMessage);
+    const finalDraft: ChapterDraft = {
+      ...draft,
+      content: draft.content + marker,
+      updatedAt: new Date(),
+    };
+    subscriber.next({ draft: finalDraft });
+    subscriber.complete();
   }
 
   /**
@@ -867,6 +941,30 @@ export class OrchestratorService {
               this.bookStateService.recordAgentUsage('reviser', result.usage);
               this.bookStateService.endStream$();
               const newDraft = result.draft;
+              if (!endsWithSentenceTerminator(newDraft.content)) {
+                // Reviser returned a tail-truncated draft — same
+                // retry semantics as a thrown error. Fall back to
+                // `currentDraft` (the pre-revision draft, which
+                // already passed the writer's completeness check)
+                // when retries are exhausted, mirroring the existing
+                // "reviser gave up, original draft kept" path.
+                const tailSnippet = newDraft.content.slice(-80).replace(/\s+/g, ' ').trim();
+                console.warn(
+                  `Orchestrator: reviser attempt ${attempt}/${maxReviseRetries} for chapter ${brief.number} returned a truncated draft. Tail: "${tailSnippet}"`
+                );
+                this.bookStateService.incrementErrorCount();
+                this.bookStateService.endStream$();
+                if (attempt >= maxReviseRetries) {
+                  console.warn(
+                    `Orchestrator: reviser exhausted ${maxReviseRetries} attempts for chapter ${brief.number}; keeping current draft.`
+                  );
+                  finish(currentDraft, 'reviser gave up, original draft kept');
+                  return;
+                }
+                this.bookStateService.incrementRetryCount();
+                this.scheduleTimer(doAttempt, 2000);
+                return;
+              }
               const criticContext: CriticContext = {
                 model: config.model,
                 chapterBrief: brief,

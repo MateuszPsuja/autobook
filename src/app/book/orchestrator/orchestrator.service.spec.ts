@@ -522,6 +522,117 @@ describe('OrchestratorService', () => {
           }
         });
       }, 15000);
+
+      it('retries and falls through with a truncation marker when the author keeps returning tail-truncated drafts', (done) => {
+        // Reproduces the user's reported bug: the author returns a
+        // tail-truncated draft on every attempt ("He kept glancing").
+        // After 3 retries the orchestrator should fall through with
+        // the most recent draft, append the truncation marker, set
+        // state.error to quote the tail, and let the numbered
+        // chapters ship.
+        //
+        // We only stub the prologue call (number=0) to return
+        // truncated prose. Numbered chapters go through the default
+        // mock which returns a complete draft so we can assert the
+        // retry count for the prologue alone without the chapter
+        // call getting conflated.
+        const truncatedContent = 'The air pressed close, as if held by invisible hands.\n\nHe kept glancing';
+        const completeContent = 'The dawn found her walking toward the harbor.\n\nShe carried the lantern high.';
+        authorServiceSpy.writeChapterStreamingWithUsage.and.callFake((brief: ChapterBrief) => {
+          if (brief.number === 0) {
+            return of({
+              draft: { ...mockDraft, content: truncatedContent, wordCount: 12 },
+              usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 }
+            });
+          }
+          return of({
+            draft: { ...mockDraft, content: completeContent, wordCount: 12 },
+            usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 }
+          });
+        });
+        const prologueBrief = {
+          number: 0, title: 'Prologue', plotBeat: 'A stranger leaves a map.', povCharacter: 'the stranger',
+          emotionalState: 'purposeful', location: 'A doorstep', keyEvents: ['k'], hookType: 'h', targetWordCount: 1000,
+        };
+        architectServiceSpy.generateBlueprintWithUsage.and.returnValue(of({
+          data: { ...mockBlueprint, prologue: prologueBrief },
+          usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 }
+        }));
+
+        service.orchestrate({ ...mockConfig, hasPrologue: true }).subscribe({
+          complete: () => {
+            // The author was called 3 times for the prologue
+            // (maxRetries=3) — every attempt returned the same
+            // truncated draft, so the orchestrator retried each time.
+            // Plus one call for chapter 1 (complete on first try).
+            const allCalls = (authorServiceSpy.writeChapterStreamingWithUsage as jasmine.Spy).calls.allArgs();
+            const prologueCalls = allCalls.filter((args: any[]) => args[0]?.number === 0);
+            expect(prologueCalls.length).toBe(3);
+
+            // The prologue still got approved — the fallback ships
+            // the most recent truncated draft with a marker appended
+            // so reviewers can see what got generated.
+            const prologueStateCalls = bookStateServiceSpy.setPrologue.calls.allArgs()
+              .filter(args => args[0] != null);
+            expect(prologueStateCalls.length).toBe(1);
+            const prologue = prologueStateCalls[0][0] as Chapter;
+            expect(prologue.content).toContain('He kept glancing');
+            expect(prologue.content).toContain('[… incomplete — generation cut off …]');
+
+            // state.error was set with a message that quotes the
+            // truncated tail so the reviewer can see what got cut.
+            const errorCalls = bookStateServiceSpy.setError.calls.allArgs()
+              .map(c => c[0])
+              .filter((msg: unknown): msg is string => typeof msg === 'string');
+            const truncationError = errorCalls.find(msg =>
+              msg.includes('truncated') && msg.includes('He kept glancing')
+            );
+            expect(truncationError).toBeTruthy();
+
+            // Numbered chapters still went through the pipeline.
+            expect(bookStateServiceSpy.setChapters).toHaveBeenCalled();
+            done();
+          },
+          error: (err) => {
+            done.fail('orchestrate should not error on truncated prologue: ' + (err?.message || err));
+          }
+        });
+      }, 15000);
+
+      it('does not retry when the author returns a complete draft on the first attempt', (done) => {
+        const completeContent = 'The dawn found her walking toward the harbor.\n\nShe carried the lantern high.';
+        authorServiceSpy.writeChapterStreamingWithUsage.and.returnValue(of({
+          draft: { ...mockDraft, content: completeContent, wordCount: 12 },
+          usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 }
+        }));
+        const prologueBrief = {
+          number: 0, title: 'Prologue', plotBeat: 'A', povCharacter: 'the stranger',
+          emotionalState: 'p', location: 'L', keyEvents: ['k'], hookType: 'h', targetWordCount: 1000,
+        };
+        architectServiceSpy.generateBlueprintWithUsage.and.returnValue(of({
+          data: { ...mockBlueprint, prologue: prologueBrief },
+          usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 }
+        }));
+
+        service.orchestrate({ ...mockConfig, hasPrologue: true }).subscribe({
+          complete: () => {
+            // Exactly one author call for the prologue (the draft
+            // was complete, no retry needed) plus one for chapter 1.
+            const allCalls = (authorServiceSpy.writeChapterStreamingWithUsage as jasmine.Spy).calls.allArgs();
+            const prologueCalls = allCalls.filter((args: any[]) => args[0]?.number === 0);
+            expect(prologueCalls.length).toBe(1);
+            const prologueStateCalls = bookStateServiceSpy.setPrologue.calls.allArgs()
+              .filter(args => args[0] != null);
+            expect(prologueStateCalls.length).toBe(1);
+            const prologue = prologueStateCalls[0][0] as Chapter;
+            expect(prologue.content).not.toContain('[… incomplete — generation cut off …]');
+            done();
+          },
+          error: (err) => {
+            done.fail('orchestrate should not error: ' + (err?.message || err));
+          }
+        });
+      });
     });
 
     it('should handle architect errors', (done) => {
@@ -791,7 +902,7 @@ describe('OrchestratorService', () => {
         draft: {
           ...mockDraft,
           chapterId: `chapter-${brief.number}`,
-          content: `new content for chapter ${brief.number}`,
+          content: `New content for chapter ${brief.number}, ending with a period.`,
         },
         usage: { promptTokens: 100, completionTokens: 200, totalTokens: 300 }
       }));
@@ -808,7 +919,7 @@ describe('OrchestratorService', () => {
           expect(latest[0].id).toBe('chapter-1');
           expect(latest[1].id).toBe('chapter-2');
           expect(latest[2].id).toBe('chapter-3');
-          expect(latest[2].content).toBe('new content for chapter 3');
+          expect(latest[2].content).toBe('New content for chapter 3, ending with a period.');
           // Successful retry → empty skipped list.
           expect(bookStateServiceSpy.setSkippedChapters).toHaveBeenCalledWith([]);
           // Final status reflects the clean retry.

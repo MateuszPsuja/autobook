@@ -105,6 +105,14 @@ Return a JSON object with this structure:
 - Suggestions: 3-5 areas for improvement
 - Be honest but constructive
 - Consider the target audience and genre expectations
+
+**Completeness:**
+- If the chapter ends mid-sentence (the last line has no terminal
+  punctuation — no period, question mark, or exclamation), the
+  generation was almost certainly cut off by a token cap or a
+  streaming interruption. Deduct at least 2 points from the
+  overallScore and add a mustFix entry calling out the truncation.
+  A polished mid-sentence fragment is still an incomplete chapter.
 `;
 
 export const criticChapterPrompt = (chapterContent: string, brief: ChapterBrief, ctx: CriticContext): string => `

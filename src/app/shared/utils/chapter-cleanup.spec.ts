@@ -1,4 +1,4 @@
-import { stripReasoningPreamble, stripRunningWordCount, stripThinkingBlocks, stripUnclosedThinkingBlock } from './chapter-cleanup';
+import { stripReasoningPreamble, stripRunningWordCount, stripThinkingBlocks, stripUnclosedThinkingBlock, endsWithSentenceTerminator } from './chapter-cleanup';
 
 describe('stripReasoningPreamble', () => {
   it('returns the input unchanged when there is no preamble', () => {
@@ -317,5 +317,99 @@ describe('stripRunningWordCount', () => {
     expect(result).not.toContain('Let me write Chapter 4');
     expect(result).not.toContain('Key elements');
     expect(result).not.toContain('<think');
+  });
+});
+
+describe('endsWithSentenceTerminator', () => {
+  it('returns true for prose ending with a period', () => {
+    expect(endsWithSentenceTerminator('The dawn found her walking.')).toBe(true);
+  });
+
+  it('returns true for prose ending with an exclamation mark', () => {
+    expect(endsWithSentenceTerminator('The dawn found her walking!')).toBe(true);
+  });
+
+  it('returns true for prose ending with a question mark', () => {
+    expect(endsWithSentenceTerminator('Where did she go?')).toBe(true);
+  });
+
+  it('returns true for prose ending with an ellipsis', () => {
+    expect(endsWithSentenceTerminator('And then she was gone…')).toBe(true);
+  });
+
+  it('returns true when the final sentence is wrapped in a closing quote', () => {
+    expect(endsWithSentenceTerminator('She whispered, "I will return."')).toBe(true);
+  });
+
+  it('returns true when the final sentence is wrapped in a closing single quote', () => {
+    expect(endsWithSentenceTerminator("It's over,' she said.")).toBe(true);
+  });
+
+  it('returns true for prose ending with a markdown emphasis asterisk after the period', () => {
+    expect(endsWithSentenceTerminator('The world tilted *sideways*.')).toBe(true);
+  });
+
+  it('returns true for prose ending with a closing parenthesis', () => {
+    expect(endsWithSentenceTerminator('He smiled (a rare thing).')).toBe(true);
+  });
+
+  it('handles trailing whitespace before the final punctuation', () => {
+    expect(endsWithSentenceTerminator('The dawn found her walking.\n\n  ')).toBe(true);
+  });
+
+  it('handles trailing blank lines', () => {
+    expect(endsWithSentenceTerminator('The dawn found her walking.\n\n\n')).toBe(true);
+  });
+
+  it('returns false for the user-reported truncation pattern', () => {
+    // Reproduces the truncation the user reported: the model
+    // returned a final sentence then a cut-off fragment with no
+    // terminal punctuation. Both lines are short → heuristic
+    // flags as incomplete.
+    const truncated = 'The air pressed close, as if held by invisible hands.\n\nHe kept glancing';
+    expect(endsWithSentenceTerminator(truncated)).toBe(false);
+  });
+
+  it('returns false for prose that ends mid-sentence on a single short line', () => {
+    expect(endsWithSentenceTerminator('He kept glancing')).toBe(false);
+  });
+
+  it('returns true for a deliberate stylistic fragment after a long paragraph', () => {
+    // A long descriptive paragraph followed by a short trailing
+    // fragment for stylistic effect. The previous paragraph is
+    // ≥ 60 chars → heuristic accepts the unterminated tail.
+    const prose = 'The market stretched for blocks, vendors calling out prices for bread, fish, and cloth, their voices weaving into a single song that carried Mara toward the harbor.\n\nHe kept glancing';
+    expect(endsWithSentenceTerminator(prose)).toBe(true);
+  });
+
+  it('returns false for prose with an unmatched opening quote that ends mid-sentence', () => {
+    // The opening `"` mid-sentence does not pair with anything
+    // at the tail. The text ends mid-sentence → incomplete.
+    expect(endsWithSentenceTerminator('She whispered, "I will return')).toBe(false);
+  });
+
+  it('returns true for content that ends inside a markdown code fence (does not false-positive on the fence)', () => {
+    // The model emits a code block at the end. The function must
+    // not mistake the trailing ``` for a truncated sentence.
+    const prose = 'The function is simple.\n\n```\nconst x = 1;\n```';
+    expect(endsWithSentenceTerminator(prose)).toBe(true);
+  });
+
+  it('returns true for content ending with a fenced code block that has a language tag', () => {
+    const prose = 'Example follows.\n\n```typescript\nconst x: number = 1;\n```';
+    expect(endsWithSentenceTerminator(prose)).toBe(true);
+  });
+
+  it('returns true for content ending with a horizontal rule after a complete sentence', () => {
+    const prose = 'The dawn found her walking.\n\n---';
+    expect(endsWithSentenceTerminator(prose)).toBe(true);
+  });
+
+  it('returns false for empty input', () => {
+    expect(endsWithSentenceTerminator('')).toBe(false);
+  });
+
+  it('returns false for whitespace-only input', () => {
+    expect(endsWithSentenceTerminator('   \n\n  ')).toBe(false);
   });
 });
