@@ -359,6 +359,42 @@ const TRAILING_HTML_COMMENT_RE = /\n*<!--[\s\S]*?-->\s*$/m;
 const TERMINAL_CHAR_RE = /[.!?…。」』\)\]"'”]$/;
 
 /**
+ * Function words that almost never end a finished sentence in literary
+ * prose. When the trailing line has no terminal punctuation AND its last
+ * word is one of these, the stream was almost certainly cut mid-clause
+ * (mid-enumeration "..., or had...", preposition tail "with the",
+ * dangling auxiliary "had been", etc.). Flagged as truncated even when
+ * the previous paragraph is long — the two-line guard's
+ * "long-previous-paragraph = deliberate fragment" assumption doesn't
+ * hold for these patterns. Conservative closed set; anything not listed
+ * still falls through to the existing heuristic.
+ */
+const DANGLING_TAIL_WORDS = new Set<string>([
+  // coordinating conjunctions
+  'or', 'and', 'but', 'nor', 'yet', 'so',
+  // articles
+  'a', 'an', 'the',
+  // prepositions (common literary-prose subset)
+  'in', 'on', 'at', 'to', 'for', 'with', 'by', 'of', 'from',
+  'into', 'onto', 'upon', 'about', 'around', 'between',
+  'under', 'over', 'through', 'across', 'against',
+  'without', 'within', 'toward', 'towards', 'beyond',
+  // auxiliaries / modals
+  'is', 'was', 'are', 'were', 'be', 'been', 'being', 'am',
+  'have', 'has', 'had', 'do', 'does', 'did',
+  'will', 'would', 'shall', 'should', 'can', 'could',
+  'may', 'might', 'must',
+  // personal pronouns
+  'i', 'you', 'he', 'she', 'it', 'we', 'they',
+  'me', 'him', 'her', 'us', 'them',
+  // possessives / demonstratives
+  'my', 'your', 'his', 'its', 'our', 'their',
+  'this', 'that', 'these', 'those',
+  // relative pronouns
+  'who', 'whom', 'whose', 'which',
+]);
+
+/**
  * Strip a trailing fenced code block (``` or ~~~) so the
  * completeness check doesn't mistake the fence's lack of terminal
  * punctuation for a truncated chapter. Done with string operations
@@ -412,15 +448,50 @@ export function endsWithSentenceTerminator(text: string): boolean {
   // or quote). Treat as complete.
   if (TERMINAL_CHAR_RE.test(cleaned)) return true;
 
-  // The last non-blank line has no terminal punctuation. Apply the
-  // two-line guard from the planning notes: only flag as truncated
-  // when the previous non-blank line is also short (< 60 chars).
-  // A long previous paragraph signals a deliberate stylistic ending;
-  // a short previous paragraph plus a short tail suggests the model
-  // was cut mid-sentence.
+  // The last non-blank line has no terminal punctuation. Compute
+  // both the tail line and the previous line once so the checks
+  // below don't re-split the content.
   const lines = cleaned.split('\n').map(l => l.trim()).filter(l => l.length > 0);
   if (lines.length < 2) return false;
+  const tailLine = lines[lines.length - 1] ?? '';
   const prevLine = lines[lines.length - 2];
+
+  // Dangling-terminal-word check: if the unterminated tail ends on a
+  // function word (conjunction, article, preposition, auxiliary,
+  // pronoun, …) the model was almost certainly cut mid-clause.
+  // Examples: "..., or had", "with the", "had been", "in a".
+  // The check sits BEFORE the two-line guard so the existing
+  // "long previous paragraph = deliberate fragment" rule still
+  // applies for stylistic fragments like "He kept glancing"
+  // (verb + adverb — neither word is on the dangling list).
+  const lastWordMatch = tailLine.match(/\b([a-zA-Z]+(?:'[a-zA-Z]+)*)\s*$/);
+  if (lastWordMatch) {
+    // Contractions like "didn't", "it's", "she'd" carry the bare
+    // lemma on the apostrophe's left side, but with one extra letter
+    // glued on from the contraction suffix ("didn't" → "didn", not
+    // "did"). Split on the apostrophe for the right-side forms
+    // ("it's" → "it"), then also try dropping one trailing letter
+    // to handle the "n't" negation forms ("didn" → "did"). The
+    // stem-stripping is conservative (only fires for ≥ 3-char
+    // parts) so it cannot mistreat a genuine short word ("an" →
+    // "a", but "a" is already a dangling article; "of" wouldn't
+    // match anything either way).
+    const lemma = lastWordMatch[1].toLowerCase().split("'")[0];
+    if (DANGLING_TAIL_WORDS.has(lemma)) {
+      return false;
+    }
+    if (lemma.length > 2 && DANGLING_TAIL_WORDS.has(lemma.slice(0, -1))) {
+      return false;
+    }
+  }
+
+  // Slow path: the last non-blank line has no terminal punctuation
+  // and doesn't end on a dangling function word. Apply the two-line
+  // guard from the planning notes: only flag as truncated when the
+  // previous non-blank line is also short (< 60 chars). A long
+  // previous paragraph signals a deliberate stylistic ending; a
+  // short previous paragraph plus a short tail suggests the model
+  // was cut mid-sentence.
   if (prevLine.length < 60) return false;
   return true;
 }

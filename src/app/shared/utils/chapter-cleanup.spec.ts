@@ -412,4 +412,107 @@ describe('endsWithSentenceTerminator', () => {
   it('returns false for whitespace-only input', () => {
     expect(endsWithSentenceTerminator('   \n\n  ')).toBe(false);
   });
+
+  it('returns false for the user-reported dangling-tail truncation', () => {
+    // Reproduces the user's reported bug: previous paragraph is long
+    // (so the two-line guard would otherwise treat the trailing
+    // fragment as a deliberate stylistic ending), but the tail ends
+    // mid-enumeration on a dangling auxiliary ", or had". Flag as
+    // truncated even though the previous paragraph is long.
+    const prose =
+      'I stood. I brushed the moss from my knees, then turned toward the sound of the river, and began to walk.\n\n' +
+      'Something was coming. Something I had forgotten, or had never known, or had';
+    expect(endsWithSentenceTerminator(prose)).toBe(false);
+  });
+
+  it('returns false for a dangling conjunction tail after a long paragraph', () => {
+    // "...trailing fragment, or" — the `or` is a coordinating conjunction
+    // that almost always introduces another operand. Flag even when the
+    // previous paragraph is long.
+    const prose =
+      'I stood. I brushed the moss from my knees, then turned toward the sound of the river, and began to walk.\n\n' +
+      'Something was coming. Something I had forgotten, or';
+    expect(endsWithSentenceTerminator(prose)).toBe(false);
+  });
+
+  it('returns false for a dangling "and the" tail after a long paragraph', () => {
+    const prose =
+      'I stood. I brushed the moss from my knees, then turned toward the sound of the river, and began to walk.\n\n' +
+      'He opened the door and';
+    expect(endsWithSentenceTerminator(prose)).toBe(false);
+  });
+
+  it('returns false for a dangling preposition tail after a long paragraph', () => {
+    // "...looked out with" — bare preposition tail is almost always
+    // mid-clause continuation.
+    const prose =
+      'The market stretched for blocks, vendors calling out prices for bread, fish, and cloth, their voices weaving into a single song that carried Mara toward the harbor.\n\n' +
+      'She looked out with';
+    expect(endsWithSentenceTerminator(prose)).toBe(false);
+  });
+
+  it('returns false for a dangling auxiliary-phrase tail after a long paragraph', () => {
+    // "had been" — modal + past participle with no terminal punctuation
+    // is a high-confidence truncation signal (the participle is
+    // missing its complement).
+    const prose =
+      'The market stretched for blocks, vendors calling out prices for bread, fish, and cloth, their voices weaving into a single song that carried Mara toward the harbor.\n\n' +
+      'The lantern had been';
+    expect(endsWithSentenceTerminator(prose)).toBe(false);
+  });
+
+  it('returns false for a dangling demonstrative tail after a long paragraph', () => {
+    // "that" as a trailing demonstrative almost always introduces a
+    // relative clause that got cut.
+    const prose =
+      'The market stretched for blocks, vendors calling out prices for bread, fish, and cloth, their voices weaving into a single song that carried Mara toward the harbor.\n\n' +
+      'She remembered that';
+    expect(endsWithSentenceTerminator(prose)).toBe(false);
+  });
+
+  it('returns false for a dangling pronoun tail after a long paragraph', () => {
+    // Standalone pronoun subject ("He") — almost always followed by a
+    // verb phrase that the model was cut before emitting.
+    const prose =
+      'The market stretched for blocks, vendors calling out prices for bread, fish, and cloth, their voices weaving into a single song that carried Mara toward the harbor.\n\n' +
+      'He';
+    expect(endsWithSentenceTerminator(prose)).toBe(false);
+  });
+
+  it('still returns true for a verb-tense stylistic fragment after a long paragraph', () => {
+    // False-positive guard: "She never looked back" — verb phrase
+    // with no dangling tail word. The two-line guard still accepts
+    // this as a deliberate stylistic ending.
+    const prose =
+      'The market stretched for blocks, vendors calling out prices for bread, fish, and cloth, their voices weaving into a single song that carried Mara toward the harbor.\n\n' +
+      'She never looked back';
+    expect(endsWithSentenceTerminator(prose)).toBe(true);
+  });
+
+  it('still returns true for an adverb-tail stylistic fragment after a long paragraph', () => {
+    // False-positive guard: "always" — adverb tail, no dangling
+    // function word. Two-line guard accepts.
+    const prose =
+      'The market stretched for blocks, vendors calling out prices for bread, fish, and cloth, their voices weaving into a single song that carried Mara toward the harbor.\n\n' +
+      'always';
+    expect(endsWithSentenceTerminator(prose)).toBe(true);
+  });
+
+  it('returns false for a dangling tail with a contraction at the very end', () => {
+    // Apostrophe in the dangling word — "don't" is in the
+    // auxiliary/particle category. The extractor regex captures the
+    // alphabetic + apostrophe run.
+    const prose =
+      'The market stretched for blocks, vendors calling out prices for bread, fish, and cloth, their voices weaving into a single song that carried Mara toward the harbor.\n\n' +
+      "I told her what I knew, but I didn't";
+    expect(endsWithSentenceTerminator(prose)).toBe(false);
+  });
+
+  it('returns false for a dangling-tail fragment after a SHORT previous line', () => {
+    // Baseline behavior preserved: dangling tail + short previous
+    // line returns false. The new dangling check makes this also
+    // false when the previous line IS long, but the slow path
+    // already returned false here.
+    expect(endsWithSentenceTerminator('She stopped.\n\nor had')).toBe(false);
+  });
 });

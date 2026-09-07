@@ -621,6 +621,80 @@ describe('OrchestratorService', () => {
         });
       }, 15000);
 
+      it('retries and falls through with a truncation marker for a dangling-tail prologue (long previous paragraph + trailing function word)', (done) => {
+        // Reproduces the user-reported bug as an integration test: the
+        // previous paragraph is long (so the old two-line guard alone
+        // would have accepted the draft as a deliberate stylistic
+        // fragment), but the tail ends mid-enumeration on a dangling
+        // auxiliary word. After the dangling-word check fires, the
+        // orchestrator should retry, and after 3 retries it should
+        // fall through with the marker and state.error quoting the tail.
+        const longPrev =
+          'I stood. I brushed the moss from my knees, then turned toward the sound of the river, and began to walk.';
+        const truncatedContent =
+          longPrev + '\n\nSomething was coming. Something I had forgotten, or had never known, or had';
+        const completeContent = 'The dawn found her walking toward the harbor.\n\nShe carried the lantern high.';
+        authorServiceSpy.writeChapterStreamingWithUsage.and.callFake((brief: ChapterBrief) => {
+          if (brief.number === 0) {
+            return of({
+              draft: { ...mockDraft, content: truncatedContent, wordCount: 30 },
+              usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 }
+            });
+          }
+          return of({
+            draft: { ...mockDraft, content: completeContent, wordCount: 12 },
+            usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 }
+          });
+        });
+        const prologueBrief = {
+          number: 0, title: 'Prologue', plotBeat: 'A stranger leaves a map.', povCharacter: 'the stranger',
+          emotionalState: 'purposeful', location: 'A doorstep', keyEvents: ['k'], hookType: 'h', targetWordCount: 1000,
+        };
+        architectServiceSpy.generateBlueprintStreamingWithUsage.and.returnValue(of({
+          data: { ...mockBlueprint, prologue: prologueBrief },
+          usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 }
+        }));
+
+        service.orchestrate({ ...mockConfig, hasPrologue: true }).subscribe({
+          complete: () => {
+            // The author was called 3 times for the prologue
+            // (maxRetries=3) — every attempt returned the same
+            // dangling-tail truncated draft, so the orchestrator
+            // retried each time. Plus one call for chapter 1.
+            const allCalls = (authorServiceSpy.writeChapterStreamingWithUsage as jasmine.Spy).calls.allArgs();
+            const prologueCalls = allCalls.filter((args: any[]) => args[0]?.number === 0);
+            expect(prologueCalls.length).toBe(3);
+
+            // The prologue still got approved — the fallback ships
+            // the most recent dangling-tail truncated draft with a
+            // marker appended so reviewers can see what got generated.
+            const prologueStateCalls = bookStateServiceSpy.setPrologue.calls.allArgs()
+              .filter(args => args[0] != null);
+            expect(prologueStateCalls.length).toBe(1);
+            const prologue = prologueStateCalls[0][0] as Chapter;
+            expect(prologue.content).toContain('or had never known, or had');
+            expect(prologue.content).toContain('[… incomplete — generation cut off …]');
+
+            // state.error was set with a message that quotes the
+            // truncated tail so the reviewer can see what got cut.
+            const errorCalls = bookStateServiceSpy.setError.calls.allArgs()
+              .map(c => c[0])
+              .filter((msg: unknown): msg is string => typeof msg === 'string');
+            const truncationError = errorCalls.find(msg =>
+              msg.includes('truncated') && msg.includes('or had')
+            );
+            expect(truncationError).toBeTruthy();
+
+            // Numbered chapters still went through the pipeline.
+            expect(bookStateServiceSpy.setChapters).toHaveBeenCalled();
+            done();
+          },
+          error: (err) => {
+            done.fail('orchestrate should not error on dangling-tail prologue: ' + (err?.message || err));
+          }
+        });
+      }, 15000);
+
       it('does not retry when the author returns a complete draft on the first attempt', (done) => {
         const completeContent = 'The dawn found her walking toward the harbor.\n\nShe carried the lantern high.';
         authorServiceSpy.writeChapterStreamingWithUsage.and.returnValue(of({
