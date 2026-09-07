@@ -6,7 +6,7 @@ import { LLM_PROVIDERS, LLM_PROVIDERS_BY_ID, getProvider } from './providers/pro
 import { ProviderService } from './providers/provider.service';
 import {
   fromAnthropicResponse,
-  parseAnthropicStreamChunk,
+  extractTextFromAnthropicFrame,
   toAnthropicRequest,
   AnthropicResponse
 } from './providers/anthropic.adapter';
@@ -294,6 +294,27 @@ export class ApiService {
     );
   }
 
+  /**
+   * Stream an OpenAI-compat chat-completion SSE response as plain
+   * text deltas.
+   *
+   * SSE framing: each delta is one `data: <json>` line terminated by
+   * `\n` (with a blank separator line after — we tolerate both). The
+   * `data: [DONE]` sentinel marks end-of-stream.
+   *
+   * Buffering: a single `data: <json>` line can straddle two
+   * `reader.read()` calls. Splitting each chunk on `\n` and processing
+   * the half-line that arrived alone causes `JSON.parse` to throw, the
+   * existing catch swallows it, and the continuation bytes in the
+   * next chunk are silently dropped because they don't start with
+   * `data:`. Every lost delta is prose that never reaches the
+   * accumulator. To avoid this, we keep a closure-scoped `buffer`
+   * that accumulates the decoded string across reads and only yields
+   * complete lines (everything up to the last newline). Anything after
+   * the last newline stays in the buffer for the next iteration. On
+   * `done` from the reader we flush the trailing remainder once so a
+   * final delta that was on the wire at connection-close isn't lost.
+   */
   private streamOpenAiCompat(
     url: string,
     body: unknown,
@@ -319,18 +340,30 @@ export class ApiService {
           return;
         }
         const decoder = new TextDecoder();
+        let buffer = '';
+        let terminated = false;
         const process = () => {
           reader.read().then(({ done, value }) => {
+            if (terminated) return;
             if (done) {
+              if (buffer.length > 0) {
+                this.emitOpenAiLine(subject, buffer);
+                buffer = '';
+              }
               subject.complete();
               return;
             }
-            const chunk = decoder.decode(value, { stream: true });
-            for (const line of chunk.split('\n')) {
-              if (line.startsWith('data: ')) {
+            buffer += decoder.decode(value, { stream: true });
+            let lastNl = buffer.lastIndexOf('\n');
+            while (lastNl >= 0) {
+              const complete = buffer.slice(0, lastNl);
+              buffer = buffer.slice(lastNl + 1);
+              for (const line of complete.split('\n')) {
+                if (!line.startsWith('data: ')) continue;
                 const data = line.slice(6);
                 if (data === '[DONE]') {
                   subject.complete();
+                  terminated = true;
                   return;
                 }
                 try {
@@ -338,11 +371,12 @@ export class ApiService {
                   const content = parsed.choices?.[0]?.delta?.content;
                   if (content) subject.next(content);
                 } catch {
-                  /* ignore malformed SSE line */
+                  /* ignore genuinely malformed SSE line */
                 }
               }
+              lastNl = buffer.lastIndexOf('\n');
             }
-            process();
+            if (!terminated) process();
           }).catch(err => subject.error(err));
         };
         process();
@@ -351,6 +385,22 @@ export class ApiService {
     return subject.asObservable();
   }
 
+  /**
+   * Stream an Anthropic Messages SSE response as plain text deltas.
+   *
+   * Anthropic framing differs from OpenAI-compat: each event is
+   * `event: <name>\ndata: <json>` followed by a blank line (`\n\n` or
+   * `\r\n\r\n`). The buffer must split on blank-line boundaries, not
+   * single newlines, otherwise we tear a single event apart across
+   * the network-buffer boundary.
+   *
+   * `message_stop` is per-event ("no more deltas coming") and does
+   * NOT close the underlying HTTP response. We keep reading until the
+   * reader itself reports `done === true`, at which point we do a
+   * final flush of the buffer so any in-flight `data:` line is not
+   * lost. The `done` flag returned by the helper is intentionally
+   * unused here — terminating the subject is the reader's job.
+   */
   private streamAnthropic(url: string, body: string, apiKey: string, anthropicVersion: string): Observable<string> {
     const subject = new Subject<string>();
     const headers: Record<string, string> = {
@@ -372,15 +422,30 @@ export class ApiService {
           return;
         }
         const decoder = new TextDecoder();
+        let buffer = '';
         const process = () => {
           reader.read().then(({ done, value }) => {
             if (done) {
+              if (buffer.length > 0) {
+                const { text } = extractTextFromAnthropicFrame(buffer);
+                if (text) subject.next(text);
+                buffer = '';
+              }
               subject.complete();
               return;
             }
-            const chunk = decoder.decode(value, { stream: true });
-            const { text } = parseAnthropicStreamChunk(chunk);
-            if (text) subject.next(text);
+            buffer += decoder.decode(value, { stream: true });
+            const terminator = /\r?\n\r?\n/;
+            let evtMatch = buffer.match(terminator);
+            while (evtMatch && evtMatch.index !== undefined) {
+              const boundary = evtMatch.index;
+              const matchLen = evtMatch[0].length;
+              const frame = buffer.slice(0, boundary);
+              buffer = buffer.slice(boundary + matchLen);
+              const { text } = extractTextFromAnthropicFrame(frame);
+              if (text) subject.next(text);
+              evtMatch = buffer.match(terminator);
+            }
             process();
           }).catch(err => subject.error(err));
         };
@@ -388,6 +453,25 @@ export class ApiService {
       })
       .catch(err => subject.error(err));
     return subject.asObservable();
+  }
+
+  /**
+   * Emit a single OpenAI-compat SSE line into the subject. Used for
+   * the end-of-stream flush so a delta that was on the wire when the
+   * reader closed is not silently lost. `data: [DONE]` on the flush
+   * path is a no-op (the server already terminated normally).
+   */
+  private emitOpenAiLine(subject: Subject<string>, line: string): void {
+    if (!line.startsWith('data: ')) return;
+    const data = line.slice(6);
+    if (data === '[DONE]') return;
+    try {
+      const parsed = JSON.parse(data);
+      const content = parsed.choices?.[0]?.delta?.content;
+      if (content) subject.next(content);
+    } catch {
+      /* ignore genuinely malformed SSE line */
+    }
   }
 
   // ===== Model management =====

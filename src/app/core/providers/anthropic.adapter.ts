@@ -168,16 +168,35 @@ export interface AnthropicStreamEvent {
 }
 
 /**
- * Parse a single SSE event from Anthropic. Anthropic's stream uses
- * `event: <name>\ndata: <json>` lines, unlike OpenAI which only uses
- * `data: <json>`. The caller iterates over raw chunks and we extract
- * the text deltas here.
+ * Extract the concatenated `text_delta` text and the `message_stop`
+ * signal from a *fully-buffered* frame of Anthropic SSE.
+ *
+ * Anthropic's SSE framing is materially different from OpenAI-compat:
+ *   - Each event is `event: <name>\ndata: <json>` followed by a blank
+ *     line terminator (`\n\n` or `\r\n\r\n`).
+ *   - The `data:` line is JSON, same as OpenAI-compat.
+ *   - `message_stop` marks "no more deltas coming" but does **not**
+ *     close the underlying stream — the HTTP response body stays open
+ *     until the server actually tears it down. Callers must keep
+ *     reading from the network reader after seeing `done === true`.
+ *
+ * Contract:
+ *   - Input must contain only *complete* events. The caller is the
+ *     single source of truth for framing: it splits the network
+ *     read-buffer on blank-line event terminators and only hands
+ *     complete event-bodies to this helper. Anything still pending
+ *     (mid-event, mid-`data:` line) stays in the caller's buffer
+ *     until the next read.
+ *   - On no matches (e.g. the frame only contained `ping` /
+ *     `message_start`), returns `{ text: '', done: false }`. A
+ *     genuinely malformed `data:` JSON is silently dropped, matching
+ *     the pre-refactor behaviour for legitimately broken server
+ *     output.
  */
-export function parseAnthropicStreamChunk(rawChunk: string): { text: string; done: boolean } {
+export function extractTextFromAnthropicFrame(frame: string): { text: string; done: boolean } {
   let text = '';
   let done = false;
-  // A single chunk may contain several events.
-  for (const event of splitSseEvents(rawChunk)) {
+  for (const event of splitSseEvents(frame)) {
     if (!event.data) continue;
     let parsed: any;
     try {
@@ -199,6 +218,13 @@ interface RawSseEvent {
   data: string;
 }
 
+/**
+ * Split a string containing one or more complete Anthropic SSE events
+ * (each terminated by a blank line) into structured events. Expects
+ * fully-framed input; any trailing partial event without a terminator
+ * is still emitted as a best-effort so the caller's end-of-stream
+ * flush can recover text written just before the connection closed.
+ */
 function splitSseEvents(chunk: string): RawSseEvent[] {
   const events: RawSseEvent[] = [];
   let current: RawSseEvent = { name: '', data: '' };

@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { ApiService } from './api.service';
 import { ProviderService } from './providers/provider.service';
-import { parseAnthropicStreamChunk } from './providers/anthropic.adapter';
+import { extractTextFromAnthropicFrame } from './providers/anthropic.adapter';
 
 describe('ApiService', () => {
   let service: ApiService;
@@ -367,9 +367,162 @@ describe('ApiService', () => {
         ''
       ].join('\n');
 
-      const out = parseAnthropicStreamChunk(chunk);
+      const out = extractTextFromAnthropicFrame(chunk);
       expect(out.text).toBe('Hello world');
       expect(out.done).toBeTrue();
+    });
+  });
+
+  describe('Streaming boundary buffering', () => {
+    /**
+     * Build a `Response` whose `body.getReader()` yields the given
+     * string chunks one at a time, then reports `done: true`. Mirrors
+     * what the real `fetch` stream looks like when the upstream
+     * socket delivers a small buffer per read.
+     */
+    function makeStreamingResponse(chunks: string[]): Response {
+      const encoded = chunks.map(c => new TextEncoder().encode(c));
+      let i = 0;
+      const reader = {
+        read(): Promise<{ done: boolean; value?: Uint8Array }> {
+          if (i >= encoded.length) {
+            return Promise.resolve({ done: true, value: undefined });
+          }
+          return Promise.resolve({ done: false, value: encoded[i++] });
+        },
+        releaseLock(): void { /* noop */ },
+        cancel(): Promise<void> { return Promise.resolve(); },
+        closed: Promise.resolve(undefined)
+      };
+      return {
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        body: { getReader: () => reader }
+      } as unknown as Response;
+    }
+
+    it('buffers OpenAI-compat SSE across reader.read() boundaries mid-data-line', async () => {
+      providerService.saveApiKey(OR_KEY, 'openrouter');
+      // First chunk ends inside a `data:` JSON value. Second chunk
+      // completes it. Without buffering the half-line would be
+      // silently dropped and the prose would be truncated.
+      const chunks = [
+        'data: {"choices":[{"delta":{"content":"hel',
+        'lo world"}}]}\n\ndata: [DONE]\n\n'
+      ];
+      (window.fetch as jasmine.Spy).and.returnValue(Promise.resolve(makeStreamingResponse(chunks)));
+
+      const emitted: string[] = [];
+      await new Promise<void>((resolve, reject) => {
+        service.chatCompletionStream({
+          model: 'openai/gpt-4o-mini',
+          messages: [{ role: 'user', content: 'hi' }]
+        }).subscribe({
+          next: v => emitted.push(v),
+          error: reject,
+          complete: resolve
+        });
+      });
+      expect(emitted.join('')).toBe('hello world');
+    });
+
+    it('flushes a trailing partial line when the reader closes for OpenAI-compat', async () => {
+      providerService.saveApiKey(OR_KEY, 'openrouter');
+      // No terminating newline before the reader reports done — the
+      // flush path must still emit the final delta.
+      const chunks = [
+        'data: {"choices":[{"delta":{"content":"hello"}}]}\n\n',
+        'data: {"choices":[{"delta":{"content":" world"}}]}'
+      ];
+      (window.fetch as jasmine.Spy).and.returnValue(Promise.resolve(makeStreamingResponse(chunks)));
+
+      const emitted: string[] = [];
+      await new Promise<void>((resolve, reject) => {
+        service.chatCompletionStream({
+          model: 'openai/gpt-4o-mini',
+          messages: [{ role: 'user', content: 'hi' }]
+        }).subscribe({
+          next: v => emitted.push(v),
+          error: reject,
+          complete: resolve
+        });
+      });
+      expect(emitted.join('')).toBe('hello world');
+    });
+
+    it('stops emitting after [DONE] even if more bytes follow in the same chunk', async () => {
+      providerService.saveApiKey(OR_KEY, 'openrouter');
+      const chunks = [
+        'data: {"choices":[{"delta":{"content":"first"}}]}\n\n' +
+          'data: [DONE]\n\n' +
+          'data: {"choices":[{"delta":{"content":"ghost"}}]}\n\n'
+      ];
+      (window.fetch as jasmine.Spy).and.returnValue(Promise.resolve(makeStreamingResponse(chunks)));
+
+      const emitted: string[] = [];
+      await new Promise<void>((resolve, reject) => {
+        service.chatCompletionStream({
+          model: 'openai/gpt-4o-mini',
+          messages: [{ role: 'user', content: 'hi' }]
+        }).subscribe({
+          next: v => emitted.push(v),
+          error: reject,
+          complete: resolve
+        });
+      });
+      expect(emitted.join('')).toBe('first');
+    });
+
+    it('buffers Anthropic SSE across reader.read() boundaries mid-event', async () => {
+      providerService.setActiveProvider('anthropic');
+      providerService.saveApiKey(ANTH_KEY, 'anthropic');
+      // First chunk ends inside a `data:` JSON value. Second chunk
+      // finishes the event and adds a second one. Without buffering
+      // the first event's text_delta would be lost.
+      const chunks = [
+        'event: content_block_delta\ndata: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"hel',
+        'lo"}}\n\nevent: content_block_delta\ndata: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" world"}}\n\n',
+        'event: message_stop\ndata: {"type":"message_stop"}\n\n'
+      ];
+      (window.fetch as jasmine.Spy).and.returnValue(Promise.resolve(makeStreamingResponse(chunks)));
+
+      const emitted: string[] = [];
+      await new Promise<void>((resolve, reject) => {
+        service.chatCompletionStream({
+          model: 'claude-3-5-haiku-20241022',
+          messages: [{ role: 'user', content: 'hi' }]
+        }).subscribe({
+          next: v => emitted.push(v),
+          error: reject,
+          complete: resolve
+        });
+      });
+      expect(emitted.join('')).toBe('hello world');
+    });
+
+    it('flushes a trailing partial Anthropic event when the reader closes', async () => {
+      providerService.setActiveProvider('anthropic');
+      providerService.saveApiKey(ANTH_KEY, 'anthropic');
+      // No trailing blank line before the reader reports done — the
+      // flush path must still emit the final text_delta.
+      const chunks = [
+        'event: content_block_delta\ndata: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"hello world"}}'
+      ];
+      (window.fetch as jasmine.Spy).and.returnValue(Promise.resolve(makeStreamingResponse(chunks)));
+
+      const emitted: string[] = [];
+      await new Promise<void>((resolve, reject) => {
+        service.chatCompletionStream({
+          model: 'claude-3-5-haiku-20241022',
+          messages: [{ role: 'user', content: 'hi' }]
+        }).subscribe({
+          next: v => emitted.push(v),
+          error: reject,
+          complete: resolve
+        });
+      });
+      expect(emitted.join('')).toBe('hello world');
     });
   });
 });
