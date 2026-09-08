@@ -1,4 +1,4 @@
-import { stripReasoningPreamble, stripRunningWordCount, stripThinkingBlocks, stripUnclosedThinkingBlock, endsWithSentenceTerminator } from './chapter-cleanup';
+import { stripReasoningPreamble, stripRunningWordCount, stripThinkingBlocks, stripUnclosedThinkingBlock, endsWithSentenceTerminator, isChapterUnusuallyShort } from './chapter-cleanup';
 
 describe('stripReasoningPreamble', () => {
   it('returns the input unchanged when there is no preamble', () => {
@@ -514,5 +514,41 @@ describe('endsWithSentenceTerminator', () => {
     // false when the previous line IS long, but the slow path
     // already returned false here.
     expect(endsWithSentenceTerminator('She stopped.\n\nor had')).toBe(false);
+  });
+});
+
+describe('isChapterUnusuallyShort', () => {
+  const words = (n: number) => Array.from({ length: n }, () => 'word').join(' ');
+
+  it('returns false at exactly 75% of the target', () => {
+    expect(isChapterUnusuallyShort(words(750), 1000)).toBe(false);
+  });
+
+  it('returns true just under 75% of the target', () => {
+    expect(isChapterUnusuallyShort(words(749), 1000)).toBe(true);
+  });
+
+  it('returns false when the chapter meets or exceeds the target', () => {
+    expect(isChapterUnusuallyShort(words(1000), 1000)).toBe(false);
+    expect(isChapterUnusuallyShort(words(1400), 1000)).toBe(false);
+  });
+
+  it('returns false for empty or whitespace-only content', () => {
+    // The empty-draft check owns that case; this helper stays quiet.
+    expect(isChapterUnusuallyShort('', 1000)).toBe(false);
+    expect(isChapterUnusuallyShort('   \n\n  ', 1000)).toBe(false);
+  });
+
+  it('returns false when the target is zero, negative, or not finite', () => {
+    expect(isChapterUnusuallyShort(words(10), 0)).toBe(false);
+    expect(isChapterUnusuallyShort(words(10), -100)).toBe(false);
+    expect(isChapterUnusuallyShort(words(10), NaN)).toBe(false);
+  });
+
+  it('counts whitespace-separated runs, not characters', () => {
+    // 400 words across newlines and multiple spaces still counts as 400.
+    const prose = Array.from({ length: 400 }, () => 'word').join('\n  ');
+    expect(isChapterUnusuallyShort(prose, 2500)).toBe(true);
+    expect(isChapterUnusuallyShort(prose, 500)).toBe(false);
   });
 });

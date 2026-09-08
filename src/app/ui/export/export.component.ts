@@ -14,7 +14,7 @@ import { BookCoverArt, ChapterIllustration } from '../../core/providers/illustra
 import pdfMake from 'pdfmake/build/pdfmake';
 import pdfFonts from 'pdfmake/build/vfs_fonts';
 import { buildPdfDocument, PdfExportOptions } from './pdf-renderer';
-import { stripRunningWordCount } from '../../shared/utils/chapter-cleanup';
+import { stripRunningWordCount, isChapterUnusuallyShort } from '../../shared/utils/chapter-cleanup';
 import { ExportLanguage, EXPORT_LANGUAGES, getExportLabels, ExportLabels } from '../../i18n/export-labels';
 import { buildEpubBlob } from './epub-builder';
 import { buildDocxBlob } from './docx-builder';
@@ -186,6 +186,15 @@ export class ExportComponent implements OnInit {
       const skipped = Array.isArray(state.skippedChapters)
         ? state.skippedChapters.filter(n => n > 0)
         : [];
+      // Prologue and epilogue live outside `state.chapters`, so build a
+      // combined list for the "finished but well under target" check.
+      const targetWordCount = state.config?.chapterLength
+        ? this.estimateTargetWordCount(state.config.chapterLength)
+        : 0;
+      const tooShort = [prologue, ...chapters, epilogue]
+        .filter((c): c is Chapter => !!c && !!c.content?.trim())
+        .filter(c => isChapterUnusuallyShort(c.content, targetWordCount))
+        .map(c => (c === prologue ? 'Prologue' : c === epilogue ? 'Epilogue' : String(c.number)));
       if (missing.length || empty.length || skipped.length) {
         const issues: string[] = [];
         if (missing.length) {
@@ -207,6 +216,23 @@ export class ExportComponent implements OnInit {
           variant: 'warning'
         });
         return;
+      }
+
+      // Informational (non-blocking): sections that finished on a real
+      // sentence but landed well under the configured word target. The
+      // export still runs — the user just gets told which sections came
+      // out thin so they can re-run generation if they care.
+      if (tooShort.length) {
+        await this.dialogService.alert({
+          title: this.t('export.shortSectionsTitle') || 'Some sections are short',
+          message:
+            `Section(s) ${tooShort.join(', ')} finished but came out under 75% of the ` +
+            `configured ~${targetWordCount}-word target. Re-run generation for those ` +
+            `sections, or pick a smaller chapter length, if you want them fuller. ` +
+            `The export will continue.`,
+          variant: 'warning'
+        });
+        if (this.isExportStopped) return;
       }
 
       // Translation: when the user picked a non-English export target,
@@ -623,6 +649,20 @@ export class ExportComponent implements OnInit {
       case 'Novel': return 15;
       case 'Epic': return 25;
       default: return 5;
+    }
+  }
+
+  /**
+   * Per-chapter word target for a given chapter length. Kept in sync
+   * with `ArchitectService.estimateWordCount` — used only to flag
+   * sections that came out unusually short.
+   */
+  private estimateTargetWordCount(chapterLength: string): number {
+    switch (chapterLength) {
+      case 'Short': return 1500;
+      case 'Long': return 3500;
+      case 'Standard':
+      default: return 2500;
     }
   }
 

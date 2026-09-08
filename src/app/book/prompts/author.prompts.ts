@@ -53,6 +53,10 @@ Tone: ${style.tone}. POV: ${style.pov}. Tense: ${style.tense}.
 - Use proper grammar and punctuation
 - The requested word count is a soft target — write naturally for as long as
   the scene needs. Do not pad or truncate to hit an exact number.
+- Always finish the chapter on a complete sentence ending in \`.\`, \`!\`, or
+  \`?\`. Never stop mid-sentence, mid-clause, or on an em-dash. If you are
+  running out of space, compress earlier paragraphs rather than truncating
+  the final scene.
 `;
 
 export const authorChapterPrompt = (brief: ChapterBrief, ctx: AuthorContext): string => `

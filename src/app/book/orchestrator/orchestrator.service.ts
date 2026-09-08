@@ -13,7 +13,7 @@ import { ChapterBrief, CriticContext, AuthorStyleContext } from '../../models/bo
 import { ChapterDraft, Chapter } from '../../models/chapter.model';
 import { PersistenceService } from '../../core/persistence.service';
 import { ProviderService } from '../../core/providers/provider.service';
-import { endsWithSentenceTerminator } from '../../shared/utils/chapter-cleanup';
+import { endsWithSentenceTerminator, isChapterUnusuallyShort } from '../../shared/utils/chapter-cleanup';
 
 @Injectable({
   providedIn: 'root'
@@ -812,17 +812,23 @@ export class OrchestratorService {
               scheduleRetry();
               return;
             }
-            if (!endsWithSentenceTerminator(draft.content)) {
-              // Tail-completeness check failed — the author stream
-              // was cut off mid-sentence. Treat it like an empty
-              // draft for retry purposes: bump the error counter,
-              // close the stream, and schedule another attempt. We
-              // keep the draft around so the fallback can ship a
-              // marked-up version if every attempt truncates near
-              // the same length.
+            const cutMidSentence = !endsWithSentenceTerminator(draft.content);
+            const tooShort = isChapterUnusuallyShort(draft.content, brief.targetWordCount);
+            if (cutMidSentence || tooShort) {
+              // Either the author stream was cut off mid-sentence, or
+              // it ended cleanly but delivered well under the brief's
+              // target (usually a reasoning-heavy model burning its
+              // output budget before the prose). Both get the same
+              // retry treatment as an empty draft: bump the error
+              // counter, close the stream, schedule another attempt.
+              // We keep the draft around so the fallback can ship a
+              // marked-up version if every attempt fails the same way.
               const tailSnippet = draft.content.slice(-80).replace(/\s+/g, ' ').trim();
+              const reason = cutMidSentence
+                ? 'no sentence terminator'
+                : `only ${draft.wordCount} of ~${brief.targetWordCount} target words`;
               console.warn(
-                `Orchestrator: attempt ${attempt} returned a truncated draft (no sentence terminator). Tail: "${tailSnippet}"`
+                `Orchestrator: attempt ${attempt} returned an incomplete draft (${reason}). Tail: "${tailSnippet}"`
               );
               lastTruncatedDraft = draft;
               self.bookStateService.incrementErrorCount();
@@ -955,16 +961,21 @@ export class OrchestratorService {
               this.bookStateService.recordAgentUsage('reviser', result.usage);
               this.bookStateService.endStream$();
               const newDraft = result.draft;
-              if (!endsWithSentenceTerminator(newDraft.content)) {
-                // Reviser returned a tail-truncated draft — same
-                // retry semantics as a thrown error. Fall back to
-                // `currentDraft` (the pre-revision draft, which
+              const reviserCutMidSentence = !endsWithSentenceTerminator(newDraft.content);
+              const reviserTooShort = isChapterUnusuallyShort(newDraft.content, brief.targetWordCount);
+              if (reviserCutMidSentence || reviserTooShort) {
+                // Reviser returned a tail-truncated or well-under-target
+                // draft — same retry semantics as a thrown error. Fall
+                // back to `currentDraft` (the pre-revision draft, which
                 // already passed the writer's completeness check)
                 // when retries are exhausted, mirroring the existing
                 // "reviser gave up, original draft kept" path.
                 const tailSnippet = newDraft.content.slice(-80).replace(/\s+/g, ' ').trim();
+                const reason = reviserCutMidSentence
+                  ? 'no sentence terminator'
+                  : `only ${newDraft.wordCount} of ~${brief.targetWordCount} target words`;
                 console.warn(
-                  `Orchestrator: reviser attempt ${attempt}/${maxReviseRetries} for chapter ${brief.number} returned a truncated draft. Tail: "${tailSnippet}"`
+                  `Orchestrator: reviser attempt ${attempt}/${maxReviseRetries} for chapter ${brief.number} returned an incomplete draft (${reason}). Tail: "${tailSnippet}"`
                 );
                 this.bookStateService.incrementErrorCount();
                 this.bookStateService.endStream$();

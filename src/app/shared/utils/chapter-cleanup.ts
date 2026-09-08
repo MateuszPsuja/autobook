@@ -427,6 +427,28 @@ function stripTrailingCodeFence(text: string): string {
   return before.slice(0, openerLineStart).replace(/\s+$/, '');
 }
 
+/**
+ * True when a chapter finished cleanly but came out well under the
+ * word count the brief asked for. Complements
+ * `endsWithSentenceTerminator`: that catches a tail cut mid-sentence,
+ * this catches a chapter that ended on a real terminator but only
+ * delivered a fraction of the requested prose (typically because the
+ * model burned its output budget on reasoning tokens and wrapped up
+ * early).
+ *
+ * Returns `false` for an unknown / non-positive target (nothing to
+ * compare against) and for empty content (the empty-draft check owns
+ * that case).
+ */
+export function isChapterUnusuallyShort(
+  text: string,
+  targetWordCount: number,
+): boolean {
+  if (!Number.isFinite(targetWordCount) || targetWordCount <= 0) return false;
+  const words = (text?.trim().match(/\S+/g) ?? []).length;
+  return words > 0 && words < targetWordCount * 0.75;
+}
+
 export function endsWithSentenceTerminator(text: string): boolean {
   if (!text) return false;
 

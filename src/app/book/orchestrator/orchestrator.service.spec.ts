@@ -98,10 +98,20 @@ describe('OrchestratorService', () => {
     keyPlotPoints: ['Inciting incident']
   };
 
+  // Mock drafts have to clear the orchestrator's "unusually short"
+  // check (a draft under 75% of the brief's targetWordCount is
+  // treated like a truncation and retried), so a mock that stands in
+  // for a finished chapter needs a realistic word count. This pads
+  // filler prose in front of an assertable tail sentence.
+  const proseOfWords = (wordCount: number, tail: string): string => {
+    const filler = Array.from({ length: Math.max(0, wordCount) }, () => 'word').join(' ');
+    return `${filler}.\n\n${tail}`;
+  };
+
   const mockDraft: ChapterDraft = {
     chapterId: 'chapter-1',
-    content: 'Test chapter content with enough words.',
-    wordCount: 10,
+    content: proseOfWords(2500, 'Test chapter content with enough words.'),
+    wordCount: 2501,
     progress: 100,
     createdAt: new Date(),
     updatedAt: new Date()
@@ -558,17 +568,18 @@ describe('OrchestratorService', () => {
         // mock which returns a complete draft so we can assert the
         // retry count for the prologue alone without the chapter
         // call getting conflated.
-        const truncatedContent = 'The air pressed close, as if held by invisible hands.\n\nHe kept glancing';
-        const completeContent = 'The dawn found her walking toward the harbor.\n\nShe carried the lantern high.';
+        // Long enough to clear the "unusually short" check so the
+        // missing terminator is the only reason for the retry.
+        const truncatedContent = proseOfWords(1000, 'The air pressed close, as if held by invisible hands.\n\nHe kept glancing');
         authorServiceSpy.writeChapterStreamingWithUsage.and.callFake((brief: ChapterBrief) => {
           if (brief.number === 0) {
             return of({
-              draft: { ...mockDraft, content: truncatedContent, wordCount: 12 },
+              draft: { ...mockDraft, content: truncatedContent, wordCount: 1012 },
               usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 }
             });
           }
           return of({
-            draft: { ...mockDraft, content: completeContent, wordCount: 12 },
+            draft: mockDraft,
             usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 }
           });
         });
@@ -631,18 +642,21 @@ describe('OrchestratorService', () => {
         // fall through with the marker and state.error quoting the tail.
         const longPrev =
           'I stood. I brushed the moss from my knees, then turned toward the sound of the river, and began to walk.';
-        const truncatedContent =
-          longPrev + '\n\nSomething was coming. Something I had forgotten, or had never known, or had';
-        const completeContent = 'The dawn found her walking toward the harbor.\n\nShe carried the lantern high.';
+        // Padded past the "unusually short" threshold so the dangling
+        // tail is the only reason the orchestrator retries.
+        const truncatedContent = proseOfWords(
+          1000,
+          longPrev + '\n\nSomething was coming. Something I had forgotten, or had never known, or had'
+        );
         authorServiceSpy.writeChapterStreamingWithUsage.and.callFake((brief: ChapterBrief) => {
           if (brief.number === 0) {
             return of({
-              draft: { ...mockDraft, content: truncatedContent, wordCount: 30 },
+              draft: { ...mockDraft, content: truncatedContent, wordCount: 1030 },
               usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 }
             });
           }
           return of({
-            draft: { ...mockDraft, content: completeContent, wordCount: 12 },
+            draft: mockDraft,
             usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 }
           });
         });
@@ -695,10 +709,101 @@ describe('OrchestratorService', () => {
         });
       }, 15000);
 
-      it('does not retry when the author returns a complete draft on the first attempt', (done) => {
-        const completeContent = 'The dawn found her walking toward the harbor.\n\nShe carried the lantern high.';
+      it('retries when the author returns a complete but unusually short draft, then ships it with a marker', (done) => {
+        // The draft ends on a real terminator (so the tail check
+        // passes) but delivers far fewer words than the brief asked
+        // for — the signature of a reasoning-heavy model burning its
+        // output budget before the prose. The short check should make
+        // the orchestrator retry, and after 3 attempts the same
+        // truncation fallback ships the draft with a marker.
+        // 12 words against the prologue brief's 1000-word target —
+        // well under the 75% threshold.
+        const shortContent = 'The air pressed close, as if held by invisible hands. She waited.';
+        authorServiceSpy.writeChapterStreamingWithUsage.and.callFake((brief: ChapterBrief) => {
+          if (brief.number === 0) {
+            return of({
+              draft: { ...mockDraft, content: shortContent, wordCount: 12 },
+              usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 }
+            });
+          }
+          return of({
+            draft: mockDraft,
+            usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 }
+          });
+        });
+        const prologueBrief = {
+          number: 0, title: 'Prologue', plotBeat: 'A stranger leaves a map.', povCharacter: 'the stranger',
+          emotionalState: 'purposeful', location: 'A doorstep', keyEvents: ['k'], hookType: 'h', targetWordCount: 1000,
+        };
+        architectServiceSpy.generateBlueprintStreamingWithUsage.and.returnValue(of({
+          data: { ...mockBlueprint, prologue: prologueBrief },
+          usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 }
+        }));
+
+        service.orchestrate({ ...mockConfig, hasPrologue: true }).subscribe({
+          complete: () => {
+            const allCalls = (authorServiceSpy.writeChapterStreamingWithUsage as jasmine.Spy).calls.allArgs();
+            const prologueCalls = allCalls.filter((args: any[]) => args[0]?.number === 0);
+            expect(prologueCalls.length).toBe(3);
+
+            const prologueStateCalls = bookStateServiceSpy.setPrologue.calls.allArgs()
+              .filter(args => args[0] != null);
+            expect(prologueStateCalls.length).toBe(1);
+            const prologue = prologueStateCalls[0][0] as Chapter;
+            expect(prologue.content).toContain('She waited.');
+            expect(prologue.content).toContain('[… incomplete — generation cut off …]');
+
+            expect(bookStateServiceSpy.setChapters).toHaveBeenCalled();
+            done();
+          },
+          error: (err) => {
+            done.fail('orchestrate should not error on a short prologue: ' + (err?.message || err));
+          }
+        });
+      }, 15000);
+
+      it('does not retry a draft that meets the brief target even when it is only just long enough', (done) => {
+        // 800 words against a 1000-word target is above the 75%
+        // threshold, so the short check must stay quiet — the draft
+        // ships on the first attempt with no marker.
+        const atTargetContent =
+          Array.from({ length: 800 }, () => 'word').join(' ') + '.';
         authorServiceSpy.writeChapterStreamingWithUsage.and.returnValue(of({
-          draft: { ...mockDraft, content: completeContent, wordCount: 12 },
+          draft: { ...mockDraft, content: atTargetContent, wordCount: 800 },
+          usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 }
+        }));
+        const prologueBrief = {
+          number: 0, title: 'Prologue', plotBeat: 'A', povCharacter: 'the stranger',
+          emotionalState: 'p', location: 'L', keyEvents: ['k'], hookType: 'h', targetWordCount: 1000,
+        };
+        architectServiceSpy.generateBlueprintStreamingWithUsage.and.returnValue(of({
+          data: { ...mockBlueprint, prologue: prologueBrief },
+          usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 }
+        }));
+
+        service.orchestrate({ ...mockConfig, hasPrologue: true }).subscribe({
+          complete: () => {
+            const allCalls = (authorServiceSpy.writeChapterStreamingWithUsage as jasmine.Spy).calls.allArgs();
+            const prologueCalls = allCalls.filter((args: any[]) => args[0]?.number === 0);
+            expect(prologueCalls.length).toBe(1);
+
+            const prologueStateCalls = bookStateServiceSpy.setPrologue.calls.allArgs()
+              .filter(args => args[0] != null);
+            expect(prologueStateCalls.length).toBe(1);
+            const prologue = prologueStateCalls[0][0] as Chapter;
+            expect(prologue.content).not.toContain('[… incomplete — generation cut off …]');
+            done();
+          },
+          error: (err) => {
+            done.fail('orchestrate should not error: ' + (err?.message || err));
+          }
+        });
+      });
+
+      it('does not retry when the author returns a complete draft on the first attempt', (done) => {
+        const completeContent = proseOfWords(1000, 'The dawn found her walking toward the harbor.\n\nShe carried the lantern high.');
+        authorServiceSpy.writeChapterStreamingWithUsage.and.returnValue(of({
+          draft: { ...mockDraft, content: completeContent, wordCount: 1012 },
           usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 }
         }));
         const prologueBrief = {
@@ -995,7 +1100,7 @@ describe('OrchestratorService', () => {
         draft: {
           ...mockDraft,
           chapterId: `chapter-${brief.number}`,
-          content: `New content for chapter ${brief.number}, ending with a period.`,
+          content: proseOfWords(1000, `New content for chapter ${brief.number}, ending with a period.`),
         },
         usage: { promptTokens: 100, completionTokens: 200, totalTokens: 300 }
       }));
@@ -1012,7 +1117,7 @@ describe('OrchestratorService', () => {
           expect(latest[0].id).toBe('chapter-1');
           expect(latest[1].id).toBe('chapter-2');
           expect(latest[2].id).toBe('chapter-3');
-          expect(latest[2].content).toBe('New content for chapter 3, ending with a period.');
+          expect(latest[2].content).toContain('New content for chapter 3, ending with a period.');
           // Successful retry → empty skipped list.
           expect(bookStateServiceSpy.setSkippedChapters).toHaveBeenCalledWith([]);
           // Final status reflects the clean retry.

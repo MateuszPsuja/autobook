@@ -24,6 +24,19 @@ export class AuthorService {
   ) {}
 
   /**
+   * Output-token budget for a prose generation of `targetWordCount`
+   * words. English prose runs ~1.33 tokens/word, so 4× leaves room
+   * for a full reasoning/thinking prefix (which models like
+   * MiniMax-M3 emit before any prose) without hitting the cap
+   * mid-sentence. The 2000 floor keeps a Short chapter — or a
+   * defensive `0` target — from producing a budget too small to
+   * finish anything.
+   */
+  private authorBudget(targetWordCount: number): number {
+    return Math.max(2000, Math.ceil(targetWordCount * 4));
+  }
+
+  /**
    * Write a chapter with streaming output
    */
   writeChapter(brief: ChapterBrief, ctx: AuthorContext): Observable<ChapterDraft> {
@@ -36,7 +49,7 @@ export class AuthorService {
       model: ctx.model,
       messages,
       temperature: 0.8,
-      max_tokens: brief.targetWordCount * 2, // Allow for longer responses
+      max_tokens: this.authorBudget(brief.targetWordCount),
       stream: true
     };
 
@@ -126,7 +139,7 @@ export class AuthorService {
       model: ctx.model,
       messages,
       temperature: 0.8,
-      max_tokens: brief.targetWordCount * 2
+      max_tokens: this.authorBudget(brief.targetWordCount)
     };
 
     return this.apiService.chatCompletion(request).pipe(
@@ -209,7 +222,7 @@ export class AuthorService {
       model: ctx.model,
       messages,
       temperature: 0.8,
-      max_tokens: brief.targetWordCount * 2,
+      max_tokens: this.authorBudget(brief.targetWordCount),
       stream: true
     };
 
@@ -303,7 +316,7 @@ export class AuthorService {
       model: model,
       messages,
       temperature: 0.7,
-      max_tokens: draft.wordCount * 2
+      max_tokens: this.authorBudget(Math.max(draft.wordCount, brief.targetWordCount))
     };
 
     return this.apiService.chatCompletion(request).pipe(
@@ -333,7 +346,7 @@ export class AuthorService {
       model: model,
       messages,
       temperature: 0.7,
-      max_tokens: draft.wordCount * 2
+      max_tokens: this.authorBudget(Math.max(draft.wordCount, brief.targetWordCount))
     };
 
     return this.apiService.chatCompletion(request).pipe(
@@ -406,7 +419,7 @@ export class AuthorService {
       model,
       messages,
       temperature: 0.7,
-      max_tokens: draft.wordCount * 2,
+      max_tokens: this.authorBudget(Math.max(draft.wordCount, brief.targetWordCount)),
       stream: true
     };
 
