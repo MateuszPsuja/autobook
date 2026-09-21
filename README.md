@@ -4,6 +4,10 @@
 	<img src="src/assets/autobook_trans.png" alt="AutoBook logo" width="260" />
 </p>
 
+<p align="center">
+	<a href="https://MateuszPsuja.github.io/autobook/">Live demo</a>
+</p>
+
 AutoBook is an AI-assisted book writing application built with Angular. It coordinates specialized agents to plan a story, generate chapters, review quality, and keep narrative consistency, then lets you export the final manuscript in multiple formats.
 
 ## What AutoBook Does
@@ -51,6 +55,14 @@ Available npm scripts:
 - `npm run build` - Build production bundle.
 - `npm run watch` - Build in watch mode.
 - `npm test` - Run unit tests (Karma + Jasmine).
+
+## Deployment
+
+The app auto-publishes to GitHub Pages on every push to `main` via `.github/workflows/deploy.yml`.
+
+One-time repo setup: in **Settings → Pages → Build and deployment**, set Source to **GitHub Actions**.
+
+In production the router uses hash-based URLs (e.g. `/#/settings`, `/#/generator`), so deep links work without any server-side rewrite. Bookmark or share the hash form.
 
 ## Configuration
 
