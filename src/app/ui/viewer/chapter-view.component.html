@@ -32,7 +32,7 @@
             @let active = selectedChapter?.id === prologue.id;
             <button
               type="button"
-              (click)="selectChapter(prologue, -1)"
+              (click)="selectChapter(prologue, 0)"
               class="relative w-full text-left px-3 py-2.5 rounded-lg transition-colors"
               [class]="active
                 ? 'bg-accent-500/10 text-surface-strong'
@@ -62,7 +62,7 @@
             @let active = selectedChapter?.id === chapter.id;
             <button
               type="button"
-              (click)="selectChapter(chapter, i)"
+              (click)="selectChapter(chapter, prologue ? i + 1 : i)"
               class="relative w-full text-left px-3 py-2.5 rounded-lg transition-colors"
               [class]="active
                 ? 'bg-accent-500/10 text-surface-strong'
@@ -89,12 +89,11 @@
             </button>
           }
           @let epilogue = (epilogue$ | async);
-          @let chapterCount = ((chapters$ | async)?.length || 0);
           @if (epilogue) {
             @let active = selectedChapter?.id === epilogue.id;
             <button
               type="button"
-              (click)="selectChapter(epilogue, chapterCount)"
+              (click)="selectChapter(epilogue, sectionsCount() - 1)"
               class="relative w-full text-left px-3 py-2.5 rounded-lg transition-colors"
               [class]="active
                 ? 'bg-accent-500/10 text-surface-strong'
@@ -161,7 +160,7 @@
 
           <!-- Chapter nav (prev/next) sits inside the card with a soft divider. -->
           <div class="flex items-center justify-between pt-4 border-t border-surface-border">
-            <button (click)="prevChapter()" [disabled]="selectedChapterIndex === 0" class="btn btn-ghost">
+            <button (click)="prevChapter()" [disabled]="selectedChapterIndex <= 0" class="btn btn-ghost">
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
               </svg>
@@ -169,10 +168,10 @@
             </button>
 
             <span class="text-xs font-mono text-surface-subtle tabular-nums">
-              {{ selectedChapterIndex + 1 }} / {{ (chapters$ | async)?.length || 0 }}
+              {{ selectedChapterIndex + 1 }} / {{ sectionsCount() }}
             </span>
 
-            <button (click)="nextChapter()" [disabled]="selectedChapterIndex === ((chapters$ | async)?.length || 1) - 1" class="btn btn-ghost">
+            <button (click)="nextChapter()" [disabled]="selectedChapterIndex >= sectionsCount() - 1" class="btn btn-ghost">
               {{ t('viewer.nextChapter') }}
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>

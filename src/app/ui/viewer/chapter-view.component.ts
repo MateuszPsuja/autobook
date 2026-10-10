@@ -27,7 +27,21 @@ export class ChapterViewComponent implements OnInit {
   prologue$: Observable<Chapter | null | undefined>;
   epilogue$: Observable<Chapter | null | undefined>;
   selectedChapter: Chapter | null = null;
+  /**
+   * 0-based index of the currently selected section in the contiguous
+   * ordered `sections` array built by `buildSections` (prologue, then
+   * numbered chapters, then epilogue). Always a valid index into that
+   * array once a section has been selected — never `-1` or any other
+   * sentinel value. Used by the template's prev/next disabled bindings
+   * and the position counter.
+   */
   selectedChapterIndex = 0;
+  /**
+   * Total number of reading sections (prologue + chapters + epilogue).
+   * Exposed as a signal so the template re-evaluates after `selectChapter`
+   * runs, rather than recomputing on every change-detection cycle.
+   */
+  sectionsCount = signal<number>(0);
 
   /**
    * Critique that the panel renders. The UI is English-only and the
@@ -46,22 +60,16 @@ export class ChapterViewComponent implements OnInit {
   }
 
   ngOnInit(): void {
-    // Default to the prologue when one exists so the user lands
-    // on the first section of the book (rather than jumping over
-    // it to Chapter 1). Falls back to chapter 1 when there's no
-    // prologue. Reads both observables synchronously off the
-    // shared state to avoid a race between the two subscriptions.
+    // Default to the first section in reading order so the user lands
+    // on the prologue when one exists, or on chapter 1 otherwise. Reads
+    // state synchronously off the shared snapshot (matching the
+    // precedent set elsewhere in this component) to avoid races
+    // between separate subscriptions.
     if (this.selectedChapter) return;
     const state = this.bookStateService.getState();
-    if (state.prologue) {
-      this.selectChapter(state.prologue, -1);
-    } else {
-      this.chapters$.subscribe((chapters: Chapter[]) => {
-        if (chapters.length > 0 && !this.selectedChapter) {
-          this.selectChapter(chapters[0], 0);
-        }
-      });
-    }
+    const sections = this.buildSections(state.prologue, state.chapters, state.epilogue);
+    if (sections.length === 0) return;
+    this.selectChapter(sections[0], 0);
   }
 
   selectChapter(chapter: Chapter, index: number): void {
@@ -70,22 +78,45 @@ export class ChapterViewComponent implements OnInit {
     // Source critique is already in the right language; mirror it
     // straight into the display signal.
     this.displayCritique.set(chapter.critique ?? null);
+    // Refresh the section count from the current state — the book may
+    // grow while the viewer is open if generation is still running.
+    const state = this.bookStateService.getState();
+    this.sectionsCount.set(this.buildSections(state.prologue, state.chapters, state.epilogue).length);
   }
 
   nextChapter(): void {
-    this.chapters$.subscribe((chapters: Chapter[]) => {
-      if (this.selectedChapterIndex < chapters.length - 1) {
-        this.selectChapter(chapters[this.selectedChapterIndex + 1], this.selectedChapterIndex + 1);
-      }
-    });
+    const sections = this.currentSections();
+    if (this.selectedChapterIndex >= sections.length - 1) return;
+    this.selectChapter(sections[this.selectedChapterIndex + 1], this.selectedChapterIndex + 1);
   }
 
   prevChapter(): void {
-    if (this.selectedChapterIndex > 0) {
-      this.chapters$.subscribe((chapters: Chapter[]) => {
-        this.selectChapter(chapters[this.selectedChapterIndex - 1], this.selectedChapterIndex - 1);
-      });
-    }
+    if (this.selectedChapterIndex <= 0) return;
+    const sections = this.currentSections();
+    this.selectChapter(sections[this.selectedChapterIndex - 1], this.selectedChapterIndex - 1);
+  }
+
+  /**
+   * Build the contiguous reading-order section list: optional prologue,
+   * then numbered chapters, then optional epilogue. Drops any null/
+   * undefined front/back matter so the array length always matches the
+   * number of items the user can navigate between.
+   */
+  private buildSections(
+    prologue: Chapter | null | undefined,
+    chapters: Chapter[],
+    epilogue: Chapter | null | undefined
+  ): Chapter[] {
+    const sections: Chapter[] = [];
+    if (prologue) sections.push(prologue);
+    if (chapters && chapters.length > 0) sections.push(...chapters);
+    if (epilogue) sections.push(epilogue);
+    return sections;
+  }
+
+  private currentSections(): Chapter[] {
+    const state = this.bookStateService.getState();
+    return this.buildSections(state.prologue, state.chapters, state.epilogue);
   }
 
   getChapterScore(chapter: Chapter): number {

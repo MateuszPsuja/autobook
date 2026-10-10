@@ -177,6 +177,104 @@ describe('ChapterViewComponent', () => {
     });
   });
 
+  describe('section navigation with prologue + chapters + epilogue', () => {
+    const mockPrologue: Chapter = {
+      id: 'prologue',
+      number: 0,
+      title: 'Prologue: The Calm Before',
+      content: 'Prologue prose.',
+      wordCount: 10,
+      status: 'approved',
+      createdAt: new Date(),
+      approvedAt: new Date(),
+      revisions: []
+    };
+    const mockEpilogue: Chapter = {
+      id: 'epilogue',
+      number: 99,
+      title: 'Epilogue: After the Storm',
+      content: 'Epilogue prose.',
+      wordCount: 10,
+      status: 'approved',
+      createdAt: new Date(),
+      approvedAt: new Date(),
+      revisions: []
+    };
+
+    beforeEach(() => {
+      bookStateServiceSpy.getPrologue$.and.returnValue(of(mockPrologue));
+      bookStateServiceSpy.getEpilogue$.and.returnValue(of(mockEpilogue));
+      bookStateServiceSpy.getState.and.returnValue({
+        chapters: mockChapters,
+        characterStore: {},
+        worldStateDoc: '',
+        status: 'completed',
+        activeAgent: null,
+        blueprint: null,
+        prologue: mockPrologue,
+        epilogue: mockEpilogue,
+        currentDraft: null,
+        critique: null,
+        revisionCount: 0,
+        config: null as any,
+        error: null,
+        continuityFlags: [],
+        skippedChapters: [] as any,
+        currentChapterNumber: null,
+        stats: null as any,
+        liveStream: '',
+        liveStreamAgent: null,
+        liveStreamStartedAt: null
+      } as any);
+      // Re-seed the component's initial selection so it picks the
+      // prologue (sections[0]) under the new contiguous scheme.
+      component.ngOnInit();
+    });
+
+    it('reports sectionsCount = prologue + chapters + epilogue', () => {
+      expect(component.sectionsCount()).toBe(4);
+    });
+
+    it('starts on the prologue at section index 0', () => {
+      expect(component.selectedChapter?.id).toBe('prologue');
+      expect(component.selectedChapterIndex).toBe(0);
+    });
+
+    it('nextChapter from prologue advances to chapter 1 at index 1', () => {
+      component.nextChapter();
+      expect(component.selectedChapter?.id).toBe('chapter-1');
+      expect(component.selectedChapterIndex).toBe(1);
+    });
+
+    it('nextChapter from the last chapter advances to the epilogue', () => {
+      component.selectChapter(mockChapters[1], 2);
+      component.nextChapter();
+      expect(component.selectedChapter?.id).toBe('epilogue');
+      expect(component.selectedChapterIndex).toBe(3);
+    });
+
+    it('nextChapter from the epilogue is a no-op', () => {
+      component.selectChapter(mockEpilogue, 3);
+      const before = component.selectedChapterIndex;
+      component.nextChapter();
+      expect(component.selectedChapterIndex).toBe(before);
+      expect(component.selectedChapter?.id).toBe('epilogue');
+    });
+
+    it('prevChapter from the prologue is a no-op', () => {
+      component.prevChapter();
+      expect(component.selectedChapter?.id).toBe('prologue');
+      expect(component.selectedChapterIndex).toBe(0);
+    });
+
+    it('prevChapter from the epilogue returns to the last numbered chapter', () => {
+      component.selectChapter(mockEpilogue, 3);
+      component.prevChapter();
+      expect(component.selectedChapter?.id).toBe('chapter-2');
+      expect(component.selectedChapterIndex).toBe(2);
+    });
+  });
+
   describe('getChapterScore', () => {
     it('should return chapter critique score', () => {
       const score = component.getChapterScore(mockChapters[0]);
