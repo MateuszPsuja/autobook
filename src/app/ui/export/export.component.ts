@@ -188,12 +188,30 @@ export class ExportComponent implements OnInit {
         : [];
       // Prologue and epilogue live outside `state.chapters`, so build a
       // combined list for the "finished but well under target" check.
-      const targetWordCount = state.config?.chapterLength
+      //
+      // The threshold MUST be the same one generation enforced. The
+      // orchestrator retries any author/reviser draft under 75% of the
+      // section's *brief* `targetWordCount` (the per-section number the
+      // architect produced), so re-deriving a single global target from
+      // `config.chapterLength` here can disagree with what the pipeline
+      // already accepted and flag perfectly finished sections. Use the
+      // blueprint's per-section target, and only fall back to the config
+      // estimate when the blueprint is unavailable.
+      const fallbackWordCount = state.config?.chapterLength
         ? this.estimateTargetWordCount(state.config.chapterLength)
         : 0;
+      const briefTargetFor = (c: Chapter): number => {
+        const brief = c === prologue
+          ? state.blueprint?.prologue
+          : c === epilogue
+            ? state.blueprint?.epilogue
+            : state.blueprint?.chapters?.find(b => b.number === c.number);
+        const briefTarget = brief?.targetWordCount ?? 0;
+        return briefTarget > 0 ? briefTarget : fallbackWordCount;
+      };
       const tooShort = [prologue, ...chapters, epilogue]
         .filter((c): c is Chapter => !!c && !!c.content?.trim())
-        .filter(c => isChapterUnusuallyShort(c.content, targetWordCount))
+        .filter(c => isChapterUnusuallyShort(c.content, briefTargetFor(c)))
         .map(c => (c === prologue ? 'Prologue' : c === epilogue ? 'Epilogue' : String(c.number)));
       if (missing.length || empty.length || skipped.length) {
         const issues: string[] = [];
@@ -226,9 +244,9 @@ export class ExportComponent implements OnInit {
         await this.dialogService.alert({
           title: this.t('export.shortSectionsTitle') || 'Some sections are short',
           message:
-            `Section(s) ${tooShort.join(', ')} finished but came out under 75% of the ` +
-            `configured ~${targetWordCount}-word target. Re-run generation for those ` +
-            `sections, or pick a smaller chapter length, if you want them fuller. ` +
+            `Section(s) ${tooShort.join(', ')} finished but came out under 75% of ` +
+            `their configured word target. Re-run generation for those sections, or ` +
+            `pick a smaller chapter length, if you want them fuller. ` +
             `The export will continue.`,
           variant: 'warning'
         });
