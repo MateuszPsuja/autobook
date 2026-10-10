@@ -153,7 +153,7 @@
           <span class="text-sm text-surface-strong">{{ t('export.includeToc') }}</span>
         </label>
 
-        @if (providerService.getActiveProviderId() === 'minimax') {
+        @if (providerService.getActiveProviderId() === 'minimax' && selectedFormat !== 'markdown') {
           <label class="flex items-center gap-2.5 px-3 py-2.5 rounded-lg border border-surface-border hover:bg-surface-sunken cursor-pointer transition-colors">
             <span class="relative inline-flex">
               <input type="checkbox" [(ngModel)]="exportOptions.includeIllustrations"

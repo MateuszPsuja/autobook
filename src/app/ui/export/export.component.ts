@@ -312,11 +312,9 @@ export class ExportComponent implements OnInit {
       // missing illustration just means the chapter / cover ships
       // without art, but the export still completes.
       //
-      // The PDF and EPUB paths both consume the same illustration
-      // payload; DOCX and Markdown don't (DOCX is out of scope for
-      // the EPUB rebuild, Markdown is plain text). The DOCX branch
-      // currently has the same "markdown with wrong MIME" bug as
-      // the old EPUB branch but that's a follow-up plan.
+      // PDF, EPUB, and DOCX all consume the same illustration payload;
+      // Markdown is plain text and ignores it. (DOCX embeds via ImageRun
+      // for jpg/png/gif/bmp; WebP/SVG fall back to typographic covers.)
       let chapterIllustrations: Map<string, ChapterIllustration> | undefined;
       let coverArt: BookCoverArt | undefined;
       let backCoverArt: BookCoverArt | undefined;
