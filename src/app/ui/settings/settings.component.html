@@ -85,16 +85,12 @@
       }
 
       <div class="space-y-3">
-        <form
-          autocomplete="off"
-          data-form-type="other"
-          (submit)="$event.preventDefault()"
-          class="contents">
         <div class="relative">
           <input
             [type]="isApiKeyVisible ? 'text' : 'password'"
             [(ngModel)]="apiKeyInput"
             [ngModelOptions]="{standalone: true}"
+            name="api-key"
             [placeholder]="activeProvider.keyValidation?.prefix || 'sk-...'"
             autocomplete="off"
             autocapitalize="off"
@@ -132,7 +128,6 @@
             </button>
           </div>
         </div>
-        </form>
 
         @if (apiError) {
           <div class="p-3 bg-rose-500/10 border border-rose-500/30 rounded-lg flex items-center gap-2.5">
