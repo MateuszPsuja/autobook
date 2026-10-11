@@ -433,10 +433,11 @@ export class ExportComponent implements OnInit {
           filename = 'book-export.epub';
           break;
         case 'docx':
+          // The DOCX builder embeds per-chapter illustrations only —
+          // it has no cover or back cover — so the cover art generated
+          // above stays a PDF / EPUB expense.
           content = await this.generateDOCX(chapters, config, {
             chapterIllustrations,
-            coverArt,
-            backCoverArt,
           }, prologue, epilogue);
           filename = 'book-export.docx';
           break;
@@ -549,17 +550,14 @@ export class ExportComponent implements OnInit {
     translatedConfig?: any,
     illustrationCtx?: {
       chapterIllustrations?: Map<string, ChapterIllustration>;
-      coverArt?: BookCoverArt;
-      backCoverArt?: BookCoverArt;
     },
     prologue?: Chapter | null,
     epilogue?: Chapter | null,
   ): Promise<Blob> {
     // If a translated config was provided, swap it into a copy of
-    // the state so the DOCX builder reads the localised title /
-    // genre / themes / protagonist name from the cover, back
-    // cover, and title page. Otherwise it falls through to the
-    // English state.config (the default for 'en' exports).
+    // the state so the DOCX builder reads the localised title.
+    // Otherwise it falls through to the English state.config (the
+    // default for 'en' exports).
     const baseState = this.bookStateService.getState();
     const config = translatedConfig ?? baseState.config;
     const labels = getExportLabels(this.exportLanguage);
@@ -571,6 +569,17 @@ export class ExportComponent implements OnInit {
       illustrationCtx,
       prologue: prologue ?? null,
       epilogue: epilogue ?? null,
+      // The DOCX builder honours the same toggles the PDF and Markdown
+      // exports do: `includeTOC` adds a contents page and
+      // `includeTitles` drops the chapter-title paragraphs (which also
+      // empties the TOC, matching the PDF exporter).
+      options: {
+        includeTitles: this.exportOptions.includeTitles,
+        includeTOC: this.exportOptions.includeTOC,
+      },
+      // Drives the document's `w:lang` so Word proofing matches the
+      // language the book was translated into.
+      language: this.exportLanguage,
     });
   }
 
