@@ -22,6 +22,19 @@ AutoBook is an AI-assisted book writing application built with Angular. It coord
 
 ![AutoBook application screenshot](screenshots/autobook_screenshot.png)
 
+## Demo Book
+
+*Rise of the Phoenix* is a five-chapter fantasy novella generated end-to-end with AutoBook's agent
+pipeline (Architect → Author → Critic → Character → Continuity) and exported from the Export screen.
+Download it in any of the four formats to see what the pipeline actually produces:
+
+| Format | File | Notes |
+| --- | --- | --- |
+| PDF | [`Rise-of-the-Phoenix.pdf`](demo_book/Rise-of-the-Phoenix.pdf) | 45 pages, with cover, chapter illustrations, and back cover |
+| EPUB | [`Rise-of-the-Phoenix.epub`](demo_book/Rise-of-the-Phoenix.epub) | Reflowable, with cover, chapter illustrations, and back cover |
+| DOCX | [`Rise-of-the-Phoenix.docx`](demo_book/Rise-of-the-Phoenix.docx) | Editable manuscript with chapter illustrations |
+| Markdown | [`Rise-of-the-Phoenix.md`](demo_book/Rise-of-the-Phoenix.md) | Plain text source, diffable |
+
 ## How It Works
 
 AutoBook runs a multi-agent workflow where each agent has a focused role:
