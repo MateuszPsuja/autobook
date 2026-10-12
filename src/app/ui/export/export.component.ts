@@ -17,6 +17,7 @@ import { buildPdfDocument, PdfExportOptions } from './pdf-renderer';
 import { stripRunningWordCount, isChapterUnusuallyShort } from '../../shared/utils/chapter-cleanup';
 import { ExportLanguage, EXPORT_LANGUAGES, getExportLabels, ExportLabels } from '../../i18n/export-labels';
 import { buildEpubBlob } from './epub-builder';
+import { slugifyTitle } from './export-filename';
 import { buildDocxBlob } from './docx-builder';
 
 // Initialize pdfMake with virtual file system
@@ -415,6 +416,13 @@ export class ExportComponent implements OnInit {
       let content: Blob;
       let filename: string;
 
+      // Name the download after the book. Reads `state.config.title`,
+      // NOT the local `config`, which was reassigned above to the
+      // translated metadata for non-English targets — a Polish export
+      // of "The Crystal Kingdom" must still download as
+      // `The-Crystal-Kingdom.pdf`, not its translation.
+      const baseName = slugifyTitle(state.config?.title);
+
       switch (this.selectedFormat) {
         case 'pdf':
           content = await this.generatePDF(chapters, {
@@ -422,7 +430,7 @@ export class ExportComponent implements OnInit {
             coverArt,
             backCoverArt,
           }, config);
-          filename = 'book-export.pdf';
+          filename = `${baseName}.pdf`;
           break;
         case 'epub':
           content = await this.generateEPUB(chapters, config, {
@@ -430,7 +438,7 @@ export class ExportComponent implements OnInit {
             coverArt,
             backCoverArt,
           }, prologue, epilogue);
-          filename = 'book-export.epub';
+          filename = `${baseName}.epub`;
           break;
         case 'docx':
           // The DOCX builder embeds per-chapter illustrations only —
@@ -439,12 +447,12 @@ export class ExportComponent implements OnInit {
           content = await this.generateDOCX(chapters, config, {
             chapterIllustrations,
           }, prologue, epilogue);
-          filename = 'book-export.docx';
+          filename = `${baseName}.docx`;
           break;
         case 'markdown':
         default:
           content = this.generateMarkdown(chapters, config, prologue, epilogue);
-          filename = 'book-export.md';
+          filename = `${baseName}.md`;
           break;
       }
 

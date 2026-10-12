@@ -15,10 +15,13 @@ describe('ExportComponent', () => {
   let fixture: ComponentFixture<ExportComponent>;
 
   const chaptersSubject = new BehaviorSubject<any[]>([]);
+  // Mutable so individual tests can rename the book and assert the
+  // download filename follows it.
+  let bookTitle = 'Test Book';
 
   const mockBookState = {
     getChapters$: () => chaptersSubject.asObservable(),
-    getState: () => ({ config: { title: 'Test Book' }, chapters: chaptersSubject.value })
+    getState: () => ({ config: { title: bookTitle }, chapters: chaptersSubject.value })
   } as Partial<BookStateService>;
 
   const mockPersistence = {} as Partial<PersistenceService>;
@@ -68,6 +71,13 @@ describe('ExportComponent', () => {
     fixture = TestBed.createComponent(ExportComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();
+  });
+
+  afterEach(() => {
+    // `mockTranslation` is shared across specs and several tests
+    // reassign `exportLanguage`; without this the leftover value leaks
+    // into every later spec in this file.
+    (mockTranslation as any).exportLanguage = () => 'en';
   });
 
   it('should create', () => {
@@ -169,6 +179,67 @@ describe('ExportComponent', () => {
       expect(capturedBody).toContain('Rozdział 1: Początek');
       expect(capturedBody).toContain('Przetłumaczona treść.');
       expect(capturedBody).not.toContain('Chapter 1: The Beginning');
+    });
+  });
+
+  describe('Download filename', () => {
+    beforeEach(() => {
+      bookTitle = 'The Crystal Kingdom';
+      chaptersSubject.next([{ number: 1, title: 'One', content: 'A' }]);
+      fixture.detectChanges();
+    });
+
+    it('names the download after the book title, not a hardcoded "book-export"', async () => {
+      const dlSpy = spyOn(component as any, 'downloadFile');
+
+      component.setFormat('markdown');
+      await component.exportBook();
+
+      expect(dlSpy).toHaveBeenCalledTimes(1);
+      expect(dlSpy.calls.mostRecent().args[1]).toBe('The-Crystal-Kingdom.md');
+    });
+
+    it('uses the matching extension for every format', async () => {
+      const dlSpy = spyOn(component as any, 'downloadFile');
+
+      for (const [format, ext] of [['markdown', '.md'], ['epub', '.epub'], ['docx', '.docx']] as const) {
+        // `exportBook` latches `isExporting` until a 1.5s timer clears
+        // it; reset so the loop isn't short-circuited on iteration 2.
+        (component as any).isExporting = false;
+        component.selectedFormat = format;
+        component.exportOptions.includeIllustrations = false;
+        await component.exportBook();
+        expect(dlSpy.calls.mostRecent().args[1]).toBe(`The-Crystal-Kingdom${ext}`);
+      }
+    });
+
+    it('falls back to "book" when the title has no ASCII-safe characters', async () => {
+      bookTitle = '星の王国';
+      const dlSpy = spyOn(component as any, 'downloadFile');
+
+      component.setFormat('markdown');
+      await component.exportBook();
+
+      expect(dlSpy.calls.mostRecent().args[1]).toBe('book.md');
+    });
+
+    it('keeps the original English title when exporting to a non-English target', async () => {
+      // Regression guard: `config` is reassigned to the translated
+      // metadata during export. The filename must read
+      // `state.config.title` instead, or translated filenames come
+      // back.
+      (mockTranslation as any).exportLanguage = () => 'pl';
+      component.exportLanguage = 'pl';
+      spyOn(mockTranslation as any, 'translateBookTo$').and.callFake((chapters: any[]) => of(chapters));
+      spyOn(mockTranslation as any, 'translateBookMetadataTo$')
+        .and.returnValue(of({ title: 'Królestwo Kryształu' }));
+
+      const dlSpy = spyOn(component as any, 'downloadFile');
+
+      component.setFormat('markdown');
+      await component.exportBook();
+
+      expect(dlSpy.calls.mostRecent().args[1]).toBe('The-Crystal-Kingdom.md');
     });
   });
 
