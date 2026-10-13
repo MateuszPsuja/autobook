@@ -1,4 +1,4 @@
-import { stripReasoningPreamble, stripRunningWordCount, stripThinkingBlocks, stripUnclosedThinkingBlock, endsWithSentenceTerminator, isChapterUnusuallyShort } from './chapter-cleanup';
+import { stripReasoningPreamble, stripRunningWordCount, stripThinkingBlocks, stripUnclosedThinkingBlock, endsWithSentenceTerminator, isChapterUnusuallyShort, normalizeProse } from './chapter-cleanup';
 
 describe('stripReasoningPreamble', () => {
   it('returns the input unchanged when there is no preamble', () => {
@@ -550,5 +550,234 @@ describe('isChapterUnusuallyShort', () => {
     const prose = Array.from({ length: 400 }, () => 'word').join('\n  ');
     expect(isChapterUnusuallyShort(prose, 2500)).toBe(true);
     expect(isChapterUnusuallyShort(prose, 500)).toBe(false);
+  });
+});
+
+describe('normalizeProse', () => {
+  const texts = (blocks: ReturnType<typeof normalizeProse>): string[] =>
+    blocks.filter(b => b.type === 'paragraph').map(b => (b as { text: string }).text);
+
+  it('collapses a hard-wrapped block into one paragraph', () => {
+    // The failure this exists to prevent: the single \n survives into
+    // the DOCX run and Word breaks the line at the model's wrap column
+    // instead of the text frame's.
+    const input = [
+      'It was a dark and stormy night, and the',
+      'rain fell in sheets across the empty road.',
+      'Nobody walked it after dark.',
+    ].join('\n');
+    expect(normalizeProse(input)).toEqual([
+      { type: 'paragraph', text: 'It was a dark and stormy night, and the rain fell in sheets across the empty road. Nobody walked it after dark.' },
+    ]);
+  });
+
+  it('keeps blank-line paragraph breaks', () => {
+    const input = 'First paragraph here.\n\nSecond paragraph here.';
+    expect(normalizeProse(input)).toEqual([
+      { type: 'paragraph', text: 'First paragraph here.' },
+      { type: 'paragraph', text: 'Second paragraph here.' },
+    ]);
+  });
+
+  it('normalizes CRLF line endings before splitting', () => {
+    const input = 'line one\r\nline two\r\n\r\nline three';
+    expect(normalizeProse(input)).toEqual([
+      { type: 'paragraph', text: 'line one line two' },
+      { type: 'paragraph', text: 'line three' },
+    ]);
+  });
+
+  it('normalizes lone CR line endings', () => {
+    expect(normalizeProse('alpha\rbeta')).toEqual([{ type: 'paragraph', text: 'alpha beta' }]);
+  });
+
+  it('splits on blank lines that contain zero-width characters', () => {
+    // `\s` does not match U+200B, so without an explicit strip these
+    // two paragraphs would be glued together.
+    const input = 'First one.\n\u200b\nSecond one.';
+    expect(texts(normalizeProse(input))).toEqual(['First one.', 'Second one.']);
+  });
+
+  it('strips a byte-order mark and zero-width joiners', () => {
+    const input = '\ufeffThe\u200clamp\u200dlit\u2060.';
+    expect(normalizeProse(input)).toEqual([{ type: 'paragraph', text: 'Thelamplit.' }]);
+  });
+
+  it('normalizes non-breaking and narrow spaces', () => {
+    const input = 'the\u00a0lamp\u2007and\u202fthe\u2009wick';
+    expect(normalizeProse(input)).toEqual([{ type: 'paragraph', text: 'the lamp and the wick' }]);
+  });
+
+  it('turns an ornament-only block into a scene break', () => {
+    const input = 'The door closed.\n\n* * *\n\nThe street was empty.';
+    expect(normalizeProse(input)).toEqual([
+      { type: 'paragraph', text: 'The door closed.' },
+      { type: 'sceneBreak' },
+      { type: 'paragraph', text: 'The street was empty.' },
+    ]);
+  });
+
+  for (const ornament of ['***', '---', '* * * *', '· · ·', '—']) {
+    it(`treats "${ornament}" as a scene break`, () => {
+      expect(normalizeProse(`Before.\n\n${ornament}\n\nAfter.`)).toEqual([
+        { type: 'paragraph', text: 'Before.' },
+        { type: 'sceneBreak' },
+        { type: 'paragraph', text: 'After.' },
+      ]);
+    });
+  }
+
+  it('collapses repeated ornament lines into a single scene break', () => {
+    const input = 'Before.\n\n* * *\n* * *\n\nAfter.';
+    expect(normalizeProse(input)).toEqual([
+      { type: 'paragraph', text: 'Before.' },
+      { type: 'sceneBreak' },
+      { type: 'paragraph', text: 'After.' },
+    ]);
+  });
+
+  it('keeps an ornament inside a hard-wrapped block as its own scene break', () => {
+    const input = ['He waited.', '* * *', 'The rain started again.'].join('\n');
+    expect(normalizeProse(input)).toEqual([
+      { type: 'paragraph', text: 'He waited.' },
+      { type: 'sceneBreak' },
+      { type: 'paragraph', text: 'The rain started again.' },
+    ]);
+  });
+
+  it('does not treat a short prose line as a scene break', () => {
+    expect(normalizeProse('Oh no.')).toEqual([{ type: 'paragraph', text: 'Oh no.' }]);
+  });
+
+  it('preserves a hyphen-at-EOL break instead of joining with a space', () => {
+    // Joining would produce "half- mate" unless the hyphen were also
+    // removed, which risks mangling legitimate dashes — keep the break.
+    const input = 'The cup shat-\ntered on the floor.';
+    expect(normalizeProse(input)).toEqual([
+      { type: 'paragraph', text: 'The cup shat-' },
+      { type: 'paragraph', text: 'tered on the floor.' },
+    ]);
+  });
+
+  it('preserves a break after a non-breaking hyphen', () => {
+    const input = 'Some\u2010\nthing else.';
+    expect(texts(normalizeProse(input))).toEqual(['Some\u2010', 'thing else.']);
+  });
+
+  it('starts a new paragraph at a list / heading / quote marker', () => {
+    const input = [
+      'The plan was simple.',
+      '- gather the letters',
+      '1. burn them all',
+      '# The End',
+      '> and mourn',
+    ].join('\n');
+    expect(texts(normalizeProse(input))).toEqual([
+      'The plan was simple.',
+      '- gather the letters',
+      '1. burn them all',
+      '# The End',
+      '> and mourn',
+    ]);
+  });
+
+  it('collapses runs of spaces and tabs within a joined paragraph', () => {
+    const input = 'alpha   beta\tgamma\n  delta';
+    expect(normalizeProse(input)).toEqual([{ type: 'paragraph', text: 'alpha beta gamma delta' }]);
+  });
+
+  it('runs the running-word-count strip itself', () => {
+    const input = 'Count: a1 banner2 fluttered3 snap4 quickly5 across6 the7 morning8 sky9. 90 words.';
+    const blocks = normalizeProse(input);
+    expect(blocks.length).toBe(1);
+    expect(blocks[0]).toEqual({ type: 'paragraph', text: 'a banner fluttered snap quickly across the morning sky.' });
+  });
+
+  it('returns [] for empty, whitespace-only, and nullish input', () => {
+    expect(normalizeProse('')).toEqual([]);
+    expect(normalizeProse('   \n\n  ')).toEqual([]);
+    expect(normalizeProse(null)).toEqual([]);
+    expect(normalizeProse(undefined)).toEqual([]);
+  });
+
+  it('drops blocks that normalize to nothing', () => {
+    expect(normalizeProse('Real prose.\n\n\u200b\n\n\ufeff')).toEqual([
+      { type: 'paragraph', text: 'Real prose.' },
+    ]);
+  });
+
+  it('drops a bare running word count left on its own line', () => {
+    // Models that count as they write leave a cumulative number after
+    // every paragraph, with no "Count:" prefix or "N words." suffix for
+    // the existing strips to catch.
+    const input = [
+      'He wore a coat that had once been a fine coat.',
+      '47',
+      '',
+      '"You are military," the man said, looking at Avery.',
+      '48',
+    ].join('\n');
+    expect(normalizeProse(input)).toEqual([
+      { type: 'paragraph', text: 'He wore a coat that had once been a fine coat.' },
+      { type: 'paragraph', text: '"You are military," the man said, looking at Avery.' },
+    ]);
+  });
+
+  it('keeps digits that sit inline with prose', () => {
+    expect(texts(normalizeProse('Room 101 was empty, and page 42 was missing.')))
+      .toEqual(['Room 101 was empty, and page 42 was missing.']);
+  });
+
+  it('drops a running word count appended to the end of every paragraph', () => {
+    // Same counters, but inline rather than on their own line.
+    const input = [
+      'He wore a coat that had once been a fine coat. 47',
+      '',
+      '"You are military," the man said, looking at Avery. 61',
+      '',
+      'The man smiled, and the smile meant nothing. 88',
+    ].join('\n');
+    expect(normalizeProse(input)).toEqual([
+      { type: 'paragraph', text: 'He wore a coat that had once been a fine coat.' },
+      { type: 'paragraph', text: '"You are military," the man said, looking at Avery.' },
+      { type: 'paragraph', text: 'The man smiled, and the smile meant nothing.' },
+    ]);
+  });
+
+  it('keeps an isolated trailing number — that is prose, not a counter', () => {
+    // Only one paragraph in four carries a trailing number, which is
+    // below the density threshold, so nothing is stripped.
+    const input = [
+      'He arrived in 1914, and the war had already begun.',
+      '',
+      'Nothing changed that winter.',
+      '',
+      'The letter came back marked Return to Sender.',
+      '',
+      'She burned it.',
+    ].join('\n');
+    expect(texts(normalizeProse(input))).toEqual([
+      'He arrived in 1914, and the war had already begun.',
+      'Nothing changed that winter.',
+      'The letter came back marked Return to Sender.',
+      'She burned it.',
+    ]);
+  });
+
+  it('never strips a sentence-final number that has no period before it', () => {
+    // "The answer was 42." is a period *after* the digits, so the
+    // counter pattern cannot match even at high density.
+    const input = [
+      'The answer was 42.',
+      '',
+      'The question was 7.',
+      '',
+      'The sum was 49.',
+    ].join('\n');
+    expect(texts(normalizeProse(input))).toEqual([
+      'The answer was 42.',
+      'The question was 7.',
+      'The sum was 49.',
+    ]);
   });
 });

@@ -41,6 +41,38 @@ const SUFFIX_TITLE_RE =
 const COUNTER_STRIP_RE =
   /\b(\p{L}+)([^\p{L}\s\d]*)\d+(?=[\s.,;:!?"')\]]|$)/gu;
 
+/**
+ * A paragraph that ends in a bare count, e.g. "…a page-turner that
+ * stays with you. 70." The leading period is what makes this safe to
+ * key on: prose can legitimately end in a number ("The answer was 42.")
+ * but that has no period before the digits.
+ */
+const TRAILING_COUNT_RE = /[ \t]*\.[ \t]*\d{1,4}\.?[ \t]*$/;
+
+/**
+ * Some models track the running word count themselves and append it to
+ * the end of every paragraph on the *same line* rather than on a line
+ * of its own:
+ *
+ *   "…the dust had not touched the lining. 47."
+ *
+ * Neither the "Count:" prefix nor the "N words." summary recognizes
+ * this form, so it reaches the export as trailing garbage after the
+ * last sentence.
+ *
+ * Guarded by the same density idea the per-word counter uses: an
+ * isolated trailing number is content ("In 1914."), but one on a third
+ * of the paragraphs or more can only be a counter. Below the threshold
+ * the text is returned untouched.
+ */
+function stripTrailingWordCounts(text: string): string {
+  if (!text) return text;
+  const paragraphs = text.split(/\n\s*\n/);
+  const withCount = paragraphs.filter(p => TRAILING_COUNT_RE.test(p)).length;
+  if (paragraphs.length === 0 || withCount / paragraphs.length < 0.3) return text;
+  return text.replace(/[ \t]*\.[ \t]*\d{1,4}\.?[ \t]*$/gm, '.');
+}
+
 export function stripRunningWordCount(text: string): string {
   if (!text) return text;
 
@@ -64,6 +96,24 @@ export function stripRunningWordCount(text: string): string {
   // would leave the entire reasoning + chapter chunk intact. This
   // pass excises the unclosed block up to the first prose paragraph.
   result = stripUnclosedThinkingBlock(result);
+
+  // Some models track the running word count themselves and emit it as
+  // a bare number on its own line at the end of every paragraph:
+  //
+  //   "…the dust had not touched the lining.\n47\n\n\"You are
+  //    military,\" the man said.\n47\n"
+  //
+  // That is neither the "Count:" prefix nor the "N words." summary the
+  // checks below look for, so it survives them and reaches the export
+  // as a line of its own. Strip any line that is nothing but digits —
+  // in narrative prose a standalone 1–4 digit line is always a counter,
+  // never content. Runs this before the early returns below so it fires
+  // regardless of whether the model also emitted the other markers.
+  result = result
+    .replace(/^[ \t]*\d{1,4}[ \t]*$/gm, '')
+    .replace(/\n{3,}/g, '\n\n');
+
+  result = stripTrailingWordCounts(result);
 
   const hasCountPrefix = PREFIX_RE.test(result);
   const hasWordsSuffix = SUFFIX_WORDS_RE.test(result.trim());
@@ -103,6 +153,154 @@ export function stripRunningWordCount(text: string): string {
   result = result.replace(SUFFIX_WORDS_RE, '');
 
   return result.trim();
+}
+
+// === Prose normalization ====================================================
+
+/**
+ * A single typographic unit of chapter text. A scene break is kept as
+ * its own block so the exporters can render it as a centred ornament
+ * instead of folding it into the surrounding prose.
+ */
+export type ProseBlock =
+  | { type: 'paragraph'; text: string }
+  | { type: 'sceneBreak' };
+
+/**
+ * Zero-width and byte-order-mark characters. JavaScript's `\s` class
+ * does NOT match these, so a blank line containing one of them would
+ * survive a `split(/\n\s*\n/)` and glue two paragraphs together.
+ */
+const ZERO_WIDTH_RE = /[\ufeff\u200b\u200c\u200d\u2060]/g;
+
+/**
+ * Exotic space characters (non-breaking, figure, narrow no-break,
+ * thin). Word treats these as unbreakable glue, which produces
+ * over-tight lines; normalize them to a plain space.
+ */
+const EXOTIC_SPACE_RE = /[\u00a0\u2007\u202f\u2009]/g;
+
+/**
+ * A line made up entirely of ornaments (`* * *`, `***`, `---`, `· · ·`,
+ * an em dash). Mirrors the PDF exporter's scene-break detector so the
+ * two exports agree on where a scene break is. The length cap keeps a
+ * genuinely short prose line from being mistaken for one.
+ */
+const SCENE_BREAK_RE = /^[*\-_~·•◦※\s]+$|^[—–-]{1,4}$/;
+
+/**
+ * Lines that open a list item, heading, or blockquote. These are
+ * structural rather than prose, so they start a new block instead of
+ * being joined onto the preceding line. Same marker set as
+ * `STRUCTURED_LINE_RE` further down.
+ */
+const BLOCK_MARKER_RE = /^(?:\d+[.)]\s+|[-*+]\s+|#+\s+|>\s+)/;
+
+/** True when a line is a lone scene-break ornament. */
+function isSceneBreakLine(line: string): boolean {
+  const t = line.trim();
+  if (t.length === 0 || t.length > 12) return false;
+  return SCENE_BREAK_RE.test(t);
+}
+
+/**
+ * True when a line ends in a hyphen, which in LLM output is almost
+ * always a word broken across the source model's wrap column rather
+ * than a real dash. Joining such a line without removing the hyphen
+ * would produce "half- mate", so we keep the break instead.
+ */
+function endsWithHyphen(line: string): boolean {
+  return /[-\u2010]$/.test(line.trim());
+}
+
+/** Collapse runs of spaces/tabs to a single space and trim. */
+function collapseSpaces(text: string): string {
+  return text.replace(/[ \t]+/g, ' ').trim();
+}
+
+/**
+ * Normalize raw chapter content into typographic blocks for export.
+ *
+ * LLM chapter output frequently arrives hard-wrapped at the model's own
+ * wrap column (~95–105 characters) rather than at the width of the
+ * target page. Exporters that split only on blank lines therefore emit
+ * one short ragged line per source line, because the single `\n`
+ * survives all the way into the rendered text. This helper collapses
+ * those hard wraps back into continuous paragraphs and preserves scene
+ * breaks as their own block type.
+ *
+ * Pipeline, in order:
+ *   1. `stripRunningWordCount` — reuse the existing cleanup entry point
+ *      so callers don't have to run it separately.
+ *   2. Line endings: `\r\n` and lone `\r` → `\n`.
+ *   3. Strip BOM / zero-width noise (invisible to `\s`, see above).
+ *   4. Normalize exotic spaces to a plain space.
+ *   5. Split on blank lines, drop empty blocks.
+ *   6. Within each block, ornament-only lines become `sceneBreak` and
+ *      everything else joins into `paragraph` blocks.
+ *
+ * Joining guard: a line that follows a line ending in a hyphen, or
+ * that starts with a list / heading / quote marker, starts a new block
+ * rather than being joined.
+ *
+ * Known trade-off: a passage of intentional verse, which relies on
+ * single newlines, is flattened into one paragraph. LLM chapter output
+ * is not verse, so this is the right trade for the export path.
+ */
+export function normalizeProse(raw: string | null | undefined): ProseBlock[] {
+  if (!raw) return [];
+
+  const normalized = stripRunningWordCount(raw)
+    .replace(/\r\n?/g, '\n')
+    .replace(ZERO_WIDTH_RE, '')
+    .replace(EXOTIC_SPACE_RE, ' ');
+
+  const blocks: ProseBlock[] = [];
+  for (const rawBlock of normalized.split(/\n\s*\n/)) {
+    const lines = rawBlock
+      .split('\n')
+      .map(collapseSpaces)
+      .filter(line => line.length > 0);
+    if (lines.length === 0) continue;
+
+    // An all-ornament block is a single scene break; the collapse of
+    // repeated ornament lines into one is what the PDF exporter does.
+    if (lines.every(isSceneBreakLine)) {
+      blocks.push({ type: 'sceneBreak' });
+      continue;
+    }
+
+    let current: string[] = [];
+    const flush = (): void => {
+      if (current.length === 0) return;
+      const text = collapseSpaces(current.join(' '));
+      if (text) blocks.push({ type: 'paragraph', text });
+      current = [];
+    };
+
+    for (const line of lines) {
+      // An ornament in the middle of a hard-wrapped block is still a
+      // scene break — emit it as its own block rather than inlining
+      // `* * *` into the prose around it.
+      if (isSceneBreakLine(line)) {
+        flush();
+        blocks.push({ type: 'sceneBreak' });
+        continue;
+      }
+      if (current.length === 0) {
+        current.push(line);
+        continue;
+      }
+      const previous = current[current.length - 1];
+      if (BLOCK_MARKER_RE.test(line) || endsWithHyphen(previous)) {
+        flush();
+      }
+      current.push(line);
+    }
+    flush();
+  }
+
+  return blocks;
 }
 
 /**
