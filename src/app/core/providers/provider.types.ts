@@ -35,6 +35,15 @@ export interface ProviderKeyValidation {
   minLength?: number;
 }
 
+/**
+ * Provider-specific transformation of the outgoing chat-completion body.
+ * Applied after `extraRequestBody` is merged. The body already carries
+ * `model`, `messages`, `temperature`, `max_tokens` and `stream`, so a
+ * transform can make model-aware decisions (Gemini: strip deprecated
+ * sampling params, add a thinking-token allowance).
+ */
+export type ProviderRequestTransform = (body: Record<string, unknown>) => Record<string, unknown>;
+
 export interface LLMProvider {
   id: string;
   name: string;
@@ -70,6 +79,12 @@ export interface LLMProvider {
    * win over the agent's defaults.
    */
   extraRequestBody?: Record<string, unknown>;
+  /**
+   * Optional per-request body transform. Runs *after* `extraRequestBody`
+   * is merged, so it sees the final model id and can post-process the
+   * merged body (e.g. strip a sampling param the provider just added).
+   */
+  requestTransform?: ProviderRequestTransform;
   requiresApiKey: boolean;
   /** True when the baseUrl can be overridden by the user (e.g. LM Studio on a custom port). */
   baseUrlEditable: boolean;

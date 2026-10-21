@@ -10,6 +10,7 @@ import {
   toAnthropicRequest,
   AnthropicResponse
 } from './providers/anthropic.adapter';
+import { transformGeminiModels } from './providers/gemini.adapter';
 
 // Re-export the canonical model type under the legacy name so the rest of
 // the codebase (settings, config component) doesn't have to rename imports.
@@ -262,12 +263,17 @@ export class ApiService {
    * vendor-specific extensions (`extraRequestBody`). Provider fields
    * win over caller fields — the registry is the source of truth for
    * per-provider quirks like Minimax's `thinking` toggle.
+   *
+   * The optional `requestTransform` hook runs *after* the merge so it
+   * can see the final model id and post-process the merged body (e.g.
+   * Gemini stripping a sampling param for the Gemini 3+ families).
    */
   private mergeProviderBody(request: ChatCompletionRequest, provider: LLMProvider): Record<string, unknown> {
-    return {
+    const merged: Record<string, unknown> = {
       ...request,
       ...(provider.extraRequestBody ?? {})
     };
+    return provider.requestTransform ? provider.requestTransform(merged) : merged;
   }
 
   private buildHeaders(provider: LLMProvider, apiKey: string | null, extra?: Record<string, string>): Record<string, string> {
@@ -565,6 +571,9 @@ export class ApiService {
         const raw: any[] = data?.data ?? [];
         if (provider.id === 'openrouter') {
           return this.transformOpenRouterModels(raw);
+        }
+        if (provider.id === 'gemini') {
+          return transformGeminiModels(raw);
         }
         return this.transformOpenAiCompatModels(raw, provider);
       })

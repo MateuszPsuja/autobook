@@ -273,7 +273,8 @@ export class SettingsComponent implements OnInit, OnDestroy {
       'LM Studio': '💻',
       'Minimax': '⚡',
       'ChatGPT': '💬',
-      'MiniMax': '🐉'
+      'MiniMax': '🐉',
+      'Google Gemini': '💎'
     };
     return icons[provider] || '💻';
   }

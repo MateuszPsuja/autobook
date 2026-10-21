@@ -1,4 +1,5 @@
 import { LLMProvider, LLMModel } from './provider.types';
+import { toGeminiRequestBody } from './gemini.adapter';
 
 /**
  * The default model list per provider. Used when the live `/models` endpoint
@@ -50,6 +51,17 @@ const lmstudioFallback: LLMModel[] = [
   // LM Studio model list is fully dynamic — the user has to load a model
   // in the LM Studio app for it to appear in /v1/models. We don't fabricate
   // any defaults here because the IDs would be meaningless without context.
+];
+
+const geminiFallback: LLMModel[] = [
+  { id: 'gemini-3.8-flash', name: 'Gemini 3.8 Flash', provider: 'Google', tier: 'standard', contextWindow: '1M', contextWindowNum: 1000000, recommended: true },
+  { id: 'gemini-3.7-flash', name: 'Gemini 3.7 Flash', provider: 'Google', tier: 'standard', contextWindow: '1M', contextWindowNum: 1000000 },
+  { id: 'gemini-3.6-flash', name: 'Gemini 3.6 Flash', provider: 'Google', tier: 'standard', contextWindow: '1M', contextWindowNum: 1000000 },
+  { id: 'gemini-3.5-flash-lite', name: 'Gemini 3.5 Flash-Lite', provider: 'Google', tier: 'budget', contextWindow: '1M', contextWindowNum: 1000000 },
+  { id: 'gemini-3.1-flash-lite', name: 'Gemini 3.1 Flash-Lite', provider: 'Google', tier: 'budget', contextWindow: '1M', contextWindowNum: 1000000 },
+  { id: 'gemini-3.1-pro-preview', name: 'Gemini 3.1 Pro (Preview)', provider: 'Google', tier: 'premium', contextWindow: '1M', contextWindowNum: 1000000 },
+  { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', provider: 'Google', tier: 'standard', contextWindow: '1M', contextWindowNum: 1000000 },
+  { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', provider: 'Google', tier: 'premium', contextWindow: '1M', contextWindowNum: 1000000 }
 ];
 
 /**
@@ -133,6 +145,21 @@ export const LLM_PROVIDERS: LLMProvider[] = [
     fallbackModels: openaiFallback,
     getKeyUrl: 'https://platform.openai.com/api-keys',
     description: 'OpenAI / ChatGPT direct API.'
+  },
+  {
+    id: 'gemini',
+    name: 'Google Gemini',
+    protocol: 'openai-compat',
+    baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
+    proxyPath: '/api/gemini/v1beta/openai',
+    requiresApiKey: true,
+    baseUrlEditable: false,
+    defaultBaseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
+    keyValidation: { prefix: 'AIza', minLength: 30 },
+    requestTransform: toGeminiRequestBody,
+    fallbackModels: geminiFallback,
+    getKeyUrl: 'https://aistudio.google.com/app/apikey',
+    description: 'Google Gemini direct API. 1M context, fast Flash models.'
   }
 ];
 

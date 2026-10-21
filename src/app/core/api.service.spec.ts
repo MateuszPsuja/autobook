@@ -2,12 +2,18 @@ import { TestBed } from '@angular/core/testing';
 import { ApiService } from './api.service';
 import { ProviderService } from './providers/provider.service';
 import { extractTextFromAnthropicFrame } from './providers/anthropic.adapter';
+import {
+  GEMINI_MAX_OUTPUT_TOKENS,
+  GEMINI_THINKING_ALLOWANCE,
+  transformGeminiModels
+} from './providers/gemini.adapter';
 
 describe('ApiService', () => {
   let service: ApiService;
   let providerService: ProviderService;
   const OR_KEY = 'sk-or-test-key-12345678901234567890';
   const ANTH_KEY = 'sk-ant-test-key-12345678901234567890';
+  const GEM_KEY = 'AIza-test-key-1234567890123456789012345';
 
   beforeEach(() => {
     localStorage.clear();
@@ -221,6 +227,7 @@ describe('ApiService', () => {
       expect(ids).toContain('minimax');
       expect(ids).toContain('anthropic');
       expect(ids).toContain('openai');
+      expect(ids).toContain('gemini');
     });
 
     it('should route chat completions through the active provider base URL', async () => {
@@ -346,6 +353,119 @@ describe('ApiService', () => {
       const call = (window.fetch as jasmine.Spy).calls.mostRecent();
       const body = JSON.parse(call.args[1].body);
       expect(body.thinking).toBeUndefined();
+    });
+
+    it('should route Gemini chat completions through the /api/gemini proxy path', async () => {
+      providerService.setActiveProvider('gemini');
+      providerService.saveApiKey(GEM_KEY, 'gemini');
+      (window.fetch as jasmine.Spy).and.returnValue(Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({
+          id: 'x',
+          object: 'chat.completion',
+          created: 0,
+          model: 'gemini-3.8-flash',
+          choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content: 'ok' } }],
+          usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 }
+        })
+      } as Response));
+
+      await new Promise<void>((resolve, reject) => {
+        service.chatCompletion({ model: 'gemini-3.8-flash', messages: [{ role: 'user', content: 'hi' }] })
+          .subscribe({ next: () => resolve(), error: reject });
+      });
+
+      const call = (window.fetch as jasmine.Spy).calls.mostRecent();
+      expect(call.args[0]).toBe('/api/gemini/v1beta/openai/chat/completions');
+    });
+
+    it('should hit /api/gemini/v1beta/openai/models for the Gemini model list', (done) => {
+      providerService.setActiveProvider('gemini');
+      providerService.saveApiKey(GEM_KEY, 'gemini');
+      (window.fetch as jasmine.Spy).and.returnValue(Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({ data: [{ id: 'gemini-3.8-flash' }] })
+      } as Response));
+
+      service.getModels$().subscribe({
+        next: () => {
+          const call = (window.fetch as jasmine.Spy).calls.mostRecent();
+          expect(call.args[0]).toBe('/api/gemini/v1beta/openai/models');
+          done();
+        },
+        error: done.fail
+      });
+    });
+
+    it('should strip `temperature` for Gemini 3+ models but keep it for 2.5', async () => {
+      providerService.setActiveProvider('gemini');
+      providerService.saveApiKey(GEM_KEY, 'gemini');
+      (window.fetch as jasmine.Spy).and.returnValue(Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({
+          id: 'x',
+          object: 'chat.completion',
+          created: 0,
+          model: 'm',
+          choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content: 'ok' } }],
+          usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 }
+        })
+      } as Response));
+
+      const bodyFor = async (model: string): Promise<any> => {
+        await new Promise<void>((resolve, reject) => {
+          service.chatCompletion({
+            model,
+            messages: [{ role: 'user', content: 'hi' }],
+            temperature: 0.4
+          }).subscribe({ next: () => resolve(), error: reject });
+        });
+        const call = (window.fetch as jasmine.Spy).calls.mostRecent();
+        return JSON.parse(call.args[1].body);
+      };
+
+      const modern = await bodyFor('gemini-3.8-flash');
+      expect(modern.temperature).toBeUndefined();
+
+      const legacy = await bodyFor('gemini-2.5-flash');
+      expect(legacy.temperature).toBe(0.4);
+    });
+
+    it('should add the Gemini thinking allowance to max_tokens and clamp it to the output cap', async () => {
+      providerService.setActiveProvider('gemini');
+      providerService.saveApiKey(GEM_KEY, 'gemini');
+      (window.fetch as jasmine.Spy).and.returnValue(Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({
+          id: 'x',
+          object: 'chat.completion',
+          created: 0,
+          model: 'm',
+          choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content: 'ok' } }],
+          usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 }
+        })
+      } as Response));
+
+      const bodyFor = async (model: string, maxTokens: number): Promise<any> => {
+        await new Promise<void>((resolve, reject) => {
+          service.chatCompletion({
+            model,
+            messages: [{ role: 'user', content: 'hi' }],
+            max_tokens: maxTokens
+          }).subscribe({ next: () => resolve(), error: reject });
+        });
+        const call = (window.fetch as jasmine.Spy).calls.mostRecent();
+        return JSON.parse(call.args[1].body);
+      };
+
+      const thinking = await bodyFor('gemini-3.8-flash', 2000);
+      expect(thinking.max_tokens).toBe(2000 + GEMINI_THINKING_ALLOWANCE);
+
+      const clamped = await bodyFor('gemini-3.8-flash', 60000);
+      expect(clamped.max_tokens).toBe(GEMINI_MAX_OUTPUT_TOKENS);
+
+      const nonThinking = await bodyFor('gemini-2.0-flash', 2000);
+      expect(nonThinking.max_tokens).toBe(2000);
     });
 
     it('should translate Anthropic SSE into plain text deltas', () => {
@@ -523,6 +643,50 @@ describe('ApiService', () => {
         });
       });
       expect(emitted.join('')).toBe('hello world');
+    });
+  });
+
+  describe('Gemini model list transform', () => {
+    it('filters non-chat Gemini models out of the live model list', () => {
+      const models = transformGeminiModels([
+        { id: 'gemini-3.8-flash' },
+        { id: 'gemini-3.5-flash-lite' },
+        { id: 'gemini-3.1-pro-preview' },
+        { id: 'gemini-embedding-001' },
+        { id: 'imagen-4.0-generate' },
+        { id: 'gemini-2.0-flash-preview-image' },
+        { id: 'gemini-2.5-flash-tts' },
+        { id: 'veo-3.0-generate' }
+      ]);
+
+      const ids = models.map(m => m.id);
+      expect(ids).toContain('gemini-3.8-flash');
+      expect(ids).toContain('gemini-3.5-flash-lite');
+      expect(ids).not.toContain('gemini-embedding-001');
+      expect(ids.some(id => id.includes('imagen'))).toBeFalse();
+      expect(ids.some(id => id.includes('tts'))).toBeFalse();
+      expect(ids.some(id => id.includes('veo'))).toBeFalse();
+      expect(ids.some(id => id.includes('image'))).toBeFalse();
+    });
+
+    it('classifies Gemini models into tiers and marks the recommended one', () => {
+      const models = transformGeminiModels([
+        { id: 'gemini-3.8-flash' },
+        { id: 'gemini-3.5-flash-lite' },
+        { id: 'gemini-3.1-pro-preview' }
+      ]);
+
+      const flash = models.find(m => m.id === 'gemini-3.8-flash');
+      expect(flash?.tier).toBe('standard');
+      expect(flash?.recommended).toBeTrue();
+      expect(flash?.name).toBe('Gemini 3.8 Flash');
+      expect(flash?.contextWindow).toBe('1M');
+
+      expect(models.find(m => m.id === 'gemini-3.5-flash-lite')?.tier).toBe('budget');
+      expect(models.find(m => m.id === 'gemini-3.1-pro-preview')?.tier).toBe('premium');
+
+      // Recommended model sorts first.
+      expect(models[0].id).toBe('gemini-3.8-flash');
     });
   });
 });
