@@ -1,6 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { Observable, Subject, from, of, throwError } from 'rxjs';
-import { shareReplay, catchError, switchMap, map } from 'rxjs/operators';
+import { shareReplay, catchError, switchMap, map, tap } from 'rxjs/operators';
 import { LLMModel, LLMProvider, ProviderProtocol } from './providers/provider.types';
 import { LLM_PROVIDERS, LLM_PROVIDERS_BY_ID, getProvider } from './providers/providers';
 import { ProviderService } from './providers/provider.service';
@@ -502,6 +502,39 @@ export class ApiService {
     );
     this.modelsCache.set(providerId, stream$);
     return stream$;
+  }
+
+  /**
+   * Force a fresh fetch of a provider's model list, bypassing the
+   * per-provider cache.
+   *
+   * Unlike `getModelsForProvider$` the failure is NOT swallowed: the
+   * caller is told, so the UI can show "refresh failed" instead of
+   * silently swapping in the curated list. The cache is re-seeded either
+   * way (live list on success, curated list on failure) so the other
+   * model consumers (`getModelById$`, `getDefaultModel$`,
+   * `validateModel$`) keep working without another round-trip.
+   */
+  refreshModelsForProvider$(providerId: string): Observable<LLMModel[]> {
+    this.modelsCache.delete(providerId);
+    const provider = getProvider(providerId) ?? this.providerService.getActiveProvider();
+    return this.fetchModelsFromApi(provider).pipe(
+      tap(models => this.modelsCache.set(providerId, of(models))),
+      catchError(err => {
+        this.modelsCache.set(providerId, of(this.normalizeFallbackModels(provider)));
+        return throwError(() => err);
+      })
+    );
+  }
+
+  /**
+   * The provider's curated model list — what the UI shows when the live
+   * list can't be fetched.
+   */
+  getFallbackModels(providerId?: string): LLMModel[] {
+    const provider = getProvider(providerId ?? this.providerService.getActiveProviderId())
+      ?? this.providerService.getActiveProvider();
+    return this.normalizeFallbackModels(provider);
   }
 
   getModelById$(modelId: string, providerId?: string): Observable<LLMModel | undefined> {

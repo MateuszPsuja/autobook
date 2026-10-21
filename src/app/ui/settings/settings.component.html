@@ -31,7 +31,7 @@
       (ngModelChange)="onProviderChange($event)"
       class="field">
       @for (provider of providers; track provider.id) {
-        <option [value]="provider.id">{{ getProviderIcon(provider.name) }} {{ provider.name }}</option>
+        <option [value]="provider.id">{{ provider.name }}</option>
       }
     </select>
     <p class="mt-1.5 text-xs text-surface-subtle">{{ activeProvider.description }}</p>
@@ -233,10 +233,32 @@
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
         </svg>
       </div>
-      <div>
+      <div class="flex-1 min-w-0">
         <h2 class="text-base font-semibold text-surface-strong">{{ t('settings.modelTitle') }}</h2>
         <p class="text-xs text-surface-subtle">{{ t('settings.modelDescription') }}</p>
       </div>
+      @if (isConfigured() && models.length > 0) {
+        <button
+          type="button"
+          (click)="refreshModels()"
+          [disabled]="isLoadingModels"
+          class="btn btn-ghost text-xs px-2.5 py-1.5 gap-1.5 flex-shrink-0"
+          [attr.aria-label]="t('settings.refreshModels')"
+          [title]="t('settings.refreshModels')">
+          @if (isLoadingModels) {
+            <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            {{ t('settings.refreshingModels') }}
+          } @else {
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+            </svg>
+            {{ t('settings.refreshModels') }}
+          }
+        </button>
+      }
     </div>
 
     @if (!isConfigured()) {
@@ -287,7 +309,6 @@
             <div class="flex items-center gap-2 flex-wrap">
               <span class="eyebrow text-accent-600 dark:text-accent-400">{{ t('settings.currentSelection') }}</span>
               <span class="font-semibold text-surface-strong">{{ getCurrentModelInfo()?.name }}</span>
-              <span class="text-xs font-mono text-surface-subtle">({{ getCurrentModelInfo()?.provider }})</span>
             </div>
           </div>
         }
@@ -346,20 +367,12 @@
                         {{ t('settings.recommended') }}
                       </span>
                     }
-                    <span class="px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider rounded" [class]="getTierBadgeClass(model.tier)">
-                      {{ model.tier }}
-                    </span>
                   </div>
-                  <div class="flex items-center gap-2 text-[11px] font-mono text-surface-subtle mt-0.5">
-                    <span class="flex items-center gap-1">
-                      {{ getProviderIcon(model.provider) }}
-                      {{ model.provider }}
-                    </span>
-                    <span>•</span>
-                    @if (model.contextWindow && model.contextWindow !== 'Unknown') {
+                  @if (model.contextWindow && model.contextWindow !== 'Unknown') {
+                    <div class="flex items-center gap-2 text-[11px] font-mono text-surface-subtle mt-0.5">
                       <span>{{ model.contextWindow }} ctx</span>
-                    }
-                  </div>
+                    </div>
+                  }
                 </div>
               </label>
             }

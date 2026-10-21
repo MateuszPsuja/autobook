@@ -157,6 +157,87 @@ describe('ApiService', () => {
     });
   });
 
+  describe('Model list refresh', () => {
+    const modelsResponse = (data: any[]) => Promise.resolve({
+      ok: true,
+      json: () => Promise.resolve({ data })
+    } as Response);
+
+    it('refetches the model list even when it was already cached', (done) => {
+      providerService.saveApiKey(OR_KEY, 'openrouter');
+      const spy = window.fetch as jasmine.Spy;
+
+      service.getModelsForProvider$('openrouter').subscribe({
+        next: () => {
+          expect(spy.calls.count()).toBe(1);
+          spy.and.returnValue(modelsResponse([{ id: 'vendor/second', name: 'Second Model' }]));
+
+          service.refreshModelsForProvider$('openrouter').subscribe({
+            next: models => {
+              expect(spy.calls.count()).toBe(2);
+              expect(models.length).toBe(1);
+              expect(models[0].id).toBe('vendor/second');
+              done();
+            },
+            error: done.fail
+          });
+        },
+        error: done.fail
+      });
+    });
+
+    it('serves the refreshed list from the cache afterwards', (done) => {
+      providerService.saveApiKey(OR_KEY, 'openrouter');
+      const spy = window.fetch as jasmine.Spy;
+
+      service.refreshModelsForProvider$('openrouter').subscribe({
+        next: refreshed => {
+          const callsAfterRefresh = spy.calls.count();
+          service.getModelsForProvider$('openrouter').subscribe({
+            next: cached => {
+              expect(spy.calls.count()).toBe(callsAfterRefresh);
+              expect(cached.map(m => m.id)).toEqual(refreshed.map(m => m.id));
+              done();
+            },
+            error: done.fail
+          });
+        },
+        error: done.fail
+      });
+    });
+
+    it('surfaces the failure and seeds the curated fallback', (done) => {
+      providerService.saveApiKey(OR_KEY, 'openrouter');
+      const spy = window.fetch as jasmine.Spy;
+      spy.and.returnValue(Promise.resolve({ ok: false, status: 500, statusText: 'Server Error' } as Response));
+
+      service.refreshModelsForProvider$('openrouter').subscribe({
+        next: () => {
+          fail('expected the refresh to fail');
+          done();
+        },
+        error: () => {
+          const callsAfterFailure = spy.calls.count();
+          service.getModelsForProvider$('openrouter').subscribe({
+            next: models => {
+              // The curated list is cached, so no extra request is made.
+              expect(spy.calls.count()).toBe(callsAfterFailure);
+              expect(models.map(m => m.id)).toEqual(service.getFallbackModels('openrouter').map(m => m.id));
+              done();
+            },
+            error: done.fail
+          });
+        }
+      });
+    });
+
+    it('exposes the curated fallback list for a provider', () => {
+      const fallback = service.getFallbackModels('openrouter');
+      expect(fallback.length).toBeGreaterThan(0);
+      expect(fallback.every(m => !!m.id)).toBeTrue();
+    });
+  });
+
   describe('API Key Testing', () => {
     it('should test valid OpenRouter API key', async () => {
       providerService.saveApiKey(OR_KEY, 'openrouter');

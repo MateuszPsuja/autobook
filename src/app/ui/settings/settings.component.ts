@@ -198,6 +198,15 @@ export class SettingsComponent implements OnInit, OnDestroy {
   // === Model methods ===
 
   loadModels(): void {
+    this.fetchModels(true);
+  }
+
+  /** Re-fetch the model list without clearing the list on screen. */
+  refreshModels(): void {
+    this.fetchModels(false);
+  }
+
+  private fetchModels(clearList: boolean): void {
     if (!this.providerService.isActiveConfigured()) {
       this.modelsError = this.t('settings.configureApiKeyFirst');
       this.models = [];
@@ -206,21 +215,40 @@ export class SettingsComponent implements OnInit, OnDestroy {
 
     this.isLoadingModels = true;
     this.modelsError = '';
-    this.models = [];
+    if (clearList) this.models = [];
 
-    this.apiService.getModels$()
+    this.apiService.refreshModelsForProvider$(this.activeProvider.id)
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (fetchedModels) => {
           this.models = fetchedModels;
           this.isLoadingModels = false;
+          this.reconcileSelection(fetchedModels);
         },
         error: (error) => {
           console.warn(`Failed to fetch ${this.activeProvider.name} models:`, error);
-          this.modelsError = this.t('settings.usingFallbackModels');
+          if (clearList) {
+            // Nothing on screen yet — fall back to the curated list.
+            this.models = this.apiService.getFallbackModels(this.activeProvider.id);
+            this.modelsError = this.t('settings.usingFallbackModels');
+          } else {
+            // Keep the list the user already has; just say it failed.
+            this.modelsError = this.t('settings.refreshFailed');
+          }
           this.isLoadingModels = false;
         }
       });
+  }
+
+  /**
+   * After a refresh the previously picked model may be gone (retired
+   * upstream). Fall back to the saved selection, then to nothing.
+   */
+  private reconcileSelection(models: LLMModel[]): void {
+    if (this.selectedModel && models.some(m => m.id === this.selectedModel)) return;
+    this.selectedModel = (this.currentModel && models.some(m => m.id === this.currentModel))
+      ? this.currentModel
+      : '';
   }
 
   saveModel(): void {
@@ -244,39 +272,6 @@ export class SettingsComponent implements OnInit, OnDestroy {
 
   isConfigured(): boolean {
     return this.providerService.isActiveConfigured();
-  }
-
-  getTierBadgeClass(tier: string): string {
-    switch (tier) {
-      case 'premium':
-        return 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400';
-      case 'standard':
-        return 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400';
-      case 'budget':
-        return 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400';
-      default:
-        return 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-400';
-    }
-  }
-
-  getProviderIcon(provider: string): string {
-    const icons: Record<string, string> = {
-      'Anthropic': '🧠',
-      'OpenAI': '🤖',
-      'Google': '🔍',
-      'Meta': '🌐',
-      'Mistral': '❄️',
-      'DeepSeek': '🔮',
-      'Cohere': '🌊',
-      'Perplexity': '✨',
-      'OpenRouter': '🛰️',
-      'LM Studio': '💻',
-      'Minimax': '⚡',
-      'ChatGPT': '💬',
-      'MiniMax': '🐉',
-      'Google Gemini': '💎'
-    };
-    return icons[provider] || '💻';
   }
 
   get filteredModels(): LLMModel[] {
