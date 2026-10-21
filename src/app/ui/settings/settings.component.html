@@ -3,16 +3,16 @@
   <!-- ===== Page header ===== -->
   <div>
     <span class="eyebrow">Preferences</span>
-    <h1 class="mt-1 text-2xl font-bold tracking-tight text-surface-strong">
+    <h1 class="mt-1 text-xl md:text-2xl font-bold tracking-tight text-surface-strong">
       {{ t('settings.title') }}
     </h1>
     <p class="text-sm text-surface-subtle mt-0.5">{{ t('settings.subtitle') }}</p>
   </div>
 
   <!-- ===== Provider ===== -->
-  <section class="card p-6">
+  <section class="card p-4 md:p-6">
     <div class="flex items-center gap-3 mb-5">
-      <div class="w-10 h-10 rounded-xl bg-accent-500/15 text-accent-600 dark:text-accent-300 flex items-center justify-center">
+      <div class="w-10 h-10 rounded-xl bg-accent-500/15 text-accent-600 dark:text-accent-300 flex items-center justify-center flex-shrink-0">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 21a9.004 9.004 0 008.716-6.747M12 21a9.004 9.004 0 01-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 017.843 4.582M12 3a8.997 8.997 0 00-7.843 4.582m15.686 0A11.953 11.953 0 0112 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0121 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0112 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 013 12c0-1.605.42-3.113 1.157-4.418"></path>
         </svg>
@@ -38,9 +38,9 @@
   </section>
 
   <!-- ===== API key ===== -->
-  <section class="card p-6">
+  <section class="card p-4 md:p-6">
     <div class="flex items-center gap-3 mb-5">
-      <div class="w-10 h-10 rounded-xl bg-accent-500/15 text-accent-600 dark:text-accent-300 flex items-center justify-center">
+      <div class="w-10 h-10 rounded-xl bg-accent-500/15 text-accent-600 dark:text-accent-300 flex items-center justify-center flex-shrink-0">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z"></path>
         </svg>
@@ -189,9 +189,9 @@
 
   <!-- ===== Base URL ===== -->
   @if (activeProvider.baseUrlEditable) {
-    <section class="card p-6">
+    <section class="card p-4 md:p-6">
       <div class="flex items-center gap-3 mb-5">
-        <div class="w-10 h-10 rounded-xl bg-cyan-500/15 text-cyan-600 dark:text-cyan-400 flex items-center justify-center">
+        <div class="w-10 h-10 rounded-xl bg-cyan-500/15 text-cyan-600 dark:text-cyan-400 flex items-center justify-center flex-shrink-0">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244"></path>
           </svg>
@@ -226,9 +226,9 @@
   }
 
   <!-- ===== Model selection ===== -->
-  <section class="card p-6">
+  <section class="card p-4 md:p-6">
     <div class="flex items-center gap-3 mb-5">
-      <div class="w-10 h-10 rounded-xl bg-sky-500/15 text-sky-600 dark:text-sky-400 flex items-center justify-center">
+      <div class="w-10 h-10 rounded-xl bg-sky-500/15 text-sky-600 dark:text-sky-400 flex items-center justify-center flex-shrink-0">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
         </svg>

@@ -1,33 +1,36 @@
-<div class="max-w-4xl mx-auto space-y-8">
+<div class="max-w-4xl mx-auto space-y-6 md:space-y-8">
 
   <!-- ===== Step indicator ===== -->
   <div>
-    <div class="flex items-center justify-between mb-3">
-      <span class="eyebrow">Setup · {{ currentStep + 1 }} / {{ steps.length }}</span>
-      <span class="eyebrow text-accent-600 dark:text-accent-400">
+    <div class="flex items-center justify-between mb-3 gap-2">
+      <span class="eyebrow truncate">Setup · {{ currentStep + 1 }} / {{ steps.length }}</span>
+      <span class="eyebrow text-accent-600 dark:text-accent-400 truncate text-right">
         {{ getCurrentStepLabel() }}
       </span>
     </div>
-    <div class="flex items-center">
+    <!-- On very narrow screens the 4 steps with labels can't all fit
+         comfortably. We keep them visible at default sizes but use a
+         smaller circle and let the label wrap to two lines. -->
+    <div class="flex items-start">
       @for (step of steps; track trackByStep($index, step); let i = $index) {
         <!-- Step group: circle + label, then a connector unless it's last. -->
-        <div class="flex flex-col items-center flex-1">
+        <div class="flex flex-col items-center flex-1 min-w-0 px-1">
           <button
             type="button"
             (click)="goToStep(step.number)"
             [disabled]="step.number > currentStep && !isStepCompleted(step.number - 1)"
-            class="relative w-11 h-11 rounded-full flex items-center justify-center font-semibold text-sm transition-all duration-300 disabled:cursor-not-allowed"
+            class="relative w-9 h-9 md:w-11 md:h-11 rounded-full flex items-center justify-center font-semibold text-xs md:text-sm transition-all duration-300 disabled:cursor-not-allowed flex-shrink-0"
             [class]="getStepClass(step.number)">
             @if (step.number < currentStep || (step.number === currentStep && isCurrentStepValid())) {
-              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg class="w-4 h-4 md:w-5 md:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"></path>
               </svg>
             } @else {
               {{ step.number }}
             }
           </button>
-          <div class="mt-2.5 min-h-[1.25rem] flex items-start justify-center">
-            <span class="text-[11px] font-medium text-center"
+          <div class="mt-2 md:mt-2.5 min-h-[1.75rem] md:min-h-[1.25rem] flex items-start justify-center w-full">
+            <span class="text-[10px] md:text-[11px] font-medium text-center leading-tight break-words hyphens-auto px-0.5"
               [class]="step.number === currentStep
                 ? 'text-accent-600 dark:text-accent-300 font-semibold'
                 : step.number < currentStep
@@ -39,7 +42,7 @@
         </div>
 
         @if (i < steps.length - 1) {
-          <div class="flex-1 h-0.5 -mt-7 rounded-full transition-colors duration-500"
+          <div class="flex-1 h-0.5 mt-4 md:mt-5 rounded-full transition-colors duration-500 min-w-[12px] md:min-w-0"
             [class]="step.number < currentStep
               ? 'bg-accent-500/80'
               : 'bg-surface-border'">
@@ -59,12 +62,13 @@
       <div class="space-y-5 animate-fade-in">
 
         <!-- Section header. The eyebrow + a clear H2 + the "Fill Random"
-             action on the right. -->
-        <div class="card p-6">
-          <div class="flex items-start justify-between gap-4">
-            <div>
+             action on the right. On mobile, the action drops below the
+             title block to avoid horizontal squeeze. -->
+        <div class="card p-5 md:p-6">
+          <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4">
+            <div class="min-w-0">
               <span class="eyebrow">Step 1</span>
-              <h2 class="mt-1 text-2xl font-bold tracking-tight text-surface-strong">
+              <h2 class="mt-1 text-xl md:text-2xl font-bold tracking-tight text-surface-strong">
                 {{ t('config.creativeSettings') }}
               </h2>
               <p class="text-sm text-surface-subtle mt-1">{{ t('config.defineCore') }}</p>
@@ -72,7 +76,7 @@
             <button
               type="button"
               (click)="fillRandom()"
-              class="btn btn-primary flex-shrink-0">
+              class="btn btn-primary flex-shrink-0 w-full sm:w-auto justify-center">
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                   d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
@@ -83,22 +87,22 @@
         </div>
 
         <!-- Title + Genre row. -->
-        <div class="card p-5 grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
+        <div class="card p-4 md:p-5 grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="min-w-0">
             <label class="block text-xs font-semibold text-surface-subtle uppercase tracking-wider mb-1.5">
               {{ t('config.title') }}
             </label>
             <input formControlName="title" type="text" class="field" [placeholder]="t('config.titlePlaceholder')">
             @if (configForm.get('title')?.invalid && configForm.get('title')?.touched) {
               <p class="mt-1.5 text-xs text-red-500 flex items-center gap-1">
-                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg class="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                 </svg>
                 {{ t('config.titleRequired') }}
               </p>
             }
           </div>
-          <div>
+          <div class="min-w-0">
             <label class="block text-xs font-semibold text-surface-subtle uppercase tracking-wider mb-1.5">
               {{ t('config.genre') }}
             </label>
@@ -113,12 +117,12 @@
 
         <!-- Plot — the "describe your book" long-text section. Full-width
              card so it gets the breathing room a textarea wants. -->
-        <div class="card p-5">
-          <div class="flex items-baseline justify-between mb-1.5">
+        <div class="card p-4 md:p-5">
+          <div class="flex items-baseline justify-between mb-1.5 gap-2">
             <label for="book-plot" class="block text-xs font-semibold text-surface-subtle uppercase tracking-wider">
               {{ t('config.plot') }}
             </label>
-            <span class="font-mono text-[11px] text-surface-subtle">
+            <span class="font-mono text-[11px] text-surface-subtle flex-shrink-0">
               {{ (configForm.get('plot')?.value || '').length }} / 2000
             </span>
           </div>
@@ -133,8 +137,8 @@
         </div>
 
         <!-- Writing style + tone. -->
-        <div class="card p-5 grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
+        <div class="card p-4 md:p-5 grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="min-w-0">
             <label class="block text-xs font-semibold text-surface-subtle uppercase tracking-wider mb-1.5">
               {{ t('config.writingStyle') }}
             </label>
@@ -145,7 +149,7 @@
               }
             </select>
           </div>
-          <div>
+          <div class="min-w-0">
             <label class="block text-xs font-semibold text-surface-subtle uppercase tracking-wider mb-1.5">
               {{ t('config.tone') }}
             </label>
@@ -159,8 +163,8 @@
         </div>
 
         <!-- POV / Tense / Audience — three across. -->
-        <div class="card p-5 grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div>
+        <div class="card p-4 md:p-5 grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="min-w-0">
             <label class="block text-xs font-semibold text-surface-subtle uppercase tracking-wider mb-1.5">{{ t('config.pov') }}</label>
             <select formControlName="pov" class="field">
               <option value="">{{ t('config.selectPov') }}</option>
@@ -169,7 +173,7 @@
               }
             </select>
           </div>
-          <div>
+          <div class="min-w-0">
             <label class="block text-xs font-semibold text-surface-subtle uppercase tracking-wider mb-1.5">{{ t('config.tense') }}</label>
             <select formControlName="tense" class="field">
               <option value="">{{ t('config.selectTense') }}</option>
@@ -178,7 +182,7 @@
               }
             </select>
           </div>
-          <div>
+          <div class="min-w-0">
             <label class="block text-xs font-semibold text-surface-subtle uppercase tracking-wider mb-1.5">{{ t('config.audience') }}</label>
             <select formControlName="audience" class="field">
               <option value="">{{ t('config.selectAudience') }}</option>
@@ -190,12 +194,12 @@
         </div>
 
         <!-- Themes + World. -->
-        <div class="card p-5 grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
+        <div class="card p-4 md:p-5 grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="min-w-0">
             <label class="block text-xs font-semibold text-surface-subtle uppercase tracking-wider mb-1.5">{{ t('config.themes') }}</label>
             <input formControlName="themes" type="text" class="field" [placeholder]="t('config.themesPlaceholder')">
           </div>
-          <div>
+          <div class="min-w-0">
             <label class="block text-xs font-semibold text-surface-subtle uppercase tracking-wider mb-1.5">{{ t('config.worldType') }}</label>
             <select formControlName="worldType" class="field">
               <option value="">{{ t('config.selectWorldType') }}</option>
@@ -207,8 +211,8 @@
         </div>
 
         <!-- Length + Chapter length. -->
-        <div class="card p-5 grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
+        <div class="card p-4 md:p-5 grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="min-w-0">
             <label class="block text-xs font-semibold text-surface-subtle uppercase tracking-wider mb-1.5">{{ t('config.targetLength') }}</label>
             <select formControlName="targetLength" class="field">
               <option value="">{{ t('config.selectLength') }}</option>
@@ -217,7 +221,7 @@
               }
             </select>
           </div>
-          <div>
+          <div class="min-w-0">
             <label class="block text-xs font-semibold text-surface-subtle uppercase tracking-wider mb-1.5">{{ t('config.chapterLength') }}</label>
             <select formControlName="chapterLength" class="field">
               <option value="">{{ t('config.selectChapterLength') }}</option>
@@ -236,18 +240,18 @@
     @if (currentStep === 1) {
       <div class="space-y-5 animate-fade-in">
 
-        <div class="card p-6">
+        <div class="card p-5 md:p-6">
           <span class="eyebrow">Step 2</span>
-          <h2 class="mt-1 text-2xl font-bold tracking-tight text-surface-strong">
+          <h2 class="mt-1 text-xl md:text-2xl font-bold tracking-tight text-surface-strong">
             {{ t('config.characters') }}
           </h2>
           <p class="text-sm text-surface-subtle mt-1">{{ t('config.defineCharacters') }}</p>
         </div>
 
         <!-- Protagonist card. Green icon badge for "hero". -->
-        <div class="card p-6" formGroupName="protagonist">
+        <div class="card p-4 md:p-6" formGroupName="protagonist">
           <div class="flex items-center gap-3 mb-5">
-            <div class="w-10 h-10 rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+            <div class="w-10 h-10 rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center flex-shrink-0">
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"></path>
               </svg>
@@ -256,11 +260,11 @@
           </div>
 
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
+            <div class="min-w-0">
               <label class="block text-xs font-semibold text-surface-subtle uppercase tracking-wider mb-1.5">{{ t('config.name') }}</label>
               <input formControlName="name" type="text" class="field">
             </div>
-            <div>
+            <div class="min-w-0">
               <label class="block text-xs font-semibold text-surface-subtle uppercase tracking-wider mb-1.5">{{ t('config.age') }}</label>
               <input formControlName="age" type="number" min="1" max="100" class="field font-mono">
             </div>
@@ -272,11 +276,11 @@
           </div>
 
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-            <div>
+            <div class="min-w-0">
               <label class="block text-xs font-semibold text-surface-subtle uppercase tracking-wider mb-1.5">{{ t('config.motivations') }}</label>
               <textarea formControlName="motivations" rows="2" class="field"></textarea>
             </div>
-            <div>
+            <div class="min-w-0">
               <label class="block text-xs font-semibold text-surface-subtle uppercase tracking-wider mb-1.5">{{ t('config.flaws') }}</label>
               <textarea formControlName="flaws" rows="2" class="field"></textarea>
             </div>
@@ -289,9 +293,9 @@
         </div>
 
         <!-- Antagonist card. Red icon badge. -->
-        <div class="card p-6" formGroupName="antagonist">
+        <div class="card p-4 md:p-6" formGroupName="antagonist">
           <div class="flex items-center gap-3 mb-5">
-            <div class="w-10 h-10 rounded-xl bg-rose-500/15 text-rose-600 dark:text-rose-400 flex items-center justify-center">
+            <div class="w-10 h-10 rounded-xl bg-rose-500/15 text-rose-600 dark:text-rose-400 flex items-center justify-center flex-shrink-0">
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"></path>
               </svg>
@@ -300,11 +304,11 @@
           </div>
 
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
+            <div class="min-w-0">
               <label class="block text-xs font-semibold text-surface-subtle uppercase tracking-wider mb-1.5">{{ t('config.name') }}</label>
               <input formControlName="name" type="text" class="field">
             </div>
-            <div>
+            <div class="min-w-0">
               <label class="block text-xs font-semibold text-surface-subtle uppercase tracking-wider mb-1.5">{{ t('config.age') }}</label>
               <input formControlName="age" type="number" min="1" max="100" class="field font-mono">
             </div>
@@ -316,11 +320,11 @@
           </div>
 
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-            <div>
+            <div class="min-w-0">
               <label class="block text-xs font-semibold text-surface-subtle uppercase tracking-wider mb-1.5">{{ t('config.motivations') }}</label>
               <textarea formControlName="motivations" rows="2" class="field"></textarea>
             </div>
-            <div>
+            <div class="min-w-0">
               <label class="block text-xs font-semibold text-surface-subtle uppercase tracking-wider mb-1.5">{{ t('config.flaws') }}</label>
               <textarea formControlName="flaws" rows="2" class="field"></textarea>
             </div>
@@ -336,9 +340,9 @@
              Each row is a FormGroup in the `supportingCharacters` FormArray.
              Add button appends a new empty group; the row's remove button
              drops it from the array. -->
-        <div class="card p-6" data-test="supporting-characters">
+        <div class="card p-4 md:p-6" data-test="supporting-characters">
           <div class="flex items-center gap-3 mb-2">
-            <div class="w-10 h-10 rounded-xl bg-sky-500/15 text-sky-600 dark:text-sky-400 flex items-center justify-center">
+            <div class="w-10 h-10 rounded-xl bg-sky-500/15 text-sky-600 dark:text-sky-400 flex items-center justify-center flex-shrink-0">
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z"></path>
               </svg>
@@ -357,11 +361,11 @@
             @for (group of supportingCharactersForm.controls; track trackBySupportingCharacter($index)) {
               <div [formGroupName]="$index" class="rounded-xl border border-surface-border/70 bg-surface-sunken/40 p-4">
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div>
+                  <div class="min-w-0">
                     <label class="block text-xs font-semibold text-surface-subtle uppercase tracking-wider mb-1.5">{{ t('config.name') }}</label>
                     <input formControlName="name" type="text" class="field" data-test="supporting-name">
                   </div>
-                  <div>
+                  <div class="min-w-0">
                     <label class="block text-xs font-semibold text-surface-subtle uppercase tracking-wider mb-1.5">{{ t('config.characterRole') }}</label>
                     <select formControlName="role" class="field" data-test="supporting-role">
                       @for (role of supportingCharacterRoles; track role) {
@@ -394,7 +398,7 @@
             <button
               type="button"
               (click)="addSupportingCharacter()"
-              class="btn btn-secondary"
+              class="btn btn-secondary w-full sm:w-auto justify-center"
               data-test="add-supporting-character">
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
@@ -411,16 +415,16 @@
          ===================================================== -->
     @if (currentStep === 2) {
       <div class="space-y-5 animate-fade-in">
-        <div class="card p-6">
+        <div class="card p-5 md:p-6">
           <span class="eyebrow">Step 3</span>
-          <h2 class="mt-1 text-2xl font-bold tracking-tight text-surface-strong">
+          <h2 class="mt-1 text-xl md:text-2xl font-bold tracking-tight text-surface-strong">
             {{ t('config.structure') }}
           </h2>
           <p class="text-sm text-surface-subtle mt-1">{{ t('config.defineStructure') }}</p>
         </div>
 
-        <div class="card p-5 grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
+        <div class="card p-4 md:p-5 grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="min-w-0">
             <label class="block text-xs font-semibold text-surface-subtle uppercase tracking-wider mb-1.5">{{ t('config.plotArchetype') }}</label>
             <select formControlName="plotArchetype" class="field">
               <option value="">{{ t('config.selectArchetype') }}</option>
@@ -429,7 +433,7 @@
               }
             </select>
           </div>
-          <div>
+          <div class="min-w-0">
             <label class="block text-xs font-semibold text-surface-subtle uppercase tracking-wider mb-1.5">{{ t('config.actStructure') }}</label>
             <select formControlName="actStructure" class="field">
               <option value="">{{ t('config.selectStructure') }}</option>
@@ -441,7 +445,7 @@
         </div>
 
         <!-- Checkboxes in a row, custom orange check style. -->
-        <div class="card p-5 flex flex-wrap items-center gap-6">
+        <div class="card p-4 md:p-5 flex flex-wrap items-center gap-x-6 gap-y-3">
           <label class="flex items-center gap-2.5 cursor-pointer group">
             <span class="relative inline-flex">
               <input formControlName="hasPrologue" type="checkbox"
@@ -472,25 +476,25 @@
          ===================================================== -->
     @if (currentStep === 3) {
       <div class="space-y-5 animate-fade-in">
-        <div class="card p-6">
+        <div class="card p-5 md:p-6">
           <span class="eyebrow">Step 4</span>
-          <h2 class="mt-1 text-2xl font-bold tracking-tight text-surface-strong">
+          <h2 class="mt-1 text-xl md:text-2xl font-bold tracking-tight text-surface-strong">
             {{ t('config.review') }}
           </h2>
           <p class="text-sm text-surface-subtle mt-1">{{ t('config.reviewSettings') }}</p>
         </div>
 
         <!-- Book details review card. -->
-        <div class="card p-5">
+        <div class="card p-4 md:p-5">
           <div class="flex items-center gap-2.5 mb-4">
-            <div class="w-8 h-8 rounded-lg bg-accent-500/15 text-accent-600 dark:text-accent-300 flex items-center justify-center">
+            <div class="w-8 h-8 rounded-lg bg-accent-500/15 text-accent-600 dark:text-accent-300 flex items-center justify-center flex-shrink-0">
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path>
               </svg>
             </div>
             <h3 class="font-semibold text-surface-strong">{{ t('config.bookDetails') }}</h3>
           </div>
-          <dl class="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-3 text-sm">
+          <dl class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-3 text-sm">
             <div><dt class="text-surface-subtle text-xs">{{ t('config.title') }}</dt><dd class="font-medium text-surface-strong">{{ configForm.get('title')?.value }}</dd></div>
             <div><dt class="text-surface-subtle text-xs">{{ t('config.genre') }}</dt><dd class="font-medium text-surface-strong">{{ configForm.get('genre')?.value }}</dd></div>
             <div><dt class="text-surface-subtle text-xs">{{ t('config.writingStyle') }}</dt><dd class="font-medium text-surface-strong">{{ configForm.get('style')?.value }}</dd></div>
@@ -508,9 +512,9 @@
         </div>
 
         <!-- Character summary. -->
-        <div class="card p-5">
+        <div class="card p-4 md:p-5">
           <div class="flex items-center gap-2.5 mb-4">
-            <div class="w-8 h-8 rounded-lg bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+            <div class="w-8 h-8 rounded-lg bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center flex-shrink-0">
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"></path>
               </svg>
@@ -544,13 +548,15 @@
       </div>
     }
 
-    <!-- ===== Step nav buttons ===== -->
-    <div class="flex items-center justify-between pt-2">
+    <!-- ===== Step nav buttons =====
+         On mobile the two buttons stack vertically with the primary
+         (Next / Generate) action on top so it's the obvious tap target. -->
+    <div class="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3 pt-2">
       <button
         type="button"
         (click)="previousStep()"
         [disabled]="currentStep === 0"
-        class="btn btn-ghost">
+        class="btn btn-ghost w-full sm:w-auto justify-center">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
         </svg>
@@ -560,7 +566,7 @@
         <button
           type="button"
           (click)="nextStep()"
-          class="btn btn-primary">
+          class="btn btn-primary w-full sm:w-auto justify-center">
           {{ t('config.next') }}
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
@@ -570,7 +576,7 @@
         <button
           type="submit"
           [disabled]="configForm.invalid"
-          class="btn btn-primary">
+          class="btn btn-primary w-full sm:w-auto justify-center">
           {{ t('config.continueToGenerate') }}
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>

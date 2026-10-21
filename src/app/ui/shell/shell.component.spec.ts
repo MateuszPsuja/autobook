@@ -29,7 +29,7 @@ describe('ShellComponent', () => {
 
     // Create router spy with url as a mockable property
     const routerEvents = new Subject<any>();
-    const router = jasmine.createSpyObj('Router', ['navigate']);
+    const router = jasmine.createSpyObj('Router', ['navigate'], { events: routerEvents.asObservable() });
     Object.defineProperty(router, 'url', { value: '/config', writable: true });
 
     TestBed.configureTestingModule({

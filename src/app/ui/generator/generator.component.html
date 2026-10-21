@@ -1,48 +1,48 @@
 <div class="max-w-5xl mx-auto space-y-5">
 
   <!-- ===== Page header ===== -->
-  <div class="card p-6">
-    <div class="flex items-center gap-4">
+  <div class="card p-4 md:p-6">
+    <div class="flex items-center gap-3 md:gap-4">
       @if (isCompleted) {
         <!-- Success: green disc, check icon. -->
-        <div class="w-12 h-12 rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
-          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div class="w-10 h-10 md:w-12 md:h-12 flex-shrink-0 rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+          <svg class="w-5 h-5 md:w-6 md:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
           </svg>
         </div>
-        <div class="flex-1">
+        <div class="flex-1 min-w-0">
           <span class="eyebrow text-emerald-600 dark:text-emerald-400">Done</span>
-          <h1 class="text-2xl font-bold tracking-tight text-surface-strong mt-0.5">{{ t('generator.generationComplete') }}</h1>
+          <h1 class="text-lg md:text-2xl font-bold tracking-tight text-surface-strong mt-0.5">{{ t('generator.generationComplete') }}</h1>
           <p class="text-sm text-surface-subtle mt-0.5">{{ t('generator.bookReady') }}</p>
         </div>
       } @else if (currentStatus === 'translating') {
         <!-- Translating: blue disc, language icon. -->
-        <div class="w-12 h-12 rounded-xl bg-sky-500/15 text-sky-600 dark:text-sky-400 flex items-center justify-center">
-          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div class="w-10 h-10 md:w-12 md:h-12 flex-shrink-0 rounded-xl bg-sky-500/15 text-sky-600 dark:text-sky-400 flex items-center justify-center">
+          <svg class="w-5 h-5 md:w-6 md:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129"></path>
           </svg>
         </div>
-        <div class="flex-1">
+        <div class="flex-1 min-w-0">
           <span class="eyebrow text-sky-600 dark:text-sky-400">Translate</span>
-          <h1 class="text-2xl font-bold tracking-tight text-surface-strong mt-0.5">{{ t('status.translating') }}</h1>
+          <h1 class="text-lg md:text-2xl font-bold tracking-tight text-surface-strong mt-0.5">{{ t('status.translating') }}</h1>
           <p class="text-sm text-surface-subtle mt-0.5">Translating the generated content into the export target language…</p>
         </div>
       } @else {
         <!-- Default: orange disc (the brand). -->
-        <div class="relative w-12 h-12">
+        <div class="relative w-10 h-10 md:w-12 md:h-12 flex-shrink-0">
           <div class="absolute inset-0 rounded-xl bg-accent-500/20 blur-md"
                [class.opacity-0]="!isGenerating"></div>
-          <div class="relative w-12 h-12 rounded-xl bg-accent-500 text-white flex items-center justify-center shadow-glow-accent">
-            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div class="relative w-10 h-10 md:w-12 md:h-12 rounded-xl bg-accent-500 text-white flex items-center justify-center shadow-glow-accent">
+            <svg class="w-5 h-5 md:w-6 md:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
             </svg>
           </div>
         </div>
-        <div class="flex-1">
+        <div class="flex-1 min-w-0">
           <span class="eyebrow text-accent-600 dark:text-accent-400">
             {{ isGenerating ? 'Running' : 'Ready' }}
           </span>
-          <h1 class="text-2xl font-bold tracking-tight text-surface-strong mt-0.5">
+          <h1 class="text-lg md:text-2xl font-bold tracking-tight text-surface-strong mt-0.5">
             {{ isGenerating ? t('generator.generating') : t('generator.readyToGenerate') }}
           </h1>
           <p class="text-sm text-surface-subtle mt-0.5">
@@ -59,7 +59,7 @@
        "Generation stats" card further down, which only appears
        when isCompleted && generationStats. -->
   @if (!isCompleted) {
-    <div class="card p-5">
+    <div class="card p-4 md:p-5">
       <div class="flex items-center justify-between mb-3">
         <div class="flex items-center gap-3">
           <div class="w-8 h-8 rounded-lg bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
@@ -100,7 +100,7 @@
        has a fixed height with vertical scroll so the card layout
        stays stable as the stream fills up. -->
   @if (isGenerating || liveStreamAgent) {
-    <div class="card p-5">
+    <div class="card p-4 md:p-5">
       <div class="flex items-center justify-between mb-3">
         <div class="flex items-center gap-3">
           <div class="w-8 h-8 rounded-lg bg-accent-500/15 text-accent-600 dark:text-accent-300 flex items-center justify-center">
@@ -179,7 +179,7 @@
        recap; the inline cards lose their purpose once every agent
        is in the "done" state. -->
   @if (!isCompleted) {
-    <div class="card p-5">
+    <div class="card p-4 md:p-5">
       <div class="flex items-center gap-2 mb-4">
         <div class="w-8 h-8 rounded-lg bg-accent-500/15 text-accent-600 dark:text-accent-300 flex items-center justify-center">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -251,7 +251,7 @@
        can finish the holes. -->
   @let skipped = (skippedChapters$ | async) ?? [];
   @if (skipped.length > 0 && !isGenerating) {
-    <div class="card p-5 border border-amber-500/30 bg-amber-500/5">
+    <div class="card p-4 md:p-5 border border-amber-500/30 bg-amber-500/5">
       <div class="flex items-start gap-3 mb-3">
         <div class="w-10 h-10 rounded-xl bg-amber-500/15 text-amber-600 dark:text-amber-400 flex items-center justify-center flex-shrink-0">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -279,7 +279,7 @@
 
   <!-- ===== Generation stats (after completion) ===== -->
   @if (isCompleted && generationStats) {
-    <div class="card p-5">
+    <div class="card p-4 md:p-5">
       <div class="flex items-center gap-3 mb-5">
         <div class="w-10 h-10 rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -412,18 +412,18 @@
   }
 
   <!-- ===== Footer nav ===== -->
-  <div class="flex items-center justify-between pt-3">
-    <button (click)="navigateBack()" class="btn btn-ghost">
+  <div class="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3 pt-3">
+    <button (click)="navigateBack()" class="btn btn-ghost w-full sm:w-auto justify-center">
       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
       </svg>
       {{ t('config.previous') }}
     </button>
 
-    <div class="flex items-center gap-3">
+    <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3">
       @if (isGenerating) {
         <button (click)="stopGeneration()"
-          class="btn bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/30 hover:bg-rose-500/20">
+          class="btn bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/30 hover:bg-rose-500/20 w-full sm:w-auto justify-center">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z"></path>
@@ -431,20 +431,20 @@
           {{ t('generator.stop') }}
         </button>
       } @else if (isGenerationCompleted()) {
-        <button (click)="onGenerateClick()" class="btn btn-secondary">
+        <button (click)="onGenerateClick()" class="btn btn-secondary w-full sm:w-auto justify-center">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
           </svg>
           {{ t('generator.regenerate') }}
         </button>
-        <button (click)="navigateNext()" class="btn bg-emerald-500 text-white hover:bg-emerald-600 shadow-lg shadow-emerald-500/30">
+        <button (click)="navigateNext()" class="btn bg-emerald-500 text-white hover:bg-emerald-600 shadow-lg shadow-emerald-500/30 w-full sm:w-auto justify-center">
           {{ t('generator.next') }}
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
           </svg>
         </button>
       } @else {
-        <button (click)="onGenerateClick()" [disabled]="!hasConfig" class="btn btn-primary text-base px-6 py-3">
+        <button (click)="onGenerateClick()" [disabled]="!hasConfig" class="btn btn-primary text-base px-6 py-3 w-full sm:w-auto justify-center">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 010 1.972l-11.54 6.347a1.125 1.125 0 01-1.667-.986V5.653z"></path>
           </svg>

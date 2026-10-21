@@ -1,7 +1,8 @@
-import { Component, inject } from '@angular/core';
+import { Component, inject, OnDestroy, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Router, RouterModule } from '@angular/router';
+import { Router, RouterModule, NavigationEnd } from '@angular/router';
+import { filter, Subscription } from 'rxjs';
 import { ThemeService } from '../../core/theme.service';
 import { ApiService } from '../../core/api.service';
 import { ProviderService } from '../../core/providers/provider.service';
@@ -20,7 +21,7 @@ interface NavItem {
   styleUrls: ['./shell.component.scss'],
   imports: [CommonModule, FormsModule, RouterModule, DialogHostComponent]
 })
-export class ShellComponent {
+export class ShellComponent implements OnInit, OnDestroy {
   protected themeService = inject(ThemeService);
   protected apiService = inject(ApiService);
   protected providerService = inject(ProviderService);
@@ -29,6 +30,8 @@ export class ShellComponent {
 
   isDarkMode = false;
   selectedModel = '';
+  isSidebarOpen = false;
+  private routerSub?: Subscription;
 
   // Single source of truth for the sidebar. Keeping it here means the
   // template's @for, the active-state logic, and the page-title lookup
@@ -45,9 +48,53 @@ export class ShellComponent {
     this.loadSelectedModel();
   }
 
+  ngOnInit(): void {
+    // Auto-close the mobile drawer whenever the route changes.
+    this.routerSub = this.router.events
+      .pipe(filter((e): e is NavigationEnd => e instanceof NavigationEnd))
+      .subscribe(() => {
+        if (this.isSidebarOpen) {
+          this.closeSidebar();
+        }
+      });
+  }
+
+  ngOnDestroy(): void {
+    this.routerSub?.unsubscribe();
+    // Make sure we never leave the body in a locked-scroll state.
+    this.unlockBodyScroll();
+  }
+
   private loadSelectedModel(): void {
     const saved = this.providerService.getSelectedModel();
     this.selectedModel = saved || this.apiService.getDefaultModel().id;
+  }
+
+  toggleSidebar(): void {
+    if (this.isSidebarOpen) {
+      this.closeSidebar();
+    } else {
+      this.openSidebar();
+    }
+  }
+
+  openSidebar(): void {
+    this.isSidebarOpen = true;
+    // Lock background scroll on mobile while the drawer is open.
+    if (typeof document !== 'undefined' && window.innerWidth < 768) {
+      document.body.style.overflow = 'hidden';
+    }
+  }
+
+  closeSidebar(): void {
+    this.isSidebarOpen = false;
+    this.unlockBodyScroll();
+  }
+
+  private unlockBodyScroll(): void {
+    if (typeof document !== 'undefined') {
+      document.body.style.overflow = '';
+    }
   }
 
   toggleTheme(): void {
