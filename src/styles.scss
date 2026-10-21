@@ -260,6 +260,14 @@ button:focus-visible {
   @apply border-surface-strong/20;
 }
 
+/* Fields with a leading icon (e.g. the model search box). The icon is
+   16px wide starting at 0.75rem, so text must start at 2.5rem to clear
+   it. Utility classes can't be used here: `.field` is emitted after the
+   utilities layer, so a Tailwind `pl-*` on the same element is ignored. */
+.field.has-leading-icon {
+  padding-left: 2.5rem;
+}
+
 /* Select chevron — drawn with a CSS background so we don't have to ship
    an icon inside every <option>. */
 select.field {
